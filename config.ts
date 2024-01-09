@@ -25,7 +25,7 @@ export default {
     // },
     Admin: {
       mainnet: "0x93072915E6fD257Ca98eD80343D6fbc8e2426C9F",
-      arbitrum: "0x93072915E6fD257Ca98eD80343D6fbc8e2426C9F",
+      arbitrum: "0xB897F50F117B983CFa42bd2a6aB77f8bE9967324",
       arbitrum_goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
@@ -33,7 +33,7 @@ export default {
     },
     Operator: {
       mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
-      arbitrum: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
+      arbitrum: "0xaAA3D934271dcbDE1D405cac6c20D3edC719b1A2", // 0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66(ETH), 0xaAA3D934271dcbDE1D405cac6c20D3edC719b1A2(BTC)
       arbitrum_goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
@@ -41,7 +41,7 @@ export default {
     },
     OperatorVault: {
       mainnet: "0xFb6B24942a19F138EF468EC39Ce8653A87500832",
-      arbitrum: "0xFb6B24942a19F138EF468EC39Ce8653A87500832",
+      arbitrum: "0x7571F9e1a48f59ffC55cDaA3709e8B76Fab71acd",
       arbitrum_goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
@@ -54,7 +54,7 @@ export default {
       ETH_USD: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
     },
     arbitrum: {
-      BTC_USD: "0xc96458d393fe9deb7a7d63a0ac41e2898a67a7750dbd166673279e06c868df0a",
+      BTC_USD: "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
       ETH_USD: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
     },
     sepolia: {

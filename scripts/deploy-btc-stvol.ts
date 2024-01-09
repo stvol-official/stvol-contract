@@ -4,12 +4,16 @@ import config from "../config";
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
+  const STVOL_NAME = "StVol3PerUp";
+  const PYTH_PRICE_FEED = "BTC_USD";
 
   // Check if the network is supported.
   if (networkName === "goerli"
     || networkName === "mainnet"
     || networkName === "arbitrum"
     || networkName === "arbitrum_goerli"
+    || networkName === "arbitrum_sepolia"
+    || networkName === "sepolia"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 
@@ -18,9 +22,10 @@ const main = async () => {
       config.Address.Usdc[networkName] === ethers.constants.AddressZero ||
       config.Address.Oracle[networkName] === ethers.constants.AddressZero ||
       config.Address.Admin[networkName] === ethers.constants.AddressZero ||
-      config.Address.Operator[networkName] === ethers.constants.AddressZero
+      config.Address.Operator[networkName] === ethers.constants.AddressZero ||
+      config.Address.OperatorVault[networkName] === ethers.constants.AddressZero
     ) {
-      throw new Error("Missing addresses (Chainlink Oracle and/or Admin/Operator)");
+      throw new Error("Missing addresses (Pyth Oracle and/or Admin/Operator)");
     }
 
     // Compile contracts.
@@ -32,12 +37,12 @@ const main = async () => {
     console.log("Oracle: %s", config.Address.Oracle[networkName]);
     console.log("Admin: %s", config.Address.Admin[networkName]);
     console.log("Operator: %s", config.Address.Operator[networkName]);
-    console.log("OperatorVault: %s", config.Address.OperatorVault[networkName]);
+    console.log("Operator Vault: %s", config.Address.OperatorVault[networkName]);
     console.log("CommissionFee: %s", config.CommissionFee[networkName]);
     console.log("===========================================");
 
     // Deploy contracts.
-    const StVol = await ethers.getContractFactory("StVol1PerDown");
+    const StVol = await ethers.getContractFactory(STVOL_NAME);
     const stVolContract = await StVol.deploy(
       config.Address.Usdc[networkName],
       config.Address.Oracle[networkName],
@@ -45,16 +50,16 @@ const main = async () => {
       config.Address.Operator[networkName],
       config.Address.OperatorVault[networkName],
       config.CommissionFee[networkName],
-      config.PythPriceId[networkName]['BTC_USD'],
+      config.PythPriceId[networkName][PYTH_PRICE_FEED],
     );
 
     await stVolContract.deployed();
-    console.log(`🍣 StVolContract deployed at ${stVolContract.address}`);
+    console.log(`🍣 ${STVOL_NAME} Contract deployed at ${stVolContract.address}`);
 
     await run("verify:verify", {
       address: stVolContract.address,
       network: ethers.provider.network,
-      contract: "contracts/StVol1PerDown.sol:StVol1PerDown",
+      contract: `contracts/${STVOL_NAME}.sol:${STVOL_NAME}`,
       constructorArguments: [
         config.Address.Usdc[networkName],
         config.Address.Oracle[networkName],
@@ -62,7 +67,7 @@ const main = async () => {
         config.Address.Operator[networkName],
         config.Address.OperatorVault[networkName],
         config.CommissionFee[networkName],
-        config.PythPriceId[networkName]['BTC_USD']
+        config.PythPriceId[networkName][PYTH_PRICE_FEED]
       ]
     });
     console.log('verify the contractAction done');
