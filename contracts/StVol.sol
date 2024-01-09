@@ -679,7 +679,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   function participateLimitOver(
     uint256 epoch,
     uint256 _amount,
-    uint256 _payout
+    uint256 _payout,
+    uint256 prevIdx
   ) external whenNotPaused nonReentrant {
     require(epoch == currentEpoch, "E07");
     require(_participable(epoch), "E08");
@@ -700,8 +701,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         block.timestamp,
         LimitOrderSet.LimitOrderStatus.Undeclared
       ),
-      0
-    ); // TODO
+      prevIdx
+    );
 
     emit ParticipateLimitOrder(
       idx,
@@ -721,7 +722,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   function participateLimitUnder(
     uint256 epoch,
     uint256 _amount,
-    uint256 _payout
+    uint256 _payout,
+    uint256 prevIdx
   ) external whenNotPaused nonReentrant {
     require(epoch == currentEpoch, "E07");
     require(_participable(epoch), "E08");
@@ -742,7 +744,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         block.timestamp,
         LimitOrderSet.LimitOrderStatus.Undeclared
       ),
-      0
+      prevIdx
     );
     emit ParticipateLimitOrder(
       idx,
