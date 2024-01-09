@@ -169,7 +169,7 @@ library LimitOrderSet {
   ) internal view returns (bool) {
     LimitOrder storage orderLeft = self.orderMap[orderLeftIdx];
 
-    if (orderLeft.payout < orderRight.payout) return true;
+    if (orderLeft.payout <= orderRight.payout) return true;
     // if (payoutLeft > payoutRight) return false;
 
     return false;
