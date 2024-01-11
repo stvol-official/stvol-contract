@@ -4,7 +4,7 @@ export default {
       mainnet: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
       arbitrum_goerli: "0x8FB1E3fC51F3b789dED7557E680551d93Ea9d892",
-      arbitrum_sepolia: "0xf3C3351D6Bd0098EEb33ca8f830FAf2a141Ea2E1",
+      arbitrum_sepolia: "0xdafcF0d6fc4a43cf8595f2172c07CEa7f273531D",
       sepolia: "0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0",
       goerli: "0x456f6b7b1c5126060fe358fb4a5f935b3fbc26ef",
     },
