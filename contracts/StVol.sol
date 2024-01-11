@@ -628,6 +628,9 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     rounds[epoch].epoch = epoch;
     rounds[epoch].totalAmount = 0;
 
+    overLimitOrders[epoch].initializeEmptyList();
+    underLimitOrders[epoch].initializeEmptyList();
+
     emit OpenRound(epoch, strategyRate, strategyType);
   }
 
