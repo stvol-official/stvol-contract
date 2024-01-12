@@ -167,9 +167,15 @@ library LimitOrderSet {
     uint256 orderLeftIdx,
     LimitOrder memory orderRight
   ) internal view returns (bool) {
+    if (orderLeftIdx == QUEUE_START) return true;
+    if (orderLeftIdx == QUEUE_END) return false;
+
     LimitOrder storage orderLeft = self.orderMap[orderLeftIdx];
 
-    if (orderLeft.payout <= orderRight.payout) return true;
+    if (orderLeft.payout < orderRight.payout) return true;
+    if (orderLeft.payout == orderRight.payout) {
+      return orderLeftIdx < orderRight.idx;
+    }
     // if (payoutLeft > payoutRight) return false;
 
     return false;
