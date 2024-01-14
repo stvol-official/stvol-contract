@@ -176,7 +176,6 @@ library LimitOrderSet {
     if (orderLeft.payout == orderRight.payout) {
       return orderLeftIdx < orderRight.idx;
     }
-    // if (payoutLeft > payoutRight) return false;
 
     return false;
   }
@@ -197,17 +196,16 @@ library LimitOrderSet {
   }
 
   function first(Data storage self) internal view returns (uint256) {
-    require(!isEmpty(self), "Trying to get first from empty set");
     return self.nextMap[QUEUE_START];
+    // returns QUEUE_END when it is empty
   }
 
   function next(
     Data storage self,
     uint256 idx
   ) internal view returns (uint256) {
-    require(idx != QUEUE_END, "Trying to get next of last element");
     uint256 nextIdx = self.nextMap[idx];
-    require(nextIdx != 0, "Trying to get next of non-existent element");
     return nextIdx;
+    // returns QUEUE_START(0) when it is non-existent element
   }
 }
