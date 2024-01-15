@@ -84,6 +84,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
   mapping(uint256 => LimitOrderSet.Data) internal overLimitOrders;
   mapping(uint256 => LimitOrderSet.Data) internal underLimitOrders;
+  mapping(uint256 => mapping(uint256 => MarketOrder)) public marketOrders;
   mapping(uint256 => mapping(Position => mapping(address => ParticipateInfo)))
     public ledger;
   mapping(uint256 => Round) public rounds;
@@ -125,16 +126,34 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     uint256 overAmount;
     uint256 underAmount;
   }
+  struct MarketOrder {
+    uint256 idx;
+    address user;
+    Position position;
+    uint256 amount;
+    uint256 blockTimestamp;
+    bool isCancelled;
+  }
 
   event ParticipateUnder(
+    uint256 indexed idx,
     address indexed sender,
     uint256 indexed epoch,
     uint256 amount
   );
   event ParticipateOver(
+    uint256 indexed idx,
     address indexed sender,
     uint256 indexed epoch,
     uint256 amount
+  );
+  event CancelMarketOrder(
+    uint256 indexed idx,
+    address indexed sender,
+    uint256 indexed epoch,
+    Position position,
+    uint256 amount,
+    uint256 cancelTimestamp
   );
   event ParticipateLimitOrder(
     uint256 indexed idx,
@@ -229,6 +248,44 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
     token.safeTransferFrom(msg.sender, address(this), _amount);
     _participate(epoch, Position.Over, msg.sender, _amount);
+  }
+
+  function cancelMarketOrder(
+    uint256 idx,
+    uint256 epoch
+  ) external nonReentrant {
+    require(rounds[epoch].openTimestamp != 0, "E21");
+    require(block.timestamp < rounds[epoch].startTimestamp, "E22");
+
+    MarketOrder storage order = marketOrders[epoch][idx];
+    require(order.user == msg.sender && !order.isCancelled, "E03");
+
+    // update order
+    order.isCancelled = true;
+
+    // Update user data
+    ParticipateInfo storage participateInfo = ledger[epoch][order.position][
+      order.user
+    ];
+    participateInfo.amount = participateInfo.amount - order.amount;
+
+    // Update user round data
+    Round storage round = rounds[epoch];
+    round.totalAmount = round.totalAmount - order.amount;
+    if (order.position == Position.Over) {
+      round.overAmount = round.overAmount - order.amount;
+    } else {
+      round.underAmount = round.underAmount - order.amount;
+    }
+
+    emit CancelMarketOrder(
+      idx,
+      msg.sender,
+      epoch,
+      order.position,
+      order.amount,
+      block.timestamp
+    );
   }
 
   function claim(uint256 epoch, Position position) external nonReentrant {
@@ -648,6 +705,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     address _user,
     uint256 _amount
   ) internal {
+    // Store market order
+    uint256 idx = counters[epoch].nextId();
+    marketOrders[epoch][idx] = MarketOrder(idx, _user, _position, _amount, block.timestamp, false);
+
     // Update user data
     ParticipateInfo storage participateInfo = ledger[epoch][_position][_user];
 
@@ -660,10 +721,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     round.totalAmount = round.totalAmount + _amount;
     if (_position == Position.Over) {
       round.overAmount = round.overAmount + _amount;
-      emit ParticipateOver(_user, epoch, _amount);
+      emit ParticipateOver(idx, _user, epoch, _amount);
     } else {
       round.underAmount = round.underAmount + _amount;
-      emit ParticipateUnder(_user, epoch, _amount);
+      emit ParticipateUnder(idx, _user, epoch, _amount);
     }
   }
 
