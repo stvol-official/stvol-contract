@@ -278,6 +278,9 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
       round.underAmount = round.underAmount - order.amount;
     }
 
+    // refund
+    token.safeTransfer(order.user, order.amount);
+
     emit CancelMarketOrder(
       idx,
       msg.sender,
