@@ -271,21 +271,17 @@ contract(
       assert.equal(options_100.totalAmount, ether("3.7").toString()); // 3.7 USDC
       assert.equal(options_100.overAmount, ether("2.3").toString()); // 2.3 USDC
       assert.equal(options_100.underAmount, ether("1.4").toString()); // 1.4 USDC
-      assert.equal((await stVol.ledger(1, Position.Over, overUser1)).position, Position.Over);
-      assert.equal((await stVol.ledger(1, Position.Over, overUser1)).amount, ether("1.1").toString());
-      assert.equal((await stVol.ledger(1, Position.Over, overUser2)).position, Position.Over);
-      assert.equal((await stVol.ledger(1, Position.Over, overUser2)).amount, ether("1.2").toString());
-      assert.equal((await stVol.ledger(1, Position.Under, underUser1)).position, Position.Under);
-      assert.equal((await stVol.ledger(1, Position.Under, underUser1)).amount, ether("1.4").toString());
-      assertBNArray((await stVol.getUserRounds(overUser1, 0, 1))[0], [1]);
-      assertBNArray((await stVol.getUserRounds(overUser2, 0, 1))[0], [1]);
-      assertBNArray((await stVol.getUserRounds(underUser1, 0, 1))[0], [1]);
-      assert.equal(await stVol.getUserRoundsLength(overUser1), 1);
+
+      // strike, epoch, idx, amount, position, claimed, isCancelled
+      assert.includeOrderedMembers((await stVol.viewUserLedger(1, STRIKE._100, overUser1))[0], ["100", "1", '1', ether("1.1").toString(), '0', false, false]);
+      assert.includeOrderedMembers((await stVol.viewUserLedger(1, STRIKE._100, overUser2))[0], ["100", "1", '2', ether("1.2").toString(), '0', false, false]);
+      assert.includeOrderedMembers((await stVol.viewUserLedger(1, STRIKE._100, underUser1))[0], ["100", "1", '3', ether("1.4").toString(), '1', false, false]);
 
       // Epoch 2
       currentTimestamp += INTERVAL_SECONDS;
       await time.increaseTo(currentTimestamp);
 
+      // TODO: Implement here below.
       await stVol.genesisStartRound(new BN(INITIAL_PRICE), currentTimestamp); // For round 1
       currentEpoch = await stVol.currentEpoch();
 

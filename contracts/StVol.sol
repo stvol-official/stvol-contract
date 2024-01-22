@@ -108,8 +108,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     uint256 rewardAmount;
     LimitOrderSet.Data overLimitOrders;
     LimitOrderSet.Data underLimitOrders;
-    mapping(uint256 => MarketOrder) marketOrders;
-    mapping(Position => mapping(address => ParticipateInfo)) ledger;
+    mapping(address => ParticipateInfo[]) ledgers;
   }
 
   struct RoundResponse {
@@ -134,11 +133,24 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     uint256 rewardAmount;
   }
 
+  struct ParticipateInfoResponse {
+    uint8 strike;
+    uint256 epoch;
+    uint256 idx;
+    uint256 amount;
+    Position position;
+    bool claimed; // default false
+    bool isCancelled;
+  }
+
   struct ParticipateInfo {
+    uint256 idx;
     Position position;
     uint256 amount;
     bool claimed; // default false
+    bool isCancelled;
   }
+
   struct RoundAmount {
     uint256 totalAmount;
     uint256 overAmount;
@@ -272,6 +284,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     _participate(_epoch, _strike, Position.Over, msg.sender, _amount);
   }
 
+
   function cancelMarketOrder(
     uint256 _idx,
     uint256 _epoch,
@@ -282,41 +295,34 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
     Option storage option = rounds[_epoch].options[_strike];
 
-    MarketOrder storage order = option.marketOrders[_idx];
-    require(order.user == msg.sender && !order.isCancelled, "E03");
-
-    // update order
-    order.isCancelled = true;
-
     // Update user data
-    ParticipateInfo storage participateInfo = option.ledger[order.position][
-      order.user
-    ];
-    participateInfo.amount = participateInfo.amount - order.amount;
+    ParticipateInfo storage participateInfo = _getParticipateInfoByIdx(_idx, _epoch, _strike, msg.sender);
+    require(!participateInfo.isCancelled && !participateInfo.claimed, "E03");
+    participateInfo.isCancelled = true;
 
     // Update user option data    
-    option.totalAmount = option.totalAmount - order.amount;
-    if (order.position == Position.Over) {
-      option.overAmount = option.overAmount - order.amount;
+    option.totalAmount = option.totalAmount - participateInfo.amount;
+    if (participateInfo.position == Position.Over) {
+      option.overAmount = option.overAmount - participateInfo.amount;
     } else {
-      option.underAmount = option.underAmount - order.amount;
+      option.underAmount = option.underAmount - participateInfo.amount;
     }
 
     // refund
-    token.safeTransfer(order.user, order.amount);
+    token.safeTransfer(msg.sender, participateInfo.amount);
 
     emit CancelMarketOrder(
       _idx,
       msg.sender,
       _epoch,
       _strike,
-      order.position,
-      order.amount,
+      participateInfo.position,
+      participateInfo.amount,
       block.timestamp
     );
   }
 
-  function claim(uint256 _epoch, uint8 _strike, Position _position) external nonReentrant {
+  function claim(uint256 _epoch, uint8 _strike, uint256 _idx) external nonReentrant {
     uint256 reward; // Initializes reward
 
     require(rounds[_epoch].openTimestamp != 0, "E10");
@@ -326,27 +332,28 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
     Round storage round = rounds[_epoch];
     Option storage option = round.options[_strike];
+    ParticipateInfo storage participateInfo = _getParticipateInfoByIdx(_idx, _epoch, _strike, msg.sender);
 
     // Round valid, claim rewards
     if (round.oracleCalled) {
-      require(claimable(_epoch, _strike, _position, msg.sender), "E12");
+      require(claimable(_epoch, _strike, _idx, msg.sender), "E12");
       if (
         (option.overAmount > 0 && option.underAmount > 0) &&
         (round.startPrice != round.closePrice)
       ) {
         addedReward +=
-          (option.ledger[_position][msg.sender].amount *
+          (participateInfo.amount *
             option.rewardAmount) /
           option.rewardBaseCalAmount;
       }
     } else {
       // Round invalid, refund Participate amount
-      require(refundable(_epoch, _strike, _position, msg.sender), "E13");
+      require(refundable(_epoch, _strike, _idx, msg.sender), "E13");
     }
-    option.ledger[_position][msg.sender].claimed = true;
-    reward = option.ledger[_position][msg.sender].amount + addedReward;
+    participateInfo.claimed = true;
+    reward = participateInfo.amount + addedReward;
 
-    emit Claim(msg.sender, _epoch, _strike, _position, reward);
+    emit Claim(msg.sender, _epoch, _strike, participateInfo.position, reward);
 
     if (reward > 0) {
       token.safeTransfer(msg.sender, reward);
@@ -562,17 +569,13 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
       Round storage round = rounds[epoch];
       for (uint i = 0; i < round.availableOptions.length; i++) {
         Option storage option = rounds[epoch].options[round.availableOptions[i]];
-        
-         // 0: Over, 1: Under
-        uint pst = 0;
-        while (pst <= uint(Position.Under)) {
-            Position position = pst == 0 ? Position.Over : Position.Under;
+        ParticipateInfo[] storage participateInfos = option.ledgers[_user];
+
+        for (uint j = 0; j < participateInfos.length; j++) {
             uint256 addedReward = 0;
+            ParticipateInfo storage ledger = participateInfos[j];
 
-            ParticipateInfo storage ledger = option.ledger[position][_user];
-
-            
-            if (claimable(epoch, option.strike, position, _user)) {
+            if (claimable(epoch, option.strike, ledger.idx, _user)) {
                 // Round vaild, claim rewards
                 if (
                     (option.overAmount > 0 && option.underAmount > 0) &&
@@ -585,18 +588,17 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                 addedReward += ledger.amount;
             } else {
                 // Round invaild, refund bet amount
-                if (refundable(epoch, option.strike, position, _user)) {
+                if (refundable(epoch, option.strike, ledger.idx, _user)) {
                     addedReward += ledger.amount;
-                    addedReward += _getUndeclaredAmt(epoch, option.strike, position, _user);
+                    addedReward += _getUndeclaredAmt(epoch, option.strike, ledger.position, _user);
                 }
             }
 
             if (addedReward != 0) {
                 ledger.claimed = true;
                 reward += addedReward;
-                emit Claim(_user, epoch, option.strike, position, addedReward);
+                emit Claim(_user, epoch, option.strike, ledger.position, addedReward);
             }
-            pst++;
         }
       }
     }
@@ -608,12 +610,12 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   function claimable(
     uint256 _epoch,
     uint8 _strike,
-    Position _position,
+    uint256 _idx,
     address _user
   ) public view returns (bool) {
     Round storage round = rounds[_epoch];
     Option storage option = round.options[_strike];
-    ParticipateInfo memory participateInfo = option.ledger[_position][_user];
+    ParticipateInfo memory participateInfo = _getParticipateInfoByIdx(_idx, _epoch, _strike, _user);
     
 
     bool isPossible = false;
@@ -638,13 +640,12 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   function refundable(
     uint256 _epoch,
     uint8 _strike,
-    Position _position,
+    uint256 _idx,
     address _user
   ) public view returns (bool) {
     Round storage round = rounds[_epoch];
-    Option storage option = round.options[_strike];
-    ParticipateInfo memory participateInfo = option.ledger[_position][_user];
-    uint256 refundAmt = _getUndeclaredAmt(_epoch, _strike, _position, _user);
+    ParticipateInfo memory participateInfo = _getParticipateInfoByIdx(_idx, _epoch, _strike, _user);
+    uint256 refundAmt = _getUndeclaredAmt(_epoch, _strike, participateInfo.position, _user);
     refundAmt += participateInfo.amount;
     return
       !round.oracleCalled &&
@@ -798,17 +799,9 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     uint256 _amount
   ) internal {
     Option storage option = rounds[_epoch].options[_strike];
-    // Store market order
     uint256 idx = _counters[_epoch].nextId();
-    option.marketOrders[idx] = MarketOrder(idx, _user, _position, _amount, block.timestamp, false);
 
-    // Update user data
-    ParticipateInfo storage participateInfo = option.ledger[_position][_user];
-
-    participateInfo.position = _position;
-    participateInfo.amount = participateInfo.amount + _amount;
-
-    // Update option amount data
+    option.ledgers[_user].push(ParticipateInfo( idx, _position, _amount, false, false));
     option.totalAmount = option.totalAmount + _amount;
     if (_position == Position.Over) {
       option.overAmount = option.overAmount + _amount;
@@ -1101,6 +1094,21 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     }
   }
 
+  function _getParticipateInfoByIdx(uint256 _idx, uint256 _epoch, uint8 _strike, address _user) internal view returns (ParticipateInfo storage){
+    Option storage option = rounds[_epoch].options[_strike];
+    ParticipateInfo[] storage participateInfos = option.ledgers[_user];
+    int selectedIdx = -1;
+
+    for (uint i = 0; i < participateInfos.length; i++) {
+      if (participateInfos[i].idx == _idx) {
+        selectedIdx = int(i);
+        break;
+      }
+    }
+    require(selectedIdx > -1, "E03");
+    return participateInfos[uint(selectedIdx)];
+  }
+
   function viewAvailableOptionLength() external view returns (uint256) {
     return availableOptionStrikes.length;
   }
@@ -1135,15 +1143,21 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
       return roundResponse;
     }
 
-    function viewUserLedger(uint256 _epoch, address _user) external view returns ( RoundResponse memory) {
+ function viewUserLedger(uint256 _epoch, uint8 _strike, address _user) external view returns ( ParticipateInfoResponse[] memory) {
       Round storage round = rounds[_epoch];
-      OptionResponse[] memory options = new OptionResponse[](round.availableOptions.length);
+      ParticipateInfo[] memory participateInfos = round.options[_strike].ledgers[_user];
+      uint256 size = participateInfos.length;
 
-      for (uint256 i=0; i<round.availableOptions.length; i++) {
-        uint256 size = round.options[round.availableOptions[i]].marketOrders.length;
-        for (uint256 j=0; j<size; j++) {
-
-        }
+      ParticipateInfoResponse[] memory participates = new ParticipateInfoResponse[](size);
+      for (uint256 j = 0; j < size; j++) {
+        participates[j] = ParticipateInfoResponse(_strike
+        , _epoch
+        , participateInfos[j].idx
+        , participateInfos[j].amount
+        , participateInfos[j].position
+        , participateInfos[j].claimed
+        , participateInfos[j].isCancelled);
       }
-    }
+    return participates;
+ }
 }
