@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "hardhat/console.sol";
 
-library LimitOrderSet {
+library IntraOrderSet {
   using SafeMath for uint256;
 
   // represents smallest possible value for an order under comparison of fn smallerThan()
@@ -29,22 +29,14 @@ library LimitOrderSet {
   struct Data {
     mapping(uint256 => uint256) nextMap;
     mapping(uint256 => uint256) prevMap;
-    mapping(uint256 => LimitOrder) orderMap;
+    mapping(uint256 => IntraOrder) orderMap;
   }
 
-  struct LimitOrder {
+  struct IntraOrder {
     uint256 idx;
     address user;
-    uint256 payout;
-    uint256 amount;
-    uint256 blockTimestamp;
-    LimitOrderStatus status;
-  }
-
-  enum LimitOrderStatus {
-    Undeclared,
-    Approve,
-    Cancelled
+    uint256 price; // 1~99 * decimal
+    uint256 unit;
   }
 
   function initializeEmptyList(Data storage self) internal {
@@ -58,20 +50,16 @@ library LimitOrderSet {
 
   function insert(
     Data storage self,
-    LimitOrder memory elementToInsert,
+    IntraOrder memory elementToInsert,
     uint256 idxBeforeNewOne
   ) internal returns (bool) {
-    //(uint32 payout, uint64 amount, address user) = decodeOrder(elementToInsert);
-
-    // console.log("user: %s, payout: %s, amount: %s", user, payout, amount);
-
     require(
-      elementToInsert.payout != 0,
-      "Inserting zero payout is not supported"
+      elementToInsert.price != 0,
+      "Inserting zero price is not supported"
     );
     require(
-      elementToInsert.amount != 0,
-      "Inserting zero amount is not supported"
+      elementToInsert.unit != 0,
+      "Inserting zero unit is not supported"
     );
 
     require(
@@ -161,38 +149,24 @@ library LimitOrderSet {
   }
 
   // @dev orders are ordered by
-  // 1. their payout
+  // 1. higher price to lower price
+  // 2. lower idx to higher idx
   function smallerThan(
     Data storage self,
     uint256 orderLeftIdx,
-    LimitOrder memory orderRight
+    IntraOrder memory orderRight
   ) internal view returns (bool) {
     if (orderLeftIdx == QUEUE_START) return true;
     if (orderLeftIdx == QUEUE_END) return false;
 
-    LimitOrder storage orderLeft = self.orderMap[orderLeftIdx];
+    IntraOrder storage orderLeft = self.orderMap[orderLeftIdx];
 
-    if (orderLeft.payout < orderRight.payout) return true;
-    if (orderLeft.payout == orderRight.payout) {
+    if (orderLeft.price > orderRight.price) return true;
+    if (orderLeft.price == orderRight.price) {
       return orderLeftIdx < orderRight.idx;
     }
 
     return false;
-  }
-
-  function getUndeclaredAmt(
-    Data storage self,
-    address user
-  ) internal view returns (uint256) {
-    uint256 idx = self.nextMap[QUEUE_START];
-    uint256 amt = 0;
-    while (idx != QUEUE_START && idx != QUEUE_END) {
-      LimitOrder storage order = self.orderMap[idx];
-      if (order.user == user && order.status == LimitOrderStatus.Undeclared) {
-        amt += order.amount;
-      }
-    }
-    return amt;
   }
 
   function first(Data storage self) internal view returns (uint256) {

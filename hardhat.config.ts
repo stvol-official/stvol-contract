@@ -114,7 +114,20 @@ export default {
       arbitrumGoerli: process.env.ARBITRUM_ETHERSCAN_KEY,
       sepolia: process.env.ETHERSCAN_KEY,
       arbitrumSepolia: process.env.ARBITRUM_ETHERSCAN_KEY,
-    }
+    },
+    customChains: [
+      {
+        network: "arbitrumSepolia",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io/",
+        },
+      },
+    ],
+  },
+  sourcify: {
+    enabled: true,
   },
   abiExporter: {
     path: "./data/abi",
