@@ -79,7 +79,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   uint256 public constant DEFAULT_BUFFER_SECONDS = 1800; // 30 * 60 (30min)
 
   mapping(uint256 => Round) public rounds; // (key: epoch)
-  mapping(uint256 => AutoIncrementing.Counter) private counters; // (key: epoch)
+  mapping(uint256 => AutoIncrementing.Counter) private _counters; // (key: epoch)
 
   enum Position {
     Over,
@@ -110,6 +110,28 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     LimitOrderSet.Data underLimitOrders;
     mapping(uint256 => MarketOrder) marketOrders;
     mapping(Position => mapping(address => ParticipateInfo)) ledger;
+  }
+
+  struct RoundResponse {
+    uint256 epoch;
+    uint256 openTimestamp;
+    uint256 startTimestamp;
+    uint256 closeTimestamp;
+    uint256 startPrice;
+    uint256 closePrice;
+    uint256 startOracleId;
+    uint256 closeOracleId;
+    bool oracleCalled;
+    OptionResponse[] options;
+  }
+
+  struct OptionResponse {
+    uint8 strike; // 97, 99, 100, 101, 103
+    uint256 totalAmount;
+    uint256 overAmount;
+    uint256 underAmount;
+    uint256 rewardBaseCalAmount;
+    uint256 rewardAmount;
   }
 
   struct ParticipateInfo {
@@ -225,42 +247,42 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function participateUnder(
-    uint256 epoch,
-    uint8 strike,
+    uint256 _epoch,
+    uint8 _strike,
     uint256 _amount
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
-    require(_participable(epoch), "E08");
+    require(_epoch == currentEpoch, "E07");
+    require(_participable(_epoch), "E08");
     require(_amount >= DEFAULT_MIN_PARTICIPATE_AMOUNT, "E09");
 
     token.safeTransferFrom(msg.sender, address(this), _amount);
-    _participate(epoch, strike, Position.Under, msg.sender, _amount);
+    _participate(_epoch, _strike, Position.Under, msg.sender, _amount);
   }
 
   function participateOver(
-    uint256 epoch,
-    uint8 strike,
+    uint256 _epoch,
+    uint8 _strike,
     uint256 _amount
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
-    require(_participable(epoch), "E08");
+    require(_epoch == currentEpoch, "E07");
+    require(_participable(_epoch), "E08");
     require(_amount >= DEFAULT_MIN_PARTICIPATE_AMOUNT, "E09");
 
     token.safeTransferFrom(msg.sender, address(this), _amount);
-    _participate(epoch, strike, Position.Over, msg.sender, _amount);
+    _participate(_epoch, _strike, Position.Over, msg.sender, _amount);
   }
 
   function cancelMarketOrder(
-    uint256 idx,
-    uint256 epoch,
-    uint8 strike
+    uint256 _idx,
+    uint256 _epoch,
+    uint8 _strike
   ) external nonReentrant {
-    require(rounds[epoch].openTimestamp != 0, "E21");
-    require(block.timestamp < rounds[epoch].startTimestamp, "E22");
+    require(rounds[_epoch].openTimestamp != 0, "E21");
+    require(block.timestamp < rounds[_epoch].startTimestamp, "E22");
 
-    Option storage option = rounds[epoch].options[strike];
+    Option storage option = rounds[_epoch].options[_strike];
 
-    MarketOrder storage order = option.marketOrders[idx];
+    MarketOrder storage order = option.marketOrders[_idx];
     require(order.user == msg.sender && !order.isCancelled, "E03");
 
     // update order
@@ -284,47 +306,47 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     token.safeTransfer(order.user, order.amount);
 
     emit CancelMarketOrder(
-      idx,
+      _idx,
       msg.sender,
-      epoch,
-      strike,
+      _epoch,
+      _strike,
       order.position,
       order.amount,
       block.timestamp
     );
   }
 
-  function claim(uint256 epoch, uint8 strike, Position position) external nonReentrant {
+  function claim(uint256 _epoch, uint8 _strike, Position _position) external nonReentrant {
     uint256 reward; // Initializes reward
 
-    require(rounds[epoch].openTimestamp != 0, "E10");
-    require(block.timestamp > rounds[epoch].closeTimestamp, "E11");
+    require(rounds[_epoch].openTimestamp != 0, "E10");
+    require(block.timestamp > rounds[_epoch].closeTimestamp, "E11");
 
     uint256 addedReward = 0;
 
-    Round storage round = rounds[epoch];
-    Option storage option = round.options[strike];
+    Round storage round = rounds[_epoch];
+    Option storage option = round.options[_strike];
 
     // Round valid, claim rewards
     if (round.oracleCalled) {
-      require(claimable(epoch, strike, position, msg.sender), "E12");
+      require(claimable(_epoch, _strike, _position, msg.sender), "E12");
       if (
         (option.overAmount > 0 && option.underAmount > 0) &&
         (round.startPrice != round.closePrice)
       ) {
         addedReward +=
-          (option.ledger[position][msg.sender].amount *
+          (option.ledger[_position][msg.sender].amount *
             option.rewardAmount) /
           option.rewardBaseCalAmount;
       }
     } else {
       // Round invalid, refund Participate amount
-      require(refundable(epoch, strike, position, msg.sender), "E13");
+      require(refundable(_epoch, _strike, _position, msg.sender), "E13");
     }
-    option.ledger[position][msg.sender].claimed = true;
-    reward = option.ledger[position][msg.sender].amount + addedReward;
+    option.ledger[_position][msg.sender].claimed = true;
+    reward = option.ledger[_position][msg.sender].amount + addedReward;
 
-    emit Claim(msg.sender, epoch, strike, position, reward);
+    emit Claim(msg.sender, _epoch, _strike, _position, reward);
 
     if (reward > 0) {
       token.safeTransfer(msg.sender, reward);
@@ -340,16 +362,16 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function executeRound(
-    bytes[] calldata priceUpdateData,
-    uint64 initDate,
-    bool isFixed
+    bytes[] calldata _priceUpdateData,
+    uint64 _initDate,
+    bool _isFixed
   ) external payable whenNotPaused onlyOperator {
     require(genesisOpenOnce && genesisStartOnce, "E14");
 
     (int64 pythPrice, uint publishTime) = _getPythPrice(
-      priceUpdateData,
-      initDate,
-      isFixed
+      _priceUpdateData,
+      _initDate,
+      _isFixed
     );
 
     Round storage currentRound = rounds[currentEpoch];
@@ -374,30 +396,30 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
     // Increment currentEpoch to current round (n)
     currentEpoch = currentEpoch + 1;
-    _safeOpenRound(currentEpoch, initDate);
+    _safeOpenRound(currentEpoch, _initDate);
   }
 
   function _getPythPrice(
-    bytes[] memory priceUpdateData,
-    uint64 fixedTimestamp,
-    bool isFixed
+    bytes[] memory _priceUpdateData,
+    uint64 _fixedTimestamp,
+    bool _isFixed
   ) internal returns (int64, uint) {
     bytes32[] memory pythPair = new bytes32[](1);
     pythPair[0] = priceId;
 
-    uint fee = oracle.getUpdateFee(priceUpdateData);
-    if (isFixed) {
+    uint fee = oracle.getUpdateFee(_priceUpdateData);
+    if (_isFixed) {
       PythStructs.PriceFeed memory pythPrice = oracle.parsePriceFeedUpdates{
         value: fee
       }(
-        priceUpdateData,
+        _priceUpdateData,
         pythPair,
-        fixedTimestamp,
-        fixedTimestamp + uint64(bufferSeconds)
+        _fixedTimestamp,
+        _fixedTimestamp + uint64(bufferSeconds)
       )[0];
-      return (pythPrice.price.price, fixedTimestamp);
+      return (pythPrice.price.price, _fixedTimestamp);
     } else {
-      oracle.updatePriceFeeds{ value: fee }(priceUpdateData);
+      oracle.updatePriceFeeds{ value: fee }(_priceUpdateData);
       return (
         oracle.getPrice(priceId).price,
         oracle.getPrice(priceId).publishTime
@@ -406,17 +428,17 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function genesisStartRound(
-    bytes[] calldata priceUpdateData,
-    uint64 initDate,
-    bool isFixed
+    bytes[] calldata _priceUpdateData,
+    uint64 _initDate,
+    bool _isFixed
   ) external payable whenNotPaused onlyOperator {
     require(genesisOpenOnce, "E16");
     require(!genesisStartOnce, "E32");
 
     (int64 pythPrice, uint publishTime) = _getPythPrice(
-      priceUpdateData,
-      initDate,
-      isFixed
+      _priceUpdateData,
+      _initDate,
+      _isFixed
     );
     Round storage currentRound = rounds[currentEpoch];
     require(
@@ -431,17 +453,17 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     }
 
     currentEpoch = currentEpoch + 1;
-    _openRound(currentEpoch, initDate);
+    _openRound(currentEpoch, _initDate);
     genesisStartOnce = true;
   }
 
   function genesisOpenRound(
-    uint256 initDate
+    uint256 _initDate
   ) external whenNotPaused onlyOperator {
     require(!genesisOpenOnce, "E33");
 
     currentEpoch = currentEpoch + 1;
-    _openRound(currentEpoch, initDate);
+    _openRound(currentEpoch, _initDate);
     genesisOpenOnce = true;
   }
 
@@ -455,8 +477,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     token.safeTransfer(operatorVaultAddress, currentTreasuryAmount);
   }
 
-  function withdraw(uint amount) external onlyAdmin {
-    require(amount <= address(this).balance);
+  function withdraw(uint _amount) external onlyAdmin {
+    require(_amount <= address(this).balance);
     payable(adminAddress).transfer(address(this).balance);
   }
 
@@ -497,22 +519,22 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     commissionfee = _commissionfee;
   }
 
-  function addOptionStrike(uint8 strike) external onlyAdmin {
+  function addOptionStrike(uint8 _strike) external onlyAdmin {
     int idx = -1;
     for (uint i = 0; i < availableOptionStrikes.length; i++) {
-        if (strike == availableOptionStrikes[i]) {
+        if (_strike == availableOptionStrikes[i]) {
             idx = int(i);
             break;
         }
     }
     require(idx == -1, "Already Exists");
-    availableOptionStrikes.push(strike);
+    availableOptionStrikes.push(_strike);
   }
 
-  function removeOptionStrike(uint8 strike) external onlyAdmin {
+  function removeOptionStrike(uint8 _strike) external onlyAdmin {
     int idx = -1;
     for (uint i = 0; i < availableOptionStrikes.length; i++) {
-        if (strike == availableOptionStrikes[i]) {
+        if (_strike == availableOptionStrikes[i]) {
             idx = int(i);
             break;
         }
@@ -584,24 +606,24 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function claimable(
-    uint256 epoch,
-    uint8 strike,
-    Position position,
-    address user
+    uint256 _epoch,
+    uint8 _strike,
+    Position _position,
+    address _user
   ) public view returns (bool) {
-    Round storage round = rounds[epoch];
-    Option storage option = round.options[strike];
-    ParticipateInfo memory participateInfo = option.ledger[position][user];
+    Round storage round = rounds[_epoch];
+    Option storage option = round.options[_strike];
+    ParticipateInfo memory participateInfo = option.ledger[_position][_user];
     
 
     bool isPossible = false;
     if (option.overAmount > 0 && option.underAmount > 0) {
       isPossible = ((round.closePrice >
-        _getStrikePrice(round.startPrice, strike) &&
+        _getStrikePrice(round.startPrice, _strike) &&
         participateInfo.position == Position.Over) ||
-        (round.closePrice < _getStrikePrice(round.startPrice, strike) &&
+        (round.closePrice < _getStrikePrice(round.startPrice, _strike) &&
           participateInfo.position == Position.Under) ||
-        (round.closePrice == _getStrikePrice(round.startPrice, strike)));
+        (round.closePrice == _getStrikePrice(round.startPrice, _strike)));
     } else {
       // refund user's fund if there is no paticipation on the other side
       isPossible = true;
@@ -614,15 +636,15 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function refundable(
-    uint256 epoch,
-    uint8 strike,
-    Position position,
-    address user
+    uint256 _epoch,
+    uint8 _strike,
+    Position _position,
+    address _user
   ) public view returns (bool) {
-    Round storage round = rounds[epoch];
-    Option storage option = round.options[strike];
-    ParticipateInfo memory participateInfo = option.ledger[position][user];
-    uint256 refundAmt = _getUndeclaredAmt(epoch, strike, position, user);
+    Round storage round = rounds[_epoch];
+    Option storage option = round.options[_strike];
+    ParticipateInfo memory participateInfo = option.ledger[_position][_user];
+    uint256 refundAmt = _getUndeclaredAmt(_epoch, _strike, _position, _user);
     refundAmt += participateInfo.amount;
     return
       !round.oracleCalled &&
@@ -632,25 +654,25 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function _getUndeclaredAmt(
-    uint256 epoch,
-    uint8 strike,
-    Position position,
-    address user
+    uint256 _epoch,
+    uint8 _strike,
+    Position _position,
+    address _user
   ) internal view returns (uint256) {
     uint256 amt = 0;
-    Option storage option = rounds[epoch].options[strike];
+    Option storage option = rounds[_epoch].options[_strike];
 
-    if (position == Position.Over) {
-      amt += option.overLimitOrders.getUndeclaredAmt(user);
+    if (_position == Position.Over) {
+      amt += option.overLimitOrders.getUndeclaredAmt(_user);
     } else {
-      amt += option.underLimitOrders.getUndeclaredAmt(user);
+      amt += option.underLimitOrders.getUndeclaredAmt(_user);
     }
     return amt;
   }
 
-  function _calculateRewards(uint256 epoch, uint8 strike) internal {
-    Round storage round = rounds[epoch];
-    Option storage option = round.options[strike];
+  function _calculateRewards(uint256 _epoch, uint8 _strike) internal {
+    Round storage round = rounds[_epoch];
+    Option storage option = round.options[_strike];
     require(
       option.rewardBaseCalAmount == 0 &&
       option.rewardAmount == 0,
@@ -668,13 +690,13 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
       treasuryAmt = 0;
     } else {
       // Over wins
-      if (round.closePrice > _getStrikePrice(round.startPrice, strike)) {
+      if (round.closePrice > _getStrikePrice(round.startPrice, _strike)) {
         rewardBaseCalAmount = option.overAmount;
         treasuryAmt = (option.underAmount * commissionfee) / BASE;
         rewardAmount = option.underAmount - treasuryAmt;
       }
       // Under wins
-      else if (round.closePrice < _getStrikePrice(round.startPrice, strike)) {
+      else if (round.closePrice < _getStrikePrice(round.startPrice, _strike)) {
         rewardBaseCalAmount = option.underAmount;
         treasuryAmt = (option.overAmount * commissionfee) / BASE;
         rewardAmount = option.overAmount - treasuryAmt;
@@ -693,8 +715,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     treasuryAmount += treasuryAmt;
 
     emit RewardsCalculated(
-      epoch,
-      strike,
+      _epoch,
+      _strike,
       rewardBaseCalAmount,
       rewardAmount,
       treasuryAmt
@@ -702,80 +724,82 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function _getStrikePrice(
-    uint256 price, uint8 strike
+    uint256 _price, uint8 _strike
   ) internal pure returns (uint256) {
-    return (price * uint256(strike)) / 100;
+    return (_price * uint256(_strike)) / 100;
   }
 
-  function _safeEndRound(uint256 epoch, uint256 price) internal {
-    require(rounds[epoch].startTimestamp != 0, "E26");
-    require(block.timestamp >= rounds[epoch].closeTimestamp, "E27");
+  function _safeEndRound(uint256 _epoch, uint256 _price) internal {
+    require(rounds[_epoch].startTimestamp != 0, "E26");
+    require(block.timestamp >= rounds[_epoch].closeTimestamp, "E27");
     require(
-      block.timestamp <= rounds[epoch].closeTimestamp + bufferSeconds,
+      block.timestamp <= rounds[_epoch].closeTimestamp + bufferSeconds,
       "E28"
     );
-    rounds[epoch].closePrice = uint256(price);
-    rounds[epoch].oracleCalled = true;
+    rounds[_epoch].closePrice = uint256(_price);
+    rounds[_epoch].oracleCalled = true;
 
-    emit EndRound(epoch, rounds[epoch].closePrice);
+    emit EndRound(_epoch, rounds[_epoch].closePrice);
   }
 
-  function _safeStartRound(uint256 epoch, uint256 price) internal {
-    require(rounds[epoch].openTimestamp != 0, "E23");
-    require(block.timestamp >= rounds[epoch].startTimestamp, "E24");
+  function _safeStartRound(uint256 _epoch, uint256 _price) internal {
+    require(rounds[_epoch].openTimestamp != 0, "E23");
+    require(block.timestamp >= rounds[_epoch].startTimestamp, "E24");
     require(
-      block.timestamp <= rounds[epoch].startTimestamp + bufferSeconds,
+      block.timestamp <= rounds[_epoch].startTimestamp + bufferSeconds,
       "E25"
     );
-    rounds[epoch].startPrice = price;
-    emit StartRound(epoch, rounds[epoch].startPrice);
+    rounds[_epoch].startPrice = _price;
+    emit StartRound(_epoch, rounds[_epoch].startPrice);
   }
 
-  function _safeOpenRound(uint256 epoch, uint256 initDate) internal {
+  function _safeOpenRound(uint256 _epoch, uint256 _initDate) internal {
     require(genesisOpenOnce, "E16");
-    require(rounds[epoch - 2].closeTimestamp != 0, "E17");
-    require(block.timestamp >= rounds[epoch - 2].closeTimestamp, "E18");
-    require(block.timestamp >= initDate, "E19");
-    _openRound(epoch, initDate);
+    require(rounds[_epoch - 2].closeTimestamp != 0, "E17");
+    require(block.timestamp >= rounds[_epoch - 2].closeTimestamp, "E18");
+    require(block.timestamp >= _initDate, "E19");
+    _openRound(_epoch, _initDate);
   }
 
-  function _openRound(uint256 epoch, uint256 initDate) internal {
-    rounds[epoch].openTimestamp = initDate;
-    rounds[epoch].startTimestamp = initDate + intervalSeconds;
-    rounds[epoch].closeTimestamp = initDate + (2 * intervalSeconds);
-    rounds[epoch].epoch = epoch;
+  function _openRound(uint256 _epoch, uint256 _initDate) internal {
+    rounds[_epoch].openTimestamp = _initDate;
+    rounds[_epoch].startTimestamp = _initDate + intervalSeconds;
+    rounds[_epoch].closeTimestamp = _initDate + (2 * intervalSeconds);
+    rounds[_epoch].epoch = _epoch;
 
     for (uint i=0; i < availableOptionStrikes.length; i++) {
-        _initOption(epoch, availableOptionStrikes[i]);
+        _initOption(_epoch, availableOptionStrikes[i]);
     }
-    emit OpenRound(epoch, initDate);
+    emit OpenRound(_epoch, _initDate);
   }
 
-  function _initOption(uint256 epoch, uint8 strike) internal {
-    rounds[epoch].availableOptions.push(strike);
-    rounds[epoch].options[strike].totalAmount = 0;
-    rounds[epoch].options[strike].overLimitOrders.initializeEmptyList();
-    rounds[epoch].options[strike].underLimitOrders.initializeEmptyList();
+  function _initOption(uint256 _epoch, uint8 _strike) internal {
+    Round storage round = rounds[_epoch];
+    round.availableOptions.push(_strike);
+    round.options[_strike].strike = _strike;
+    round.options[_strike].totalAmount = 0;
+    round.options[_strike].overLimitOrders.initializeEmptyList();
+    round.options[_strike].underLimitOrders.initializeEmptyList();
   }
 
-  function _participable(uint256 epoch) internal view returns (bool) {
+  function _participable(uint256 _epoch) internal view returns (bool) {
     return
-      rounds[epoch].openTimestamp != 0 &&
-      rounds[epoch].startTimestamp != 0 &&
-      block.timestamp > rounds[epoch].openTimestamp &&
-      block.timestamp < rounds[epoch].startTimestamp;
+      rounds[_epoch].openTimestamp != 0 &&
+      rounds[_epoch].startTimestamp != 0 &&
+      block.timestamp > rounds[_epoch].openTimestamp &&
+      block.timestamp < rounds[_epoch].startTimestamp;
   }
 
   function _participate(
-    uint256 epoch,
-    uint8 strike,
+    uint256 _epoch,
+    uint8 _strike,
     Position _position,
     address _user,
     uint256 _amount
   ) internal {
-    Option storage option = rounds[epoch].options[strike];
+    Option storage option = rounds[_epoch].options[_strike];
     // Store market order
-    uint256 idx = counters[epoch].nextId();
+    uint256 idx = _counters[_epoch].nextId();
     option.marketOrders[idx] = MarketOrder(idx, _user, _position, _amount, block.timestamp, false);
 
     // Update user data
@@ -788,43 +812,43 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     option.totalAmount = option.totalAmount + _amount;
     if (_position == Position.Over) {
       option.overAmount = option.overAmount + _amount;
-      emit ParticipateOver(idx, _user, epoch, strike, _amount);
+      emit ParticipateOver(idx, _user, _epoch, _strike, _amount);
     } else {
       option.underAmount = option.underAmount + _amount;
-      emit ParticipateUnder(idx, _user, epoch, strike, _amount);
+      emit ParticipateUnder(idx, _user, _epoch, _strike, _amount);
     }
   }
 
   /**
    * @notice Returns true if `account` is a contract.
-   * @param account: account address
+   * @param _account: account address
    */
-  function _isContract(address account) internal view returns (bool) {
+  function _isContract(address _account) internal view returns (bool) {
     uint256 size;
     assembly {
-      size := extcodesize(account)
+      size := extcodesize(_account)
     }
     return size > 0;
   }
 
   function participateLimitOver(
-    uint256 epoch,
-    uint8 strike,
+    uint256 _epoch,
+    uint8 _strike,
     uint256 _amount,
     uint256 _payout,
     uint256 prevIdx
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
-    require(_participable(epoch), "E08");
+    require(_epoch == currentEpoch, "E07");
+    require(_participable(_epoch), "E08");
     require(_amount >= DEFAULT_MIN_PARTICIPATE_AMOUNT, "E09");
     require(_payout > BASE, "E20");
     // require(overLimitOrders[epoch].length <= MAX_LIMIT_ORDERS, "E35");
 
     token.safeTransferFrom(msg.sender, address(this), _amount);
 
-    Option storage option = rounds[epoch].options[strike];
+    Option storage option = rounds[_epoch].options[_strike];
     LimitOrderSet.Data storage limitOrders = option.overLimitOrders;
-    uint256 idx = counters[epoch].nextId();
+    uint256 idx = _counters[_epoch].nextId();
     limitOrders.insert(
       LimitOrderSet.LimitOrder(
         idx,
@@ -840,8 +864,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     emit ParticipateLimitOrder(
       idx,
       msg.sender,
-      epoch,
-      strike,
+      _epoch,
+      _strike,
       _amount,
       _payout,
       block.timestamp,
@@ -854,23 +878,23 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
    * @notice Participate under limit position
    */
   function participateLimitUnder(
-    uint256 epoch,
-    uint8 strike,
+    uint256 _epoch,
+    uint8 _strike,
     uint256 _amount,
     uint256 _payout,
-    uint256 prevIdx
+    uint256 _prevIdx
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
-    require(_participable(epoch), "E08");
+    require(_epoch == currentEpoch, "E07");
+    require(_participable(_epoch), "E08");
     require(_amount >= DEFAULT_MIN_PARTICIPATE_AMOUNT, "E09");
     require(_payout > BASE, "E20");
     // require(underLimitOrders[epoch].length <= MAX_LIMIT_ORDERS, "E35");
 
     token.safeTransferFrom(msg.sender, address(this), _amount);
 
-    Option storage option = rounds[epoch].options[strike];
+    Option storage option = rounds[_epoch].options[_strike];
     LimitOrderSet.Data storage limitOrders = option.underLimitOrders;
-    uint256 idx = counters[epoch].nextId();
+    uint256 idx = _counters[_epoch].nextId();
     limitOrders.insert(
       LimitOrderSet.LimitOrder(
         idx,
@@ -880,13 +904,13 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         block.timestamp,
         LimitOrderSet.LimitOrderStatus.Undeclared
       ),
-      prevIdx
+      _prevIdx
     );
     emit ParticipateLimitOrder(
       idx,
       msg.sender,
-      epoch,
-      strike,
+      _epoch,
+      _strike,
       _amount,
       _payout,
       block.timestamp,
@@ -896,20 +920,20 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
   }
 
   function cancelLimitOrder(
-    uint256 idx,
-    uint256 epoch,
-    uint8 strike,
-    Position position
+    uint256 _idx,
+    uint256 _epoch,
+    uint8 _strike,
+    Position _position
   ) external nonReentrant {
-    require(rounds[epoch].openTimestamp != 0, "E21");
-    require(block.timestamp < rounds[epoch].startTimestamp, "E22");
+    require(rounds[_epoch].openTimestamp != 0, "E21");
+    require(block.timestamp < rounds[_epoch].startTimestamp, "E22");
 
     LimitOrderSet.LimitOrder storage order;
 
-    if (position == Position.Over) {
-      order = rounds[epoch].options[strike].overLimitOrders.orderMap[idx];
+    if (_position == Position.Over) {
+      order = rounds[_epoch].options[_strike].overLimitOrders.orderMap[_idx];
     } else {
-      order = rounds[epoch].options[strike].underLimitOrders.orderMap[idx];
+      order = rounds[_epoch].options[_strike].underLimitOrders.orderMap[_idx];
     }
 
     if (
@@ -923,19 +947,19 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
       emit ParticipateLimitOrder(
         order.idx,
         msg.sender,
-        epoch,
-        strike,
+        _epoch,
+        _strike,
         order.amount,
         order.payout,
         order.blockTimestamp,
-        position,
+        _position,
         LimitOrderSet.LimitOrderStatus.Cancelled
       );
     }
   }
 
-  function _placeLimitOrders(uint256 epoch, uint8 strike) internal {
-    Option storage option = rounds[epoch].options[strike];
+  function _placeLimitOrders(uint256 _epoch, uint8 _strike) internal {
+    Option storage option = rounds[_epoch].options[_strike];
     RoundAmount memory ra = RoundAmount(
        option.totalAmount,
        option.overAmount,
@@ -1011,8 +1035,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         emit ParticipateLimitOrder(
           order.idx,
           order.user,
-          epoch,
-          strike,
+          _epoch,
+          _strike,
           order.amount,
           order.payout,
           order.blockTimestamp,
@@ -1020,12 +1044,12 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
           LimitOrderSet.LimitOrderStatus.Cancelled
         );
       } else if (order.status == LimitOrderSet.LimitOrderStatus.Approve) {
-        _participate(epoch, strike, Position.Over, order.user, order.amount);
+        _participate(_epoch, _strike, Position.Over, order.user, order.amount);
         emit ParticipateLimitOrder(
           order.idx,
           order.user,
-          epoch,
-          strike,
+          _epoch,
+          _strike,
           order.amount,
           order.payout,
           order.blockTimestamp,
@@ -1051,8 +1075,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         emit ParticipateLimitOrder(
           order.idx,
           order.user,
-          epoch,
-          strike,
+          _epoch,
+          _strike,
           order.amount,
           order.payout,
           order.blockTimestamp,
@@ -1060,12 +1084,12 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
           LimitOrderSet.LimitOrderStatus.Cancelled
         );
       } else if (order.status == LimitOrderSet.LimitOrderStatus.Approve) {
-        _participate(epoch, strike, Position.Under, order.user, order.amount);
+        _participate(_epoch, _strike, Position.Under, order.user, order.amount);
         emit ParticipateLimitOrder(
           order.idx,
           order.user,
-          epoch,
-          strike,
+          _epoch,
+          _strike,
           order.amount,
           order.payout,
           order.blockTimestamp,
@@ -1076,4 +1100,50 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
       idx = sortedUnderLimitOrders.next(idx);
     }
   }
+
+  function viewAvailableOptionLength() external view returns (uint256) {
+    return availableOptionStrikes.length;
+  }
+
+  function viewRound(uint256 _epoch) external view returns ( RoundResponse memory) {
+      Round storage round = rounds[_epoch];
+      OptionResponse[] memory options = new OptionResponse[](round.availableOptions.length);
+
+      for (uint256 i=0; i<round.availableOptions.length; i++) {
+        options[i] = OptionResponse({
+            strike: round.options[round.availableOptions[i]].strike,
+            totalAmount: round.options[round.availableOptions[i]].totalAmount,
+            overAmount: round.options[round.availableOptions[i]].overAmount,
+            underAmount: round.options[round.availableOptions[i]].underAmount,
+            rewardBaseCalAmount: round.options[round.availableOptions[i]].rewardBaseCalAmount,
+            rewardAmount: round.options[round.availableOptions[i]].rewardAmount
+          });
+      }
+
+      RoundResponse memory roundResponse = RoundResponse({
+        epoch: round.epoch,
+        openTimestamp: round.openTimestamp,
+        startTimestamp: round.startTimestamp,
+        closeTimestamp: round.closeTimestamp,
+        startPrice: round.startPrice,
+        closePrice: round.closePrice,
+        startOracleId: round.startOracleId,
+        closeOracleId: round.closeOracleId,
+        oracleCalled: round.oracleCalled,
+        options: options
+      });
+      return roundResponse;
+    }
+
+    function viewUserLedger(uint256 _epoch, address _user) external view returns ( RoundResponse memory) {
+      Round storage round = rounds[_epoch];
+      OptionResponse[] memory options = new OptionResponse[](round.availableOptions.length);
+
+      for (uint256 i=0; i<round.availableOptions.length; i++) {
+        uint256 size = round.options[round.availableOptions[i]].marketOrders.length;
+        for (uint256 j=0; j<size; j++) {
+
+        }
+      }
+    }
 }

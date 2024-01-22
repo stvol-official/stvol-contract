@@ -2,13 +2,10 @@ import { ethers, artifacts, contract } from "hardhat";
 import { assert } from "chai";
 import { BN, constants, expectEvent, expectRevert, time, ether, balance } from "@openzeppelin/test-helpers";
 
-const StVol = artifacts.require("StVol0Per");
+const StVol = artifacts.require("StVol");
 const Pyth = artifacts.require("/contracts/mocks/pyth/MockPyth.sol:MockPyth");
 const MockERC20 = artifacts.require("/contracts/utils/MockERC20.sol");
 
-const GAS_PRICE = 8000000000; // hardhat default
-// BLOCK_COUNT_MULTPLIER: Only for test, because testing trx causes block to increment which exceeds blockBuffer time checks
-// Note that the higher this value is, the slower the test will run
 const BLOCK_COUNT_MULTPLIER = 5;
 const DECIMALS = 8; // Chainlink default for ETH/USD
 const INITIAL_PRICE = 10000000000; // $100, 8 decimal places
@@ -25,6 +22,15 @@ const FIRST_PRICE = 100000;
 const SECOND_PRICE = 120000;
 const THIRD_PRICE = 150000;
 
+const enum STRIKE {
+  _97 = 97,
+  _99 = 99,
+  _100 = 100,
+  _101 = 101,
+  _103 = 103,
+
+}
+
 // Enum: 0 = Over, 1 = Under
 const Position = {
   Over: "0",
@@ -37,7 +43,27 @@ const LimitOrderStatus = {
 
 }
 
-const calcGasCost = (gasUsed: number) => new BN(GAS_PRICE * gasUsed);
+interface RoundResponse {
+  epoch: number
+  openTimestamp: number
+  startTimestamp: number
+  closeTimestamp: number
+  startPrice: number
+  closePrice: number
+  startOracleId: number
+  closeOracleId: number
+  oracleCalled: boolean
+  options: OptionResponse[] | any[]
+}
+
+interface OptionResponse {
+  strike: number
+  totalAmount: number
+  overAmount: number
+  underAmount: number
+  rewardBaseCalAmount: number
+  rewardAmount: number
+}
 
 const assertBNArray = (arr1: any[], arr2: any | any[]) => {
   assert.equal(arr1.length, arr2.length);
@@ -47,7 +73,7 @@ const assertBNArray = (arr1: any[], arr2: any | any[]) => {
 };
 
 contract(
-  "StVolUpDown",
+  "StVol.v1",
   ([operator, admin, owner, overUser1, overUser2, overUser3, underUser1, underUser2, underUser3, participantVault, overLimitUser1, overLimitUser2, overLimitUser3, underLimitUser1, underLimitUser2, underLimitUser3]) => {
     // mock usdc total supply
     const _totalInitSupply = ether("10000000000");
@@ -114,10 +140,14 @@ contract(
       assert.equal(await stVol.currentEpoch(), 0);
       assert.equal(await stVol.adminAddress(), admin);
       assert.equal(await stVol.treasuryAmount(), 0);
-      assert.equal(await stVol.minParticipateAmount(), MIN_AMOUNT.toString());
       assert.equal(await stVol.genesisOpenOnce(), false);
       assert.equal(await stVol.genesisStartOnce(), false);
       assert.equal(await stVol.paused(), false);
+      assert.equal(await stVol.availableOptionStrikes(0), STRIKE._97)
+      assert.equal(await stVol.availableOptionStrikes(1), STRIKE._99)
+      assert.equal(await stVol.availableOptionStrikes(2), STRIKE._100)
+      assert.equal(await stVol.availableOptionStrikes(3), STRIKE._101)
+      assert.equal(await stVol.availableOptionStrikes(4), STRIKE._103)
     });
 
     it("Should start genesis rounds (round 1, round 2, round 3)", async () => {
@@ -140,7 +170,14 @@ contract(
       assert.equal((await stVol.rounds(1)).startTimestamp, currentTimestamp + INTERVAL_SECONDS);
       assert.equal((await stVol.rounds(1)).closeTimestamp, currentTimestamp + INTERVAL_SECONDS * 2);
       assert.equal((await stVol.rounds(1)).epoch, 1);
-      assert.equal((await stVol.rounds(1)).totalAmount, 0);
+
+      let round = (await stVol.viewRound(1) as RoundResponse);
+      let options = round.options;
+      assertBNArray(options[0], [STRIKE._97, 0, 0, 0, 0, 0]);
+      assertBNArray(options[1], [STRIKE._99, 0, 0, 0, 0, 0]);
+      assertBNArray(options[2], [STRIKE._100, 0, 0, 0, 0, 0]);
+      assertBNArray(options[3], [STRIKE._101, 0, 0, 0, 0, 0]);
+      assertBNArray(options[4], [STRIKE._103, 0, 0, 0, 0, 0]);
 
       // Elapse 20 blocks
       currentTimestamp += INTERVAL_SECONDS;
@@ -172,7 +209,18 @@ contract(
       assert.equal((await stVol.rounds(2)).startTimestamp, currentTimestamp + INTERVAL_SECONDS);
       assert.equal((await stVol.rounds(2)).closeTimestamp, currentTimestamp + 2 * INTERVAL_SECONDS);
       assert.equal((await stVol.rounds(2)).epoch, 2);
-      assert.equal((await stVol.rounds(2)).totalAmount, 0);
+      round = (await stVol.viewRound(2) as RoundResponse);
+      options = round.options;
+      options.forEach((item, idx) => {
+        console.log(`item: ${item} : idx: ${idx}`)
+      })
+
+      assertBNArray(options[0], [STRIKE._97, 0, 0, 0, 0, 0]);
+      assertBNArray(options[1], [STRIKE._99, 0, 0, 0, 0, 0]);
+      assertBNArray(options[2], [STRIKE._100, 0, 0, 0, 0, 0]);
+      assertBNArray(options[3], [STRIKE._101, 0, 0, 0, 0, 0]);
+      assertBNArray(options[4], [STRIKE._103, 0, 0, 0, 0, 0]);
+
 
       // Elapse 20 blocks
       currentTimestamp += INTERVAL_SECONDS;
@@ -205,107 +253,24 @@ contract(
       // Lock round 2
       assert.equal((await stVol.rounds(2)).startPrice, SECOND_PRICE);
     });
-    it("Should start genesis rounds with parsePriceFeedUpdates in pyth (round 1, round 2, round 3)", async () => {
-      // Manual block calculation
-      let currentTimestamp = (await time.latest()).toNumber();
-
-      // Epoch 0
-      assert.equal((await time.latest()).toNumber(), currentTimestamp);
-      assert.equal(await stVol.currentEpoch(), 0);
-
-      // Epoch 1: Start genesis round 1
-      let tx = await stVol.genesisOpenRound(currentTimestamp);
-      expectEvent(tx, "OpenRound", { epoch: new BN(1) });
-      assert.equal(await stVol.currentEpoch(), 1);
-
-      // Start round 1
-      assert.equal(await stVol.genesisOpenOnce(), true);
-      assert.equal(await stVol.genesisStartOnce(), false);
-      assert.equal((await stVol.rounds(1)).openTimestamp, currentTimestamp);
-      assert.equal((await stVol.rounds(1)).startTimestamp, currentTimestamp + INTERVAL_SECONDS);
-      assert.equal((await stVol.rounds(1)).closeTimestamp, currentTimestamp + INTERVAL_SECONDS * 2);
-      assert.equal((await stVol.rounds(1)).epoch, 1);
-      assert.equal((await stVol.rounds(1)).totalAmount, 0);
-
-      // Elapse 20 blocks
-      currentTimestamp += INTERVAL_SECONDS;
-      await time.increaseTo(currentTimestamp);
-      // update pythPrice updateData
-      let updateData = await pyth.createPriceFeedUpdateData(priceId, FIRST_PRICE, 10 * FIRST_PRICE, -5, FIRST_PRICE, 10 * FIRST_PRICE, currentTimestamp);
-      let requiredFee = await pyth.getUpdateFee([updateData]);
-
-      await pyth.updatePriceFeeds([updateData], { value: requiredFee });
-
-      // Epoch 2: Lock genesis round 1 and starts round 2
-      tx = await stVol.genesisStartRound([updateData], currentTimestamp, true, { value: requiredFee });
-
-      expectEvent(tx, "StartRound", {
-        epoch: new BN(1),
-        price: new BN(FIRST_PRICE),
-      });
-
-      expectEvent(tx, "OpenRound", { epoch: new BN(2) });
-      assert.equal(await stVol.currentEpoch(), 2);
-
-      // Lock round 1
-      assert.equal(await stVol.genesisOpenOnce(), true);
-      assert.equal(await stVol.genesisStartOnce(), true);
-      assert.equal((await stVol.rounds(1)).startPrice, FIRST_PRICE);
-
-      // Start round 2
-      assert.equal((await stVol.rounds(2)).openTimestamp, currentTimestamp);
-      assert.equal((await stVol.rounds(2)).startTimestamp, currentTimestamp + INTERVAL_SECONDS);
-      assert.equal((await stVol.rounds(2)).closeTimestamp, currentTimestamp + 2 * INTERVAL_SECONDS);
-      assert.equal((await stVol.rounds(2)).epoch, 2);
-      assert.equal((await stVol.rounds(2)).totalAmount, 0);
-
-      // Elapse 20 blocks
-      currentTimestamp += INTERVAL_SECONDS;
-      await time.increaseTo(currentTimestamp);
-      // update pythPrice updateData
-      updateData = await pyth.createPriceFeedUpdateData(priceId, SECOND_PRICE, 10 * SECOND_PRICE, -5, SECOND_PRICE, 10 * SECOND_PRICE, currentTimestamp);
-      requiredFee = await pyth.getUpdateFee([updateData]);
-
-      await pyth.updatePriceFeeds([updateData], { value: requiredFee });
-
-      // Epoch 3: End genesis round 1, locks round 2, starts round 3
-      tx = await stVol.executeRound([updateData], currentTimestamp, true, { value: 100000 });
-
-      expectEvent(tx, "EndRound", {
-        epoch: new BN(1),
-        price: new BN(SECOND_PRICE),
-      });
-
-      expectEvent(tx, "StartRound", {
-        epoch: new BN(2),
-        price: new BN(SECOND_PRICE),
-      });
-
-      expectEvent(tx, "OpenRound", { epoch: new BN(3) });
-      assert.equal(await stVol.currentEpoch(), 3);
-
-      // End round 1
-      assert.equal((await stVol.rounds(1)).closePrice, SECOND_PRICE);
-
-      // Lock round 2
-      assert.equal((await stVol.rounds(2)).startPrice, SECOND_PRICE);
-    });
-
-    it("Should record data and user participate", async () => {
+    it.only("Should participate with strike by user", async () => {
       let currentTimestamp = (await time.latest()).toNumber();
 
       // Epoch 1
       await stVol.genesisOpenRound(currentTimestamp);
       currentEpoch = await stVol.currentEpoch();
 
-      await stVol.participateOver(currentEpoch, ether("1.1"), { from: overUser1 }); // 1.1 USDC
-      await stVol.participateOver(currentEpoch, ether("1.2"), { from: overUser2 }); // 1.2 USDC
-      await stVol.participateUnder(currentEpoch, ether("1.4"), { from: underUser1 }); // 1.4 USDC
+      await stVol.participateOver(currentEpoch, STRIKE._100, ether("1.1"), { from: overUser1 }); // 1.1 USDC
+      await stVol.participateOver(currentEpoch, STRIKE._100, ether("1.2"), { from: overUser2 }); // 1.2 USDC
+      await stVol.participateUnder(currentEpoch, STRIKE._100, ether("1.4"), { from: underUser1 }); // 1.4 USDC
 
       assert.equal((await mockUsdc.balanceOf(stVol.address)).toString(), ether("3.7").toString()); // 3.7 USDC
-      assert.equal((await stVol.rounds(1)).totalAmount, ether("3.7").toString()); // 3.7 USDC
-      assert.equal((await stVol.rounds(1)).overAmount, ether("2.3").toString()); // 2.3 USDC
-      assert.equal((await stVol.rounds(1)).underAmount, ether("1.4").toString()); // 1.4 USDC
+      let round = await stVol.viewRound(1);
+      let [options_97, options_99, options_100, options_101, options_102] = round.options;
+
+      assert.equal(options_100.totalAmount, ether("3.7").toString()); // 3.7 USDC
+      assert.equal(options_100.overAmount, ether("2.3").toString()); // 2.3 USDC
+      assert.equal(options_100.underAmount, ether("1.4").toString()); // 1.4 USDC
       assert.equal((await stVol.ledger(1, Position.Over, overUser1)).position, Position.Over);
       assert.equal((await stVol.ledger(1, Position.Over, overUser1)).amount, ether("1.1").toString());
       assert.equal((await stVol.ledger(1, Position.Over, overUser2)).position, Position.Over);
@@ -495,7 +460,7 @@ contract(
       assert.equal((await mockUsdc.balanceOf(stVol.address)).toString(), ether("0").toString());
     });
 
-    it.only("Should refund all user's participant amount when round is fail", async () => {
+    it("Should refund all user's participant amount when round is fail", async () => {
       let currentTimestamp = (await time.latest()).toNumber();
 
       // Epoch 1

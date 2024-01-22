@@ -17,7 +17,7 @@
     "deploy:arbitrum": "npx hardhat run --network arbitrum scripts/deploy-eth-stvol.ts",
     "test": "npx hardhat test",
     "test:iter": "hardhat test --network hardhat ./test/IteratableOrderSet.spec.ts",
-    "test:stvol-pyth": "hardhat test --network hardhat ./test/StVol.pyth.test.ts",
+    "test:stvol-v1": "hardhat test --network hardhat ./test/StVol.v1.test.ts",
     "test:mock-pyth": "hardhat test --network hardhat ./test/MockPyth.test.ts",
     "test:coverage": "npx hardhat coverage",
     "test:size-contracts": "npx hardhat size-contracts",
