@@ -10,7 +10,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "./utils/AutoIncrementing.sol";
-import "./libraries/LimitOrderSet.sol";
+import "./libraries/IntraOrderSet.sol";
 
 /**
  * E01: Not admin
@@ -49,7 +49,7 @@ import "./libraries/LimitOrderSet.sol";
 contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   using SafeERC20 for IERC20;
   using AutoIncrementing for AutoIncrementing.Counter;
-  using LimitOrderSet for LimitOrderSet.Data;
+  using IntraOrderSet for IntraOrderSet.Data;
 
   IERC20 public immutable token; // Prediction token
 
@@ -73,7 +73,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   uint256 public currentEpoch; // current epoch for round
   uint256 public constant BASE = 10000; // 100%
   uint256 public constant MAX_COMMISSION_FEE = 200; // 2%
-  uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC
+  uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
   uint256 public constant DEFAULT_INTERVAL_SECONDS = 86400; // 24 * 60 * 60 * 1(1day)
   uint256 public constant DEFAULT_BUFFER_SECONDS = 1800; // 30 * 60 (30min)
 
@@ -84,6 +84,15 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     Over,
     Under
   }
+
+  struct Order {
+    uint256 epoch;
+    uint8 strike;
+    Position position;
+    uint256 price;
+    uint256 unit;
+  }
+
   struct Round {
     uint256 epoch;
     uint256 startTimestamp;
@@ -101,24 +110,15 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint8 strike; // 97, 99, 100, 101, 103
     uint256 overPrice;
     uint256 underPrice;
-    LimitOrderSet.Data overLimitOrders;
-    LimitOrderSet.Data underLimitOrders;
+
+    IntraOrderSet.Data overOrders;
+    IntraOrderSet.Data underOrders;
 
     AutoIncrementing.Counter executedOrderCounter;
     mapping(uint256 => ExecutedOrder) executedOrders;
     mapping(address => uint256[]) userExecutedOrder;
   }
 
-  struct LimitOrder {
-    uint256 idx;
-    address user;
-    uint256 epoch; // round
-    uint8 strike; 
-    Position position;
-    uint256 price; // 1~99
-    uint256 unit; // how many
-  }
-  
   struct ExecutedOrder {
     uint256 idx;
     uint256 epoch; 
@@ -126,7 +126,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     address overUser;
     address underUser;
     uint256 overPrice;
-    uint256 underPrice; // over_price + under_price = 100
+    uint256 underPrice; // over_price + under_price = 100 * decimal
     uint256 unit;
     bool isOverClaimed; // default: false
     bool isUnderClaimed; // default: false
@@ -146,26 +146,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint8 strike,
     uint256 amount
   );
-  event CancelMarketOrder(
-    uint256 indexed idx,
-    address indexed sender,
-    uint256 indexed epoch,
-    uint8 strike,
-    Position position,
-    uint256 amount,
-    uint256 cancelTimestamp
-  );
-  event ParticipateLimitOrder(
-    uint256 indexed idx,
-    address indexed sender,
-    uint256 indexed epoch,
-    uint8 strike,
-    uint256 amount,
-    uint256 payout,
-    uint256 placeTimestamp,
-    Position position,
-    LimitOrderSet.LimitOrderStatus status
-  );
+  
   event Claim(
     address indexed sender,
     uint256 indexed epoch,
@@ -234,9 +215,43 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint8 strike,
     Position position,
     uint256 price,
-    uint256 unit
+    uint256 unit,
+    uint256 prevIdx
   ) external whenNotPaused nonReentrant {
-    // TODO: not implemented
+    require(epoch == currentEpoch, "E07");
+    require(rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp, "E08");
+    require(price >= 1000000 && price <= 99000000, "The price must be between 1 and 99.");
+    require(price % 1000000 == 0, "The price must be an integer.");
+    require(unit > 0, "The unit must be greater than 0.");
+
+    uint256 transferedToken = price * unit;
+    token.safeTransferFrom(msg.sender, address(this), transferedToken);
+    
+    uint256 usedToken;
+    (usedToken, unit) = _matchOrders(Order(epoch, strike, position, price, unit));
+
+    if (unit > 0) {
+      uint256 idx = counters[epoch].nextId();
+      Option storage option = rounds[epoch].options[strike];
+      IntraOrderSet.Data storage orders = position == Position.Over ? option.overOrders : option.underOrders;
+      orders.insert(
+        IntraOrderSet.IntraOrder(
+          idx,
+          msg.sender,
+          price,
+          unit
+        ),
+        prevIdx
+      );
+
+      usedToken += price * unit;
+    }
+
+    if (transferedToken > usedToken) {
+      token.safeTransferFrom(address(this), msg.sender, transferedToken - usedToken);
+    }
+
+    // TODO: emit Events
   }
 
   function refundable(
@@ -453,7 +468,59 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
 
   /* internal functions */
+  function _matchOrders(
+    Order memory order
+  ) internal returns (uint256, uint256) {
+    Option storage option = rounds[order.epoch].options[order.strike];
+    IntraOrderSet.Data storage counterOrders = order.position == Position.Over ? option.underOrders : option.overOrders;
+    uint256 usedToken;
+    uint256 leftUnit = order.unit;
 
+    while (leftUnit > 0) {
+      uint256 counterIdx = counterOrders.first();
+      if (counterIdx == IntraOrderSet.QUEUE_START || counterIdx == IntraOrderSet.QUEUE_END) {
+        // counter order is empty
+        break;
+      }
+
+      IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
+      if (counterOrder.price + order.price < 100000000) { // 100 usdc
+        // no more matched counter orders
+        break;
+      }
+
+      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 txUnit = leftUnit < counterOrder.unit ? leftUnit : counterOrder.unit; // min
+
+      uint256 txId = option.executedOrderCounter.nextId();
+
+      option.executedOrders[txId] = ExecutedOrder(
+        txId,
+        order.epoch,
+        order.strike,
+        order.position == Position.Over ? msg.sender : counterOrder.user,
+        order.position == Position.Over ? counterOrder.user : msg.sender,
+        order.position == Position.Over ? myPrice : counterOrder.price,
+        order.position == Position.Over ? counterOrder.price : myPrice,
+        txUnit,
+        false,
+        false
+      );
+      option.userExecutedOrder[msg.sender].push(txId);
+      option.userExecutedOrder[counterOrder.user].push(txId);
+
+      leftUnit = leftUnit - txUnit;
+      usedToken += myPrice * txUnit;
+
+      if (counterOrder.unit - txUnit == 0) { // remove
+        counterOrders.remove(counterIdx);
+      } else { // update
+        counterOrder.unit = counterOrder.unit - txUnit;
+      }
+    }
+    return (usedToken, leftUnit); // used token and unmatched unit
+  }
+  
   function _getPythPrice(
     bytes[] memory priceUpdateData,
     uint64 fixedTimestamp,
@@ -629,8 +696,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   function _initOption(uint256 epoch, uint8 strike) internal {
     rounds[epoch].availableOptions.push(strike);
-    rounds[epoch].options[strike].overLimitOrders.initializeEmptyList();
-    rounds[epoch].options[strike].underLimitOrders.initializeEmptyList();
+    rounds[epoch].options[strike].overOrders.initializeEmptyList();
+    rounds[epoch].options[strike].underOrders.initializeEmptyList();
   }
 
   /**
