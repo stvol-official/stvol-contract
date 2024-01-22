@@ -248,7 +248,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     }
 
     if (transferedToken > usedToken) {
-      token.safeTransferFrom(address(this), msg.sender, transferedToken - usedToken);
+      token.safeTransfer(msg.sender, transferedToken - usedToken);
     }
 
     // TODO: emit Events
