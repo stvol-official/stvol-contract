@@ -4,7 +4,8 @@ import config from "../config";
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const STVOL_NAME = "StVol0Per";
+  const STVOL_NAME = "StVol3PerUp";
+  const PYTH_PRICE_FEED = "ETH_USD";
 
   // Check if the network is supported.
   if (networkName === "goerli"
@@ -49,7 +50,7 @@ const main = async () => {
       config.Address.Operator[networkName],
       config.Address.OperatorVault[networkName],
       config.CommissionFee[networkName],
-      config.PythPriceId[networkName]['ETH_USD'],
+      config.PythPriceId[networkName][PYTH_PRICE_FEED],
     );
 
     await stVolContract.deployed();
@@ -66,7 +67,7 @@ const main = async () => {
         config.Address.Operator[networkName],
         config.Address.OperatorVault[networkName],
         config.CommissionFee[networkName],
-        config.PythPriceId[networkName]['ETH_USD']
+        config.PythPriceId[networkName][PYTH_PRICE_FEED]
       ]
     });
     console.log('verify the contractAction done');
