@@ -2,7 +2,7 @@ import { time } from "@openzeppelin/test-helpers";
 import { assert } from "chai";
 import { artifacts, contract } from "hardhat";
 
-const MockPythPrice = artifacts.require("MockPyth");
+const MockPythPrice = artifacts.require("/contracts/mocks/pyth/MockPyth.sol:MockPyth");
 contract("MockPythPrice", ([operator, admin]) => {
     const priceId = '0x000000000000000000000000000000000000000000000000000000000000abcd';
     const INTERVAL_SECONDS = 100;
