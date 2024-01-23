@@ -100,6 +100,9 @@ contract(
 
         await stVol.printOrders(1, 100);
 
+        const values = await stVol.getTotalMarketPrice(1, 100, OVER, 35, {from: underUser1});
+        console.log('total unit:' + values[0] + ', total price: ' + values[1] + ', average price: ' + (values[1] / values[0]));
+
         await stVol.executeMarketOrder(1, 100, OVER, 33000000, 50, {from: underUser1});
 
         await stVol.printOrders(1, 100);

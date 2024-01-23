@@ -303,6 +303,47 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     // TODO: emit Events
   }
 
+  function getTotalMarketPrice(
+    uint256 epoch,
+    uint8 strike,
+    Position position,
+    uint256 unit
+  ) public view returns (uint256, uint256) {
+    require(epoch == currentEpoch, "E07");
+    require(rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp, "E08");
+
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.Data storage counterOrders = position == Position.Over ? option.underOrders : option.overOrders;
+
+    uint256 totalUnit;
+    uint256 totalPrice;
+
+    uint256 counterIdx = counterOrders.first();
+
+    while (totalUnit < unit) {
+      if (counterIdx == IntraOrderSet.QUEUE_START || counterIdx == IntraOrderSet.QUEUE_END) {
+        // counter order is empty
+        break;
+      }
+
+      IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
+      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 txUnit = (unit - totalUnit) < counterOrder.unit ? unit - totalUnit : counterOrder.unit; // min
+
+      totalPrice += myPrice * txUnit;
+      totalUnit += txUnit;
+
+      if (counterOrder.unit - txUnit == 0) {
+        // check next order
+        counterIdx = counterOrders.next(counterIdx);
+      } else {
+        break; // finish
+      }
+    }
+
+    return (totalUnit, totalPrice);
+  }
+
 
   function refundable(
     uint256 epoch,
