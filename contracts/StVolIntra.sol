@@ -254,6 +254,29 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     // TODO: emit Events
   }
 
+  function cancelLimitOrder(
+    uint256 epoch,
+    uint8 strike,
+    Position position,
+    uint256 idx
+  ) external whenNotPaused nonReentrant {
+    require(epoch == currentEpoch, "E07");
+    require(rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp, "E08");
+    require(idx > 0, "The idx must be greater than 0.");
+
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.Data storage orders = position == Position.Over ? option.overOrders : option.underOrders;
+    IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
+    require(order.user == msg.sender, "E03");
+
+    uint256 refundAmount = order.price * order.unit;
+    bool deleted = orders.remove(idx);
+
+    token.safeTransfer(msg.sender, refundAmount);
+
+    // TODO: emit Events
+  }
+
   function refundable(
     uint256 epoch,
     uint8 strike,
