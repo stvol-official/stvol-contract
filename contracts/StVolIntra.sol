@@ -228,7 +228,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     token.safeTransferFrom(msg.sender, address(this), transferedToken);
     
     uint256 usedToken;
-    (usedToken, unit) = _matchOrders(Order(epoch, strike, position, price, unit));
+    (usedToken, unit) = _matchLimitOrders(Order(epoch, strike, position, price, unit));
 
     if (unit > 0) {
       uint256 idx = counters[epoch].nextId();
@@ -276,6 +276,33 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
     // TODO: emit Events
   }
+
+  function executeMarketOrder(
+    uint256 epoch,
+    uint8 strike,
+    Position position,
+    uint256 price, // expected average price
+    uint256 unit // max unit of the order
+  ) external whenNotPaused nonReentrant {
+    require(epoch == currentEpoch, "E07");
+    require(rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp, "E08");
+    require(price >= 1000000 && price <= 99000000, "The price must be between 1 and 99.");
+    require(unit > 0, "The unit must be greater than 0.");
+
+    uint256 transferedToken = price * unit;
+    token.safeTransferFrom(msg.sender, address(this), transferedToken);
+
+    uint256 totalUnit;
+    uint256 totalPrice;
+    (totalUnit, totalPrice) = _matchMarketOrders(Order(epoch, strike, position, price, unit));
+
+    if (transferedToken > totalPrice) {
+      token.safeTransfer(msg.sender, transferedToken - totalPrice);
+    }
+
+    // TODO: emit Events
+  }
+
 
   function refundable(
     uint256 epoch,
@@ -491,13 +518,14 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
 
   /* internal functions */
-  function _matchOrders(
+  function _matchLimitOrders(
     Order memory order
   ) internal returns (uint256, uint256) {
     Option storage option = rounds[order.epoch].options[order.strike];
     IntraOrderSet.Data storage counterOrders = order.position == Position.Over ? option.underOrders : option.overOrders;
     uint256 usedToken;
     uint256 leftUnit = order.unit;
+    
 
     while (leftUnit > 0) {
       uint256 counterIdx = counterOrders.first();
@@ -534,6 +562,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
       leftUnit = leftUnit - txUnit;
       usedToken += myPrice * txUnit;
+      
 
       if (counterOrder.unit - txUnit == 0) { // remove
         counterOrders.remove(counterIdx);
@@ -542,6 +571,85 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
     }
     return (usedToken, leftUnit); // used token and unmatched unit
+  }
+
+  function _matchMarketOrders(
+    Order memory order
+  ) internal returns (uint256, uint256) {
+    Option storage option = rounds[order.epoch].options[order.strike];
+    IntraOrderSet.Data storage counterOrders = order.position == Position.Over ? option.underOrders : option.overOrders;
+
+    uint256 totalUnit;
+    uint256 totalPrice;
+
+    while (totalUnit < order.unit) {
+      uint256 counterIdx = counterOrders.first();
+      if (counterIdx == IntraOrderSet.QUEUE_START || counterIdx == IntraOrderSet.QUEUE_END) {
+        // counter order is empty
+        break;
+      }
+
+      IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
+      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 txUnit = (order.unit - totalUnit) < counterOrder.unit ? order.unit - totalUnit : counterOrder.unit; // min
+
+      txUnit = _findExactUnit(totalPrice, totalUnit, myPrice, txUnit, order.price);
+
+      if (txUnit == 0) {
+        // no more matching
+        break;
+      }
+
+      uint256 txId = option.executedOrderCounter.nextId();
+      option.executedOrders[txId] = ExecutedOrder(
+        txId,
+        order.epoch,
+        order.strike,
+        order.position == Position.Over ? msg.sender : counterOrder.user,
+        order.position == Position.Over ? counterOrder.user : msg.sender,
+        order.position == Position.Over ? myPrice : counterOrder.price,
+        order.position == Position.Over ? counterOrder.price : myPrice,
+        txUnit,
+        false,
+        false
+      );
+      option.userExecutedOrder[msg.sender].push(txId);
+      option.userExecutedOrder[counterOrder.user].push(txId);
+
+      totalPrice += myPrice * txUnit;
+      totalUnit += txUnit;
+
+      if (counterOrder.unit - txUnit == 0) { // remove
+        counterOrders.remove(counterIdx);
+      } else { // update
+        counterOrder.unit = counterOrder.unit - txUnit;
+        break; // no more matching
+      }
+    }
+    return (totalUnit, totalPrice);
+  }
+
+  function _findExactUnit(uint256 totalPrice, uint256 totalUnit, uint256 myPrice, uint256 txUnit, uint256 price) internal pure returns (uint256) {
+      uint256 newTotalPrice = totalPrice + (myPrice * txUnit);
+      uint256 newTotalUnits = totalUnit + txUnit;
+
+      if (newTotalPrice / newTotalUnits <= price) {
+        // all txUnit matched!
+      } else {
+        // check one by one
+        uint256 newTxUnit;
+        for (uint i=1; i < txUnit; i++) {
+          newTotalPrice = totalPrice + (myPrice * i);
+          newTotalUnits = totalUnit + i;
+          if (newTotalPrice / newTotalUnits <= price) {
+            newTxUnit = i; // matched!
+          } else {
+            break;
+          }
+        }
+        txUnit = newTxUnit;
+      }
+      return txUnit;
   }
   
   function _getPythPrice(

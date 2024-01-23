@@ -93,8 +93,14 @@ contract(
         await stVol.submitLimitOrder(1, 100, UNDER, 98000000, 10, 0, {from: underUser3});
         await stVol.submitLimitOrder(1, 100, UNDER, 99000000, 5, 0, {from: underUser3});
 
-        const rounds = await stVol.rounds(1);
-        console.log(rounds);
+        await stVol.submitLimitOrder(1, 100, UNDER, 99000000, 15, 0, {from: underUser1});
+        await stVol.submitLimitOrder(1, 100, UNDER, 88000000, 15, 0, {from: underUser2});
+        await stVol.submitLimitOrder(1, 100, UNDER, 77000000, 10, 0, {from: underUser3});
+        await stVol.submitLimitOrder(1, 100, UNDER, 66000000, 5, 0, {from: underUser3});
+
+        await stVol.printOrders(1, 100);
+
+        await stVol.executeMarketOrder(1, 100, OVER, 33000000, 50, {from: underUser1});
 
         await stVol.printOrders(1, 100);
 
