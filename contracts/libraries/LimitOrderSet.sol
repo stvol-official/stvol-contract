@@ -62,7 +62,6 @@ library LimitOrderSet {
     uint256 idxBeforeNewOne
   ) internal returns (bool) {
     //(uint32 payout, uint64 amount, address user) = decodeOrder(elementToInsert);
-
     // console.log("user: %s, payout: %s, amount: %s", user, payout, amount);
 
     require(
@@ -191,6 +190,7 @@ library LimitOrderSet {
       if (order.user == user && order.status == LimitOrderStatus.Undeclared) {
         amt += order.amount;
       }
+      idx = self.nextMap[idx];
     }
     return amt;
   }
