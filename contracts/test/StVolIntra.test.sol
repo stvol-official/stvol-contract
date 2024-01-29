@@ -53,7 +53,7 @@ contract StVolIntraTest is StVolIntra {
         console.log("== excuted orders ==");
         idx = 1;
         do {
-            ExecutedOrder memory order = option.executedOrders[idx];
+            FilledOrder memory order = option.filledOrders[idx];
             if (order.idx == 0) break;
 
             console.log("idx: %s, over price: %s, unit: %s", order.idx, order.overPrice, order.unit);

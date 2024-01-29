@@ -85,6 +85,11 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     Under
   }
 
+  enum OrderType {
+    Market,
+    Limit
+  }
+
   struct Order {
     uint256 epoch;
     uint8 strike;
@@ -114,12 +119,12 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     IntraOrderSet.Data overOrders;
     IntraOrderSet.Data underOrders;
 
-    AutoIncrementing.Counter executedOrderCounter;
-    mapping(uint256 => ExecutedOrder) executedOrders;
-    mapping(address => uint256[]) userExecutedOrder;
+    AutoIncrementing.Counter filledOrderCounter;
+    mapping(uint256 => FilledOrder) filledOrders;
+    mapping(address => uint256[]) userFilledOrder;
   }
 
-  struct ExecutedOrder {
+  struct FilledOrder {
     uint256 idx;
     uint256 epoch; 
     uint8 strike;
@@ -132,19 +137,39 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     bool isUnderClaimed; // default: false
   }
 
-  event ParticipateUnder(
-    uint256 indexed idx,
+  event SubmitLimitOrder(
     address indexed sender,
     uint256 indexed epoch,
+    uint256 indexed idx,
     uint8 strike,
-    uint256 amount
+    Position position,
+    uint256 price,
+    uint256 unit,
+    uint256 unfilledUnit
   );
-  event ParticipateOver(
-    uint256 indexed idx,
+
+  event CancelLimitOrder(
     address indexed sender,
     uint256 indexed epoch,
+    uint256 indexed idx,
     uint8 strike,
-    uint256 amount
+    Position position,
+    uint256 price,
+    uint256 unit
+  );
+
+  event OrderFilled(
+    address indexed sender,
+    uint256 indexed epoch,
+    uint256 indexed idx,
+    uint8 strike,
+    Position position,
+    address overUser,
+    address underUser,
+    uint256 overPrice,
+    uint256 underPrice,
+    uint256 unit,
+    OrderType orderType
   );
   
   event Claim(
@@ -228,10 +253,12 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     token.safeTransferFrom(msg.sender, address(this), transferedToken);
     
     uint256 usedToken;
-    (usedToken, unit) = _matchLimitOrders(Order(epoch, strike, position, price, unit));
+    uint256 leftUnit;
+    (usedToken, leftUnit) = _matchLimitOrders(Order(epoch, strike, position, price, unit));
 
-    if (unit > 0) {
-      uint256 idx = counters[epoch].nextId();
+
+    uint256 idx = counters[epoch].nextId();
+    if (leftUnit > 0) {
       Option storage option = rounds[epoch].options[strike];
       IntraOrderSet.Data storage orders = position == Position.Over ? option.overOrders : option.underOrders;
       orders.insert(
@@ -239,19 +266,19 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
           idx,
           msg.sender,
           price,
-          unit
+          leftUnit
         ),
         prevIdx
       );
 
-      usedToken += price * unit;
+      usedToken += price * leftUnit;
     }
 
     if (transferedToken > usedToken) {
       token.safeTransfer(msg.sender, transferedToken - usedToken);
     }
 
-    // TODO: emit Events
+    emit SubmitLimitOrder(msg.sender, epoch, idx, strike, position, price, unit, leftUnit);
   }
 
   function cancelLimitOrder(
@@ -270,11 +297,11 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     require(order.user == msg.sender, "E03");
 
     uint256 refundAmount = order.price * order.unit;
-    bool deleted = orders.remove(idx);
+    orders.remove(idx);
 
     token.safeTransfer(msg.sender, refundAmount);
 
-    // TODO: emit Events
+    emit CancelLimitOrder(msg.sender, epoch, idx, strike, position, order.price, order.unit);
   }
 
   function executeMarketOrder(
@@ -299,8 +326,6 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     if (transferedToken > totalPrice) {
       token.safeTransfer(msg.sender, transferedToken - totalPrice);
     }
-
-    // TODO: emit Events
   }
 
   function getTotalMarketPrice(
@@ -371,8 +396,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     if (!round.oracleCalled) return false;
 
     Option storage option = round.options[strike];
-    uint256[] memory myExecutedOrders = option.userExecutedOrder[user];
-    if (myExecutedOrders.length == 0) return false;
+    uint256[] memory myFilledOrders = option.userFilledOrder[user];
+    if (myFilledOrders.length == 0) return false;
 
     uint256 strikePrice = (round.startPrice * uint256(option.strike)) / 100;
 
@@ -380,15 +405,15 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     bool isOverWin = strikePrice < round.closePrice;
     bool isUnderWin = strikePrice > round.closePrice;
 
-    for (uint i = 0; i < myExecutedOrders.length; i++) {
-      ExecutedOrder memory executedOrder = option.executedOrders[myExecutedOrders[i]];
-      if (executedOrder.overUser == user) {
+    for (uint i = 0; i < myFilledOrders.length; i++) {
+      FilledOrder memory filledOrder = option.filledOrders[myFilledOrders[i]];
+      if (filledOrder.overUser == user) {
         // my position was over
-        if (executedOrder.isOverClaimed) continue;
+        if (filledOrder.isOverClaimed) continue;
         if (isTie || isOverWin) return true;
-      } else if (executedOrder.underUser == user) {
+      } else if (filledOrder.underUser == user) {
         // my position was under
-        if (executedOrder.isUnderClaimed) continue;
+        if (filledOrder.isUnderClaimed) continue;
         if (isTie || isUnderWin) return true;
       }
     }
@@ -584,22 +609,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       uint256 myPrice = 100000000 - counterOrder.price;
       uint256 txUnit = leftUnit < counterOrder.unit ? leftUnit : counterOrder.unit; // min
 
-      uint256 txId = option.executedOrderCounter.nextId();
-
-      option.executedOrders[txId] = ExecutedOrder(
-        txId,
-        order.epoch,
-        order.strike,
-        order.position == Position.Over ? msg.sender : counterOrder.user,
-        order.position == Position.Over ? counterOrder.user : msg.sender,
-        order.position == Position.Over ? myPrice : counterOrder.price,
-        order.position == Position.Over ? counterOrder.price : myPrice,
-        txUnit,
-        false,
-        false
-      );
-      option.userExecutedOrder[msg.sender].push(txId);
-      option.userExecutedOrder[counterOrder.user].push(txId);
+      _createFilledOrder(option, order, counterOrder, myPrice, txUnit, OrderType.Limit);
 
       leftUnit = leftUnit - txUnit;
       usedToken += myPrice * txUnit;
@@ -641,21 +651,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         break;
       }
 
-      uint256 txId = option.executedOrderCounter.nextId();
-      option.executedOrders[txId] = ExecutedOrder(
-        txId,
-        order.epoch,
-        order.strike,
-        order.position == Position.Over ? msg.sender : counterOrder.user,
-        order.position == Position.Over ? counterOrder.user : msg.sender,
-        order.position == Position.Over ? myPrice : counterOrder.price,
-        order.position == Position.Over ? counterOrder.price : myPrice,
-        txUnit,
-        false,
-        false
-      );
-      option.userExecutedOrder[msg.sender].push(txId);
-      option.userExecutedOrder[counterOrder.user].push(txId);
+      _createFilledOrder(option, order, counterOrder, myPrice, txUnit, OrderType.Market);
 
       totalPrice += myPrice * txUnit;
       totalUnit += txUnit;
@@ -668,6 +664,42 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
     }
     return (totalUnit, totalPrice);
+  }
+
+  function _createFilledOrder(Option storage option, Order memory order,
+    IntraOrderSet.IntraOrder storage counterOrder, 
+    uint256 myPrice, uint256 txUnit, OrderType orderType
+    ) internal {
+   
+      uint256 txId = option.filledOrderCounter.nextId();
+      option.filledOrders[txId] = FilledOrder(
+        txId,
+        order.epoch,
+        order.strike,
+        order.position == Position.Over ? msg.sender : counterOrder.user,
+        order.position == Position.Over ? counterOrder.user : msg.sender,
+        order.position == Position.Over ? myPrice : counterOrder.price,
+        order.position == Position.Over ? counterOrder.price : myPrice,
+        txUnit,
+        false,
+        false
+      );
+      option.userFilledOrder[msg.sender].push(txId);
+      option.userFilledOrder[counterOrder.user].push(txId);
+
+      emit OrderFilled(
+        msg.sender,
+        order.epoch,
+        txId,
+        order.strike,
+        order.position,
+        order.position == Position.Over ? msg.sender : counterOrder.user,
+        order.position == Position.Over ? counterOrder.user : msg.sender,
+        order.position == Position.Over ? myPrice : counterOrder.price,
+        order.position == Position.Over ? counterOrder.price : myPrice,
+        txUnit,
+        orderType
+      );
   }
 
   function _findExactUnit(uint256 totalPrice, uint256 totalUnit, uint256 myPrice, uint256 txUnit, uint256 price) internal pure returns (uint256) {
@@ -739,9 +771,9 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     if (round.oracleCalled) {
       // Round valid, claim rewards
       require(claimable(epoch, strike, user), "E12");
-      uint256[] memory userExecutedOrderIdx = option.userExecutedOrder[user];
-      for (uint i = 0; i < userExecutedOrderIdx.length; i++) {
-        ExecutedOrder storage order = option.executedOrders[userExecutedOrderIdx[i]];
+      uint256[] memory userFilledOrderIdx = option.userFilledOrder[user];
+      for (uint i = 0; i < userFilledOrderIdx.length; i++) {
+        FilledOrder storage order = option.filledOrders[userFilledOrderIdx[i]];
         if (order.overUser == user) {
           if (order.isOverClaimed) continue;
           if (isTie) {
@@ -770,17 +802,17 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     } else {
       // Round invalid, refund Participate amount (after bufferSeconds)
       require(block.timestamp > round.closeTimestamp + bufferSeconds, "E13");
-      uint256[] memory userExecutedOrderIdx = option.userExecutedOrder[user];
-      for (uint i = 0; i < userExecutedOrderIdx.length; i++) {
-        ExecutedOrder storage executedOrder = option.executedOrders[userExecutedOrderIdx[i]];
-        if (executedOrder.overUser == user) {
-          if (executedOrder.isOverClaimed) continue;
-          reward += executedOrder.overPrice * executedOrder.unit;
-          executedOrder.isOverClaimed = true;
-        } else if (executedOrder.underUser == user) {
-          if (executedOrder.isUnderClaimed) continue;
-          reward += executedOrder.underPrice * executedOrder.unit;
-          executedOrder.isUnderClaimed = true;
+      uint256[] memory userFilledOrderIdx = option.userFilledOrder[user];
+      for (uint i = 0; i < userFilledOrderIdx.length; i++) {
+        FilledOrder storage filledOrder = option.filledOrders[userFilledOrderIdx[i]];
+        if (filledOrder.overUser == user) {
+          if (filledOrder.isOverClaimed) continue;
+          reward += filledOrder.overPrice * filledOrder.unit;
+          filledOrder.isOverClaimed = true;
+        } else if (filledOrder.underUser == user) {
+          if (filledOrder.isUnderClaimed) continue;
+          reward += filledOrder.underPrice * filledOrder.unit;
+          filledOrder.isUnderClaimed = true;
         }
       }
     }
@@ -822,9 +854,9 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     // bool isUnderWin = strikePrice > round.closePrice;
 
     if (!isTie) {
-      uint256 last = option.executedOrderCounter.nextId();
+      uint256 last = option.filledOrderCounter.nextId();
       for (uint i = 1; i < last ; i++) {
-        ExecutedOrder storage order = option.executedOrders[i];
+        FilledOrder storage order = option.filledOrders[i];
         uint256 fee = ((isOverWin ? order.underPrice : order.overPrice) * order.unit * commissionfee) / BASE;
         treasuryAmt += fee;
       }
