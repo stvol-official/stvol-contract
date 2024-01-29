@@ -137,7 +137,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     bool isUnderClaimed; // default: false
   }
 
-  event SubmitLimitOrder(
+  event PlaceLimitOrder(
     address indexed sender,
     uint256 indexed epoch,
     uint256 indexed idx,
@@ -145,7 +145,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     Position position,
     uint256 price,
     uint256 unit,
-    uint256 unfilledUnit
+    uint256 unfilledUnit,
+    uint256 refundedAmount
   );
 
   event CancelLimitOrder(
@@ -156,6 +157,17 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     Position position,
     uint256 price,
     uint256 unit
+  );
+
+  event PlaceMarketOrder(
+    address indexed sender,
+    uint256 indexed epoch,
+    uint8 strike,
+    Position position,
+    uint256 price,
+    uint256 unit,
+    uint256 filledUnit,
+    uint256 filledAmount
   );
 
   event OrderFilled(
@@ -243,7 +255,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     availableOptionStrikes.push(103);
   }
 
-  function submitLimitOrder(
+  function placeLimitOrder(
     uint256 epoch,
     uint8 strike,
     Position position,
@@ -286,7 +298,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       token.safeTransfer(msg.sender, transferedToken - usedToken);
     }
 
-    emit SubmitLimitOrder(msg.sender, epoch, idx, strike, position, price, unit, leftUnit);
+    emit PlaceLimitOrder(msg.sender, epoch, idx, strike, position, price, unit, leftUnit, transferedToken - usedToken);
   }
 
   function cancelLimitOrder(
@@ -312,7 +324,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     emit CancelLimitOrder(msg.sender, epoch, idx, strike, position, order.price, order.unit);
   }
 
-  function executeMarketOrder(
+  function placeMarketOrder(
     uint256 epoch,
     uint8 strike,
     Position position,
@@ -328,12 +340,14 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     token.safeTransferFrom(msg.sender, address(this), transferedToken);
 
     uint256 totalUnit;
-    uint256 totalPrice;
-    (totalUnit, totalPrice) = _matchMarketOrders(Order(epoch, strike, position, price, unit));
+    uint256 totalAmount;
+    (totalUnit, totalAmount) = _matchMarketOrders(Order(epoch, strike, position, price, unit));
 
-    if (transferedToken > totalPrice) {
-      token.safeTransfer(msg.sender, transferedToken - totalPrice);
+    if (transferedToken > totalAmount) {
+      token.safeTransfer(msg.sender, transferedToken - totalAmount);
     }
+
+    emit PlaceMarketOrder(msg.sender, epoch, strike, position, price, unit, totalUnit, totalAmount);
   }
 
   function getTotalMarketPrice(
@@ -653,7 +667,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     IntraOrderSet.Data storage counterOrders = order.position == Position.Over ? option.underOrders : option.overOrders;
 
     uint256 totalUnit;
-    uint256 totalPrice;
+    uint256 totalAmount;
 
     while (totalUnit < order.unit) {
       uint256 counterIdx = counterOrders.first();
@@ -666,7 +680,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       uint256 myPrice = 100000000 - counterOrder.price;
       uint256 txUnit = (order.unit - totalUnit) < counterOrder.unit ? order.unit - totalUnit : counterOrder.unit; // min
 
-      txUnit = _findExactUnit(totalPrice, totalUnit, myPrice, txUnit, order.price);
+      txUnit = _findExactUnit(totalAmount, totalUnit, myPrice, txUnit, order.price);
 
       if (txUnit == 0) {
         // no more matching
@@ -675,7 +689,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
       _createFilledOrder(option, order, counterOrder, myPrice, txUnit, OrderType.Market);
 
-      totalPrice += myPrice * txUnit;
+      totalAmount += myPrice * txUnit;
       totalUnit += txUnit;
 
       if (counterOrder.unit - txUnit == 0) { // remove
@@ -685,7 +699,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         break; // no more matching
       }
     }
-    return (totalUnit, totalPrice);
+    return (totalUnit, totalAmount);
   }
 
   function _createFilledOrder(Option storage option, Order memory order,
