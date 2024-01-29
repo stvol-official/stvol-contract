@@ -72,7 +72,6 @@ library LimitOrderSet {
       elementToInsert.amount != 0,
       "Inserting zero amount is not supported"
     );
-
     require(
       elementToInsert.idx > QUEUE_START && elementToInsert.idx < QUEUE_END,
       "Inserting element has not valid index"
@@ -80,7 +79,7 @@ library LimitOrderSet {
     if (contains(self, elementToInsert.idx)) {
       return false;
     }
-    if (idxBeforeNewOne != QUEUE_START && self.prevMap[idxBeforeNewOne] == 0) {
+    if (idxBeforeNewOne != QUEUE_START && self.prevMap[idxBeforeNewOne] == 0 && self.orderMap[idxBeforeNewOne].payout == 0) {
       return false;
     }
     if (!smallerThan(self, idxBeforeNewOne, elementToInsert)) {
@@ -113,6 +112,7 @@ library LimitOrderSet {
     self.nextMap[elementToInsert.idx] = current;
     self.orderMap[elementToInsert.idx] = elementToInsert;
 
+    viewOrderHist(self);
     return true;
   }
 
@@ -170,7 +170,6 @@ library LimitOrderSet {
     if (orderLeftIdx == QUEUE_END) return false;
 
     LimitOrder storage orderLeft = self.orderMap[orderLeftIdx];
-
     if (orderLeft.payout < orderRight.payout) return true;
     if (orderLeft.payout == orderRight.payout) {
       return orderLeftIdx < orderRight.idx;
@@ -207,5 +206,18 @@ library LimitOrderSet {
     uint256 nextIdx = self.nextMap[idx];
     return nextIdx;
     // returns QUEUE_START(0) when it is non-existent element
+  }
+
+  function viewOrderHist(Data storage self) internal view {
+    uint256 idx = QUEUE_START;
+
+    while (idx < QUEUE_END) {
+      console.log("idx:", idx);
+      console.log("prev:", self.prevMap[idx]);
+      console.log("next:", self.nextMap[idx]);
+      console.log("payout:", self.orderMap[idx].payout);
+      console.log("--------------------------------");
+      idx = self.nextMap[idx];
+    }
   }
 }
