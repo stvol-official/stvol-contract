@@ -179,6 +179,14 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 amount
   );
 
+  event Refund(
+    address indexed sender,
+    uint256 indexed epoch,
+    uint8 indexed strike,
+    uint256 amount,
+    bool byAdmin
+  );
+
   event StartRound(
     uint256 indexed epoch, 
     uint256 initDate,
@@ -373,18 +381,32 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   function refundable(
     uint256 epoch,
     uint8 strike,
-    Position position,
     address user
   ) public view returns (bool) {
-    
     Round storage round = rounds[epoch];
-    if (round.oracleCalled) return false;
-    if (block.timestamp < round.closeTimestamp + bufferSeconds) return false;
+    if (block.timestamp <= round.closeTimestamp + bufferSeconds) return false;
     
     Option storage option = round.options[strike];
-    // TODO: 오더북에 들어갔으나 체결되지 않은 주문들이 있는지 확인
-    uint256 refundAmt; // TODO
-    return refundAmt != 0;
+
+    if (_refundable(option.overOrders, user)) return true; // check over orders
+    if (_refundable(option.underOrders, user)) return true; // check under orders
+
+    return false;
+  }
+
+  function refund(
+    uint256 epoch,
+    uint8 strike
+  ) external nonReentrant {
+    _refund(epoch, strike, msg.sender, false);
+  }
+
+  function refundByAdmin(
+    uint256 epoch,
+    uint8 strike,
+    address _user
+  ) external nonReentrant whenPaused onlyAdmin { 
+    _refund(epoch, strike, _user, true);
   }
 
   function claimable(
@@ -418,7 +440,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
     }
     return false;
-  } 
+  }
 
   function claim(uint256 epoch, uint8 strike) external nonReentrant {
     require(rounds[epoch].closeTimestamp != 0, "E11");
@@ -750,6 +772,52 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         oracle.getPrice(priceId).price,
         oracle.getPrice(priceId).publishTime
       );
+    }
+  }
+
+  function _refundable(IntraOrderSet.Data storage orders, address user) internal view returns (bool) {
+    uint256 idx = orders.first();
+    while (idx > IntraOrderSet.QUEUE_START && idx < IntraOrderSet.QUEUE_END) {
+      IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
+      if (order.user == user && order.price > 0 && order.unit > 0) return true;
+      idx = orders.nextMap[idx];
+    }
+  }
+
+
+  function _refund(
+    uint256 epoch,
+    uint8 strike,
+    address user,
+    bool byAdmin
+  ) internal nonReentrant {
+    Round storage round = rounds[epoch];
+    require (block.timestamp > round.closeTimestamp + bufferSeconds, "E11");
+
+    Option storage option = round.options[strike];
+    uint256 totalAmount;
+
+    for (int i = 0; i < 2; i++) {
+      IntraOrderSet.Data storage orders = i == 0 ? option.overOrders : option.underOrders;
+      uint256 idx = orders.first();
+      while (idx > IntraOrderSet.QUEUE_START && idx < IntraOrderSet.QUEUE_END) {
+        IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
+        if (order.user == user && order.price > 0 && order.unit > 0) {
+          // refund
+          totalAmount += order.price * order.unit;
+
+          uint256 prevIdx = idx;
+          idx = orders.nextMap[prevIdx];  
+          orders.remove(prevIdx);
+        } else {
+          idx = orders.nextMap[idx];
+        }
+      }
+    }
+
+    if (totalAmount > 0) {
+      token.safeTransfer(user, totalAmount);
+      emit Refund(user, epoch, strike, totalAmount, byAdmin);
     }
   }
 
