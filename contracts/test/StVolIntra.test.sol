@@ -28,7 +28,7 @@ contract StVolIntraTest is StVolIntra {
     ) {
     }
 
-    function printOrders(uint256 epoch, uint8 strike) public {
+    function printOrders(uint256 epoch, uint8 strike) view public {
         console.log("=== printOrders ===");
 
         Option storage option = rounds[epoch].options[strike];
