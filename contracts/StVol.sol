@@ -121,6 +121,9 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 startOracleId;
         uint256 closeOracleId;
         bool oracleCalled;
+
+        uint256 intervalSeconds;
+        uint256 bufferSeconds;
         OptionResponse[] options;
     }
 
@@ -1170,6 +1173,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             startOracleId: round.startOracleId,
             closeOracleId: round.closeOracleId,
             oracleCalled: round.oracleCalled,
+            intervalSeconds: intervalSeconds,
+            bufferSeconds: bufferSeconds,
             options: options
         });
         return roundResponse;
