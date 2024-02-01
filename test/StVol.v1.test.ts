@@ -169,11 +169,13 @@ contract(
 
       // Epoch 1: Start genesis round 1
       let tx = await stVol.genesisOpenRound(currentTimestamp);
-      expectEvent(tx, "OpenRound", { 
+
+      const eventOpenRound = expectEvent(tx, "OpenRound", {
         epoch: new BN(1),
         initDate: new BN(currentTimestamp),
-        strikes: [new BN(97),new BN(99),new BN(100),new BN(101),new BN(103)]
+        // strikes: [new BN(97),new BN(99),new BN(100),new BN(101),new BN(103)] // [CAUTION] Does not support arrays of bignumbers.
       });
+      assertBNArray(eventOpenRound.args["strikes"], [STRIKE._97, STRIKE._99, STRIKE._100, STRIKE._101, STRIKE._103])
       assert.equal(await stVol.currentEpoch(), 1);
 
       // Start round 1
