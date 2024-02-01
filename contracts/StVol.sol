@@ -212,7 +212,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 rewardAmount,
         uint256 treasuryAmount
     );
-    event OpenRound(uint256 indexed epoch, uint256 initDate);
+    event OpenRound(uint256 indexed epoch, uint256 initDate, uint8[] strikes);
     modifier onlyAdmin() {
         require(msg.sender == adminAddress, "E01");
         _;
@@ -808,7 +808,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         for (uint i = 0; i < availableOptionStrikes.length; i++) {
             _initOption(_epoch, availableOptionStrikes[i]);
         }
-        emit OpenRound(_epoch, _initDate);
+        uint8[] memory strikes = availableOptionStrikes;
+        emit OpenRound(_epoch, _initDate, strikes);
     }
 
     function _initOption(uint256 _epoch, uint8 _strike) internal {
@@ -848,18 +849,6 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             option.underAmount = option.underAmount + _amount;
         }
         emit PlaceMarketOrder(idx, _user, _epoch, _position, _strike, _amount);
-    }
-
-    /**
-     * @notice Returns true if `account` is a contract.
-     * @param _account: account address
-     */
-    function _isContract(address _account) internal view returns (bool) {
-        uint256 size;
-        assembly {
-            size := extcodesize(_account)
-        }
-        return size > 0;
     }
 
     function placeLimitOrder(
