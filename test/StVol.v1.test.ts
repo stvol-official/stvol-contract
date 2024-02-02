@@ -760,7 +760,7 @@ contract(
       assert.equal(await stVol.claimable(1, STRIKE._100, 2, underUser1), false);
 
       tx = await stVol.claim(1, STRIKE._100, 1, { from: overUser1 });
-      expectEvent(tx, "Claim", { sender: overUser1, epoch: new BN("1"), strike: STRIKE._100.toString(), position: Position.Over, amount: ether("3.96") });
+      expectEvent(tx, "Claim", { sender: overUser1, epoch: new BN("1"), strike: STRIKE._100.toString(), idx: new BN("1"), amount: ether("3.96") });
     });
   }
 );

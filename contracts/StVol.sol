@@ -121,7 +121,6 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 startOracleId;
         uint256 closeOracleId;
         bool oracleCalled;
-
         uint256 intervalSeconds;
         uint256 bufferSeconds;
         OptionResponse[] options;
@@ -172,16 +171,16 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 indexed idx,
         address indexed sender,
         uint256 indexed epoch,
-        Position position, 
+        Position position,
         uint8 strike,
-        uint256 amount
+        uint256 amount,
+        uint256 placeTimestamp
     );
     event CancelMarketOrder(
         uint256 indexed idx,
         address indexed sender,
         uint256 indexed epoch,
         uint8 strike,
-        Position position,
         uint256 amount,
         uint256 cancelTimestamp
     );
@@ -200,7 +199,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         address indexed sender,
         uint256 indexed epoch,
         uint8 indexed strike,
-        Position position,
+        uint256 idx,
         uint256 amount
     );
     event EndRound(uint256 indexed epoch, uint256 price);
@@ -283,10 +282,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             _strike,
             msg.sender
         );
-        require(
-            !orderInfo.isCancelled && !orderInfo.claimed,
-            "E03"
-        );
+        require(!orderInfo.isCancelled && !orderInfo.claimed, "E03");
         orderInfo.isCancelled = true;
 
         // Update user option data
@@ -305,7 +301,6 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             msg.sender,
             _epoch,
             _strike,
-            orderInfo.position,
             orderInfo.amount,
             block.timestamp
         );
@@ -350,13 +345,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         orderInfo.claimed = true;
         reward = orderInfo.amount + addedReward;
 
-        emit Claim(
-            msg.sender,
-            _epoch,
-            _strike,
-            orderInfo.position,
-            reward
-        );
+        emit Claim(msg.sender, _epoch, _strike, _idx, reward);
 
         if (reward > 0) {
             token.safeTransfer(msg.sender, reward);
@@ -575,9 +564,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                 Option storage option = rounds[epoch].options[
                     round.availableOptions[i]
                 ];
-                OrderInfo[] storage orderInfos = option.ledgers[
-                    _user
-                ];
+                OrderInfo[] storage orderInfos = option.ledgers[_user];
 
                 // pre-market
                 for (uint j = 0; j < orderInfos.length; j++) {
@@ -611,7 +598,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                             _user,
                             epoch,
                             option.strike,
-                            ledger.position,
+                            ledger.idx,
                             addedReward
                         );
                     }
@@ -848,7 +835,15 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         } else {
             option.underAmount = option.underAmount + _amount;
         }
-        emit PlaceMarketOrder(idx, _user, _epoch, _position, _strike, _amount);
+        emit PlaceMarketOrder(
+            idx,
+            _user,
+            _epoch,
+            _position,
+            _strike,
+            _amount,
+            block.timestamp
+        );
     }
 
     function placeLimitOrder(
@@ -867,7 +862,9 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         token.safeTransferFrom(msg.sender, address(this), _amount);
 
         Option storage option = rounds[_epoch].options[_strike];
-        LimitOrderSet.Data storage limitOrders = _position == Position.Over ? option.overLimitOrders : option.underLimitOrders;
+        LimitOrderSet.Data storage limitOrders = _position == Position.Over
+            ? option.overLimitOrders
+            : option.underLimitOrders;
         uint256 idx = _counters[_epoch].nextId();
         limitOrders.insert(
             LimitOrderSet.LimitOrder(
@@ -1175,13 +1172,12 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         address _user
     ) external view returns (OrderInfoResponse[] memory) {
         Round storage round = rounds[_epoch];
-        OrderInfo[] memory orderInfos = round
-            .options[_strike]
-            .ledgers[_user];
+        OrderInfo[] memory orderInfos = round.options[_strike].ledgers[_user];
         uint256 size = orderInfos.length;
 
-        OrderInfoResponse[]
-            memory orderInfoResponse = new OrderInfoResponse[](size);
+        OrderInfoResponse[] memory orderInfoResponse = new OrderInfoResponse[](
+            size
+        );
         for (uint256 j = 0; j < size; j++) {
             orderInfoResponse[j] = OrderInfoResponse(
                 _strike,

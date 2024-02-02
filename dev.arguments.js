@@ -1,6 +1,6 @@
 // for goerli
-const usdc = '0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0';
-const oracle = '0xDd24F84d36BF92C65F92307595335bdFab5Bbd21'; // PythContractAddress
+const usdc = '0x456f6b7b1c5126060fe358fb4a5f935b3fbc26ef';
+const oracle = '0xff1a0f4744e8582DF1aE09D5611b887B6a12925C'; // PythContractAddress
 const admin = '0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0';
 const operator = '0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0';
 const operatorVault = '0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0';

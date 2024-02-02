@@ -7,6 +7,7 @@
   "private": true,
   "scripts": {
     "compile": "npx hardhat compile",
+    "deploy:goerli": "npx hardhat run --network goerli scripts/deploy-eth-stvol.ts",
     "deploy:sepolia": "npx hardhat run --network sepolia scripts/deploy-eth-stvol.ts",
     "deploy:arbitrum-sepolia": "npx hardhat run --network arbitrum_sepolia scripts/deploy-eth-stvol.ts",
     "deploy-eth:arbitrum": "npx hardhat run --network arbitrum scripts/deploy-eth-stvol.ts",
@@ -14,6 +15,7 @@
     "test": "npx hardhat test",
     "test:stvol-v1": "hardhat test --network hardhat ./test/StVol.v1.test.ts",
     "test:mock-pyth": "hardhat test --network hardhat ./test/MockPyth.test.ts",
+    "verify:goerli": "npx hardhat verify --constructor-args dev.arguments.js --network goerli 0x5d3C49C36bd685916E9fd275FF16af7d086499DE",
     "verify:sepolia": "npx hardhat verify --constructor-args dev.arguments.js --contract \"contracts/StVol0Per.sol:StVol0Per\" --network sepolia 0x0Ff5F73D50318f62a07cE1c7A4C124f5c5062AE9",
     "verify:arbitrum-sepolia": "npx hardhat verify --constructor-args arbi.dev.arguments.js --contract \"contracts/StVol0Per.sol:StVol0Per\" --network arbitrum_sepolia 0xA9A277401dA8C814052a18A0ccb5A2fC14BCb6DD",
     "verify:arbitrum": "npx hardhat verify --constructor-args arbi.prod.arguments.js --contract \"contracts/StVolUpDown.sol:StVolUpDown\" --network arbitrum 0x40b0c000893164D6963597F572699107fB27CE04"
@@ -37,7 +39,7 @@
   },
   "dependencies": {
     "@nomicfoundation/hardhat-verify": "^2.0.2",
-    "@nomiclabs/hardhat-etherscan": "^3.1.7",
+    "@nomiclabs/hardhat-etherscan": "^3.0.1",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
     "@nomiclabs/hardhat-web3": "^2.0.0",
     "@pythnetwork/pyth-sdk-solidity": "^2.2.1",
