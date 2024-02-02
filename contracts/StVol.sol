@@ -85,6 +85,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         Over,
         Under
     }
+
     struct Round {
         uint256 epoch;
         uint256 openTimestamp;
@@ -174,15 +175,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         Position position,
         uint8 strike,
         uint256 amount,
+        bool isCancelled,
         uint256 placeTimestamp
-    );
-    event CancelMarketOrder(
-        uint256 indexed idx,
-        address indexed sender,
-        uint256 indexed epoch,
-        uint8 strike,
-        uint256 amount,
-        uint256 cancelTimestamp
     );
     event PlaceLimitOrder(
         uint256 indexed idx,
@@ -296,12 +290,14 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         // refund
         token.safeTransfer(msg.sender, orderInfo.amount);
 
-        emit CancelMarketOrder(
+        emit PlaceMarketOrder(
             _idx,
             msg.sender,
             _epoch,
+            orderInfo.position,
             _strike,
             orderInfo.amount,
+            true,
             block.timestamp
         );
     }
@@ -842,6 +838,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             _position,
             _strike,
             _amount,
+            false,
             block.timestamp
         );
     }
