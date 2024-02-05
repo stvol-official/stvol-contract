@@ -205,7 +205,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 rewardAmount,
         uint256 treasuryAmount
     );
-    event OpenRound(uint256 indexed epoch, uint256 initDate, uint8[] strikes);
+    event OpenRound(uint256 indexed epoch, uint256 openTimestamp, uint256 startTimestamp, uint256 closeTimestamp, uint8[] strikes);
     modifier onlyAdmin() {
         require(msg.sender == adminAddress, "E01");
         _;
@@ -792,7 +792,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             _initOption(_epoch, availableOptionStrikes[i]);
         }
         uint8[] memory strikes = availableOptionStrikes;
-        emit OpenRound(_epoch, _initDate, strikes);
+        emit OpenRound(_epoch, rounds[_epoch].openTimestamp, rounds[_epoch].startTimestamp, rounds[_epoch].closeTimestamp, strikes);
     }
 
     function _initOption(uint256 _epoch, uint8 _strike) internal {
