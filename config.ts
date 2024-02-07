@@ -6,7 +6,7 @@ export default {
       arbitrum_goerli: "0x8FB1E3fC51F3b789dED7557E680551d93Ea9d892",
       arbitrum_sepolia: "0xdafcF0d6fc4a43cf8595f2172c07CEa7f273531D",
       sepolia: "0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0",
-      goerli: "0x456f6b7b1c5126060fe358fb4a5f935b3fbc26ef",
+      goerli: "0xc87095a378DEb619BA55Fff67f40fC1e7C0b219C",
     },
     Oracle: {
       mainnet: "0x4305FB66699C3B2702D4d05CF36551390A4c69C6",
