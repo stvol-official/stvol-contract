@@ -73,9 +73,9 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   uint256 public currentEpoch; // current epoch for round
   uint256 public constant BASE = 10000; // 100%
   uint256 public constant MAX_COMMISSION_FEE = 200; // 2%
-  uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
-  uint256 public constant DEFAULT_INTERVAL_SECONDS = 86400; // 24 * 60 * 60 * 1(1day)
-  uint256 public constant DEFAULT_BUFFER_SECONDS = 1800; // 30 * 60 (30min)
+  // uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
+  uint256 public constant DEFAULT_INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
+  uint256 public constant DEFAULT_BUFFER_SECONDS = 600; // 10 * 60 (10min)
 
   mapping(uint256 => Round) public rounds; // (key: epoch)
   mapping(uint256 => AutoIncrementing.Counter) private counters; // (key: epoch)
@@ -246,11 +246,11 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     bufferSeconds = DEFAULT_BUFFER_SECONDS;
 
     // init available option makets
-    availableOptionStrikes.push(97);
+    availableOptionStrikes.push(98);
     availableOptionStrikes.push(99);
     availableOptionStrikes.push(100);
     availableOptionStrikes.push(101);
-    availableOptionStrikes.push(103);
+    availableOptionStrikes.push(102);
   }
 
   function placeLimitOrder(
@@ -805,7 +805,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint8 strike,
     address user,
     bool byAdmin
-  ) internal nonReentrant {
+  ) internal {
     Round storage round = rounds[epoch];
     require (block.timestamp > round.closeTimestamp + bufferSeconds, "E11");
 
@@ -957,11 +957,18 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   function _safeEndRound(uint256 epoch, uint256 price) internal {
     require(rounds[epoch].startTimestamp != 0, "E26");
+
+    /* TODO: what is the side effect?
     require(block.timestamp >= rounds[epoch].closeTimestamp, "E27");
     require(
       block.timestamp <= rounds[epoch].closeTimestamp + bufferSeconds,
       "E28"
     );
+    */
+   
+    // close round forcely
+    rounds[epoch].closeTimestamp = block.timestamp;
+    
     rounds[epoch].closePrice = uint256(price);
     rounds[epoch].oracleCalled = true;
 

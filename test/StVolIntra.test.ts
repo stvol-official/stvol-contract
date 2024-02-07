@@ -33,6 +33,11 @@ contract(
     let mockUsdc: any;
     let oracle: any;
 
+    async function nextEpoch() {
+      await time.increaseTo((await time.latest()).toNumber() + INTERVAL_SECONDS); // Elapse 20 seconds
+    }
+
+
     beforeEach(async () => {
         // Deploy USDC
         mockUsdc = await MockERC20.new("Mock USDC", "USDC", _totalInitSupply);
@@ -71,10 +76,10 @@ contract(
       it("Should start genesis rounds", async () => {
         console.log("Starting genesis rounds");
 
-        const currentTimestamp = (await time.latest()).toNumber();
+        let currentTimestamp = (await time.latest()).toNumber();
         console.log("current time is ", currentTimestamp);
 
-        const updateData = await oracle.createPriceFeedUpdateData(priceId, FIRST_PRICE, 10 * FIRST_PRICE, -5, FIRST_PRICE, 10 * FIRST_PRICE, currentTimestamp);
+        let updateData = await oracle.createPriceFeedUpdateData(priceId, FIRST_PRICE, 10 * FIRST_PRICE, -5, FIRST_PRICE, 10 * FIRST_PRICE, currentTimestamp);
 
         await oracle.updatePriceFeeds([updateData]);
         await stVol.genesisStartRound([updateData], currentTimestamp, false);
@@ -83,29 +88,36 @@ contract(
         const OVER = 0, UNDER = 1;
 
         console.log("place over orders");
-        await stVol.submitLimitOrder(1, 100, OVER, 1000000, 10, 0, {from: overUser1});
-        await stVol.submitLimitOrder(1, 100, OVER, 99000000, 10, 0, {from: overUser2});
-        await stVol.submitLimitOrder(1, 100, OVER, 50000000, 10, 0, {from: overUser3});
+        await stVol.placeLimitOrder(1, 100, OVER, 1000000, 10, 0, {from: overUser1});
+        await stVol.placeLimitOrder(1, 100, OVER, 99000000, 10, 0, {from: overUser2});
+        await stVol.placeLimitOrder(1, 100, OVER, 50000000, 10, 0, {from: overUser3});
 
         console.log("place under orders");
-        await stVol.submitLimitOrder(1, 100, UNDER, 2000000, 15, 0, {from: underUser1});
-        await stVol.submitLimitOrder(1, 100, UNDER, 55000000, 15, 0, {from: underUser2});
-        await stVol.submitLimitOrder(1, 100, UNDER, 98000000, 10, 0, {from: underUser3});
-        await stVol.submitLimitOrder(1, 100, UNDER, 99000000, 5, 0, {from: underUser3});
+        await stVol.placeLimitOrder(1, 100, UNDER, 2000000, 15, 0, {from: underUser1});
+        await stVol.placeLimitOrder(1, 100, UNDER, 55000000, 15, 0, {from: underUser2});
+        await stVol.placeLimitOrder(1, 100, UNDER, 98000000, 10, 0, {from: underUser3});
+        await stVol.placeLimitOrder(1, 100, UNDER, 99000000, 5, 0, {from: underUser3});
 
-        await stVol.submitLimitOrder(1, 100, UNDER, 99000000, 15, 0, {from: underUser1});
-        await stVol.submitLimitOrder(1, 100, UNDER, 88000000, 15, 0, {from: underUser2});
-        await stVol.submitLimitOrder(1, 100, UNDER, 77000000, 10, 0, {from: underUser3});
-        await stVol.submitLimitOrder(1, 100, UNDER, 66000000, 5, 0, {from: underUser3});
+        await stVol.placeLimitOrder(1, 100, UNDER, 99000000, 15, 0, {from: underUser1});
+        await stVol.placeLimitOrder(1, 100, UNDER, 88000000, 15, 0, {from: underUser2});
+        await stVol.placeLimitOrder(1, 100, UNDER, 77000000, 10, 0, {from: underUser3});
+        await stVol.placeLimitOrder(1, 100, UNDER, 66000000, 5, 0, {from: underUser3});
 
         await stVol.printOrders(1, 100);
 
         const values = await stVol.getTotalMarketPrice(1, 100, OVER, 35, {from: underUser1});
         console.log('total unit:' + values[0] + ', total price: ' + values[1] + ', average price: ' + (values[1] / values[0]));
 
-        await stVol.executeMarketOrder(1, 100, OVER, 33000000, 50, {from: underUser1});
+        await stVol.placeMarketOrder(1, 100, OVER, 33000000, 50, {from: underUser1});
 
         await stVol.printOrders(1, 100);
+
+        currentTimestamp += 86400;
+        await time.increaseTo(currentTimestamp);
+        
+        updateData = await oracle.createPriceFeedUpdateData(priceId, FIRST_PRICE, 10 * FIRST_PRICE, -5, FIRST_PRICE, 10 * FIRST_PRICE, currentTimestamp);
+        await oracle.updatePriceFeeds([updateData]);
+        await stVol.executeRound([updateData], currentTimestamp, false);
 
 
 
