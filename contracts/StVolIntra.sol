@@ -378,66 +378,6 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     );
   }
 
-  function getTotalMarketPrice(
-    uint256 epoch,
-    uint8 strike,
-    Position position,
-    uint256 unit
-  ) public view returns (uint256, uint256) {
-    require(epoch == currentEpoch, "E07");
-    require(
-      rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
-      "E08"
-    );
-
-    Option storage option = rounds[epoch].options[strike];
-    IntraOrderSet.Data storage counterOrders = position == Position.Over
-      ? option.underOrders
-      : option.overOrders;
-
-    uint256 totalUnit;
-    uint256 totalPrice;
-
-    uint256 counterIdx = counterOrders.first();
-
-    while (totalUnit < unit) {
-      if (counterIdx == IntraOrderSet.QUEUE_START || counterIdx == IntraOrderSet.QUEUE_END) {
-        // counter order is empty
-        break;
-      }
-
-      IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      uint256 myPrice = 100000000 - counterOrder.price;
-      uint256 txUnit = (unit - totalUnit) < counterOrder.unit
-        ? unit - totalUnit
-        : counterOrder.unit; // min
-
-      totalPrice += myPrice * txUnit;
-      totalUnit += txUnit;
-
-      if (counterOrder.unit - txUnit == 0) {
-        // check next order
-        counterIdx = counterOrders.next(counterIdx);
-      } else {
-        break; // finish
-      }
-    }
-
-    return (totalUnit, totalPrice);
-  }
-
-  function refundable(uint256 epoch, uint8 strike, address user) public view returns (bool) {
-    Round storage round = rounds[epoch];
-    if (block.timestamp <= round.closeTimestamp + bufferSeconds) return false;
-
-    Option storage option = round.options[strike];
-
-    if (_refundable(option.overOrders, user)) return true; // check over orders
-    if (_refundable(option.underOrders, user)) return true; // check under orders
-
-    return false;
-  }
-
   function refund(uint256 epoch, uint8 strike) external nonReentrant {
     _refund(epoch, strike, msg.sender, false);
   }
@@ -448,36 +388,6 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     address _user
   ) external nonReentrant whenPaused onlyAdmin {
     _refund(epoch, strike, _user, true);
-  }
-
-  function claimable(uint256 epoch, address user) public view returns (bool) {
-    Round storage round = rounds[epoch];
-    if (!round.oracleCalled) return false;
-
-    uint256[] memory myFilledOrders = round.userFilledOrder[user];
-
-    for (uint i = 0; i < myFilledOrders.length; i++) {
-      FilledOrder memory filledOrder = round.filledOrders[myFilledOrders[i]];
-
-      Option storage option = round.options[filledOrder.strike];
-      uint256 strikePrice = (round.startPrice * uint256(option.strike)) / 100;
-
-      bool isTie = strikePrice == round.closePrice;
-      bool isOverWin = strikePrice < round.closePrice;
-      bool isUnderWin = strikePrice > round.closePrice;
-
-      if (filledOrder.overUser == user) {
-        // my position was over
-        if (filledOrder.isOverClaimed) continue;
-        if (isTie || isOverWin) return true;
-      } else if (filledOrder.underUser == user) {
-        // my position was under
-        if (filledOrder.isUnderClaimed) continue;
-        if (isTie || isUnderWin) return true;
-      }
-    }
-
-    return false;
   }
 
   function claim(uint256 epoch, uint256 idx) external nonReentrant {
@@ -653,6 +563,165 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   function setAdmin(address _adminAddress) external onlyOwner {
     require(_adminAddress != address(0), "E31");
     adminAddress = _adminAddress;
+  }
+
+  /* public views */
+  function getAvailableOptionsInRound(uint256 epoch) public view returns (uint8[] memory) {
+    return rounds[epoch].availableOptions;
+  }
+
+  function getHighestPrices(uint256 epoch, uint8 strike) public view returns (uint256, uint256) {
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.IntraOrder storage overOrder = option.overOrders.orderMap[
+      option.overOrders.first()
+    ];
+    IntraOrderSet.IntraOrder storage underOrder = option.underOrders.orderMap[
+      option.underOrders.first()
+    ];
+    return (underOrder.price, overOrder.price);
+  }
+
+  function getRoundUserFilledOrderIdx(
+    uint256 epoch,
+    address user
+  ) public view returns (uint256[] memory) {
+    return rounds[epoch].userFilledOrder[user];
+  }
+
+  function getFilledOrder(uint256 epoch, uint256 idx) public view returns (FilledOrder memory) {
+    return rounds[epoch].filledOrders[idx];
+  }
+
+  function getUnfilledOrderIdx(
+    uint256 epoch,
+    uint8 strike,
+    Position position
+  ) public view returns (uint256[] memory) {
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.Data storage orders = position == Position.Over
+      ? option.overOrders
+      : option.underOrders;
+
+    uint256 idx = orders.first();
+    uint256 length = 0;
+    while (idx != IntraOrderSet.QUEUE_START && idx != IntraOrderSet.QUEUE_END) {
+      length++;
+      idx = orders.next(idx);
+    }
+
+    uint256[] memory result = new uint256[](length);
+    idx = orders.first();
+    length = 0;
+
+    while (idx != IntraOrderSet.QUEUE_START && idx != IntraOrderSet.QUEUE_END) {
+      result[length] = idx;
+      idx = orders.next(idx);
+    }
+
+    return result;
+  }
+
+  function getUnfilledOrder(
+    uint256 epoch,
+    uint8 strike,
+    Position position,
+    uint256 idx
+  ) public view returns (IntraOrderSet.IntraOrder memory) {
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.Data storage orders = position == Position.Over
+      ? option.overOrders
+      : option.underOrders;
+    return orders.orderMap[idx];
+  }
+
+  function getTotalMarketPrice(
+    uint256 epoch,
+    uint8 strike,
+    Position position,
+    uint256 unit
+  ) public view returns (uint256, uint256) {
+    require(epoch == currentEpoch, "E07");
+    require(
+      rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
+      "E08"
+    );
+
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.Data storage counterOrders = position == Position.Over
+      ? option.underOrders
+      : option.overOrders;
+
+    uint256 totalUnit;
+    uint256 totalPrice;
+
+    uint256 counterIdx = counterOrders.first();
+
+    while (totalUnit < unit) {
+      if (counterIdx == IntraOrderSet.QUEUE_START || counterIdx == IntraOrderSet.QUEUE_END) {
+        // counter order is empty
+        break;
+      }
+
+      IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
+      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 txUnit = (unit - totalUnit) < counterOrder.unit
+        ? unit - totalUnit
+        : counterOrder.unit; // min
+
+      totalPrice += myPrice * txUnit;
+      totalUnit += txUnit;
+
+      if (counterOrder.unit - txUnit == 0) {
+        // check next order
+        counterIdx = counterOrders.next(counterIdx);
+      } else {
+        break; // finish
+      }
+    }
+
+    return (totalUnit, totalPrice);
+  }
+
+  function refundable(uint256 epoch, uint8 strike, address user) public view returns (bool) {
+    Round storage round = rounds[epoch];
+    if (block.timestamp <= round.closeTimestamp + bufferSeconds) return false;
+
+    Option storage option = round.options[strike];
+
+    if (_refundable(option.overOrders, user)) return true; // check over orders
+    if (_refundable(option.underOrders, user)) return true; // check under orders
+
+    return false;
+  }
+
+  function claimable(uint256 epoch, address user) public view returns (bool) {
+    Round storage round = rounds[epoch];
+    if (!round.oracleCalled) return false;
+
+    uint256[] memory myFilledOrders = round.userFilledOrder[user];
+
+    for (uint i = 0; i < myFilledOrders.length; i++) {
+      FilledOrder memory filledOrder = round.filledOrders[myFilledOrders[i]];
+
+      Option storage option = round.options[filledOrder.strike];
+      uint256 strikePrice = (round.startPrice * uint256(option.strike)) / 100;
+
+      bool isTie = strikePrice == round.closePrice;
+      bool isOverWin = strikePrice < round.closePrice;
+      bool isUnderWin = strikePrice > round.closePrice;
+
+      if (filledOrder.overUser == user) {
+        // my position was over
+        if (filledOrder.isOverClaimed) continue;
+        if (isTie || isOverWin) return true;
+      } else if (filledOrder.underUser == user) {
+        // my position was under
+        if (filledOrder.isUnderClaimed) continue;
+        if (isTie || isUnderWin) return true;
+      }
+    }
+
+    return false;
   }
 
   /* internal functions */
