@@ -7,7 +7,7 @@ export default {
       arbitrum_sepolia: "0xdafcF0d6fc4a43cf8595f2172c07CEa7f273531D",
       sepolia: "0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0",
       goerli: "0xc87095a378DEb619BA55Fff67f40fC1e7C0b219C",
-      blast_sepolia: "0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC",
+      blast_sepolia: "0x4200000000000000000000000000000000000022",
     },
     Oracle: {
       mainnet: "0x4305FB66699C3B2702D4d05CF36551390A4c69C6",
@@ -67,8 +67,8 @@ export default {
       ETH_USD: "0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6",
     },
     blast_sepolia: {
-      BTC_USD: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b",
-      ETH_USD: "0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6",
+      BTC_USD: "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+      ETH_USD: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
     },
     arbitrum_sepolia: {
       BTC_USD: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b",
