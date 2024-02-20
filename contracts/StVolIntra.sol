@@ -12,40 +12,6 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "./utils/AutoIncrementing.sol";
 import "./libraries/IntraOrderSet.sol";
 
-/**
- * E01: Not admin
- * E02: Not operator
- * E03: Contract not allowed
- * E04: Commission fee too high
- * E07: Participate is too early/late
- * E08: Round not participable
- * E09: Participate amount must be greater than minParticipateAmount
- * E10: Round has not started
- * E11: Round has not ended
- * E12: Not eligible for claim
- * E13: Not eligible for refund
- * E14: Can only run after genesisOpenRound and genesisStartRound is triggered
- * E15: Pyth Oracle non increasing publishTimes
- * E16: Can only run after genesisOpenRound is triggered
- * E17: Can only open round after round n-2 has ended
- * E18: Can only open new round after round n-2 closeTimestamp
- * E19: Can only open new round after init date
- * E20: Participate payout must be greater than zero
- * E21: Can only cancel order after round has started
- * E22: Can only cancel order before startTimestamp
- * E23: Can only lock round after round has started
- * E24: Can only start round after startTimestamp
- * E25: Can only start round within bufferSeconds
- * E26: Can only end round after round has locked
- * E27: Can only end round after closeTimestamp
- * E28: Can only end round within bufferSeconds
- * E29: Rewards calculated
- * E30: bufferSeconds must be inferior to intervalSeconds
- * E31: Cannot be zero address
- * E32: Can only run genesisStartRound once
- * E33: Pyth Oracle non increasing publishTimes
- * E35: Exceed limit order size
- */
 contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   using SafeERC20 for IERC20;
   using AutoIncrementing for AutoIncrementing.Counter;
@@ -118,10 +84,18 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   struct Option {
     uint8 strike; // 98, 99, 100, 101, 102
-    uint256 overPrice;
-    uint256 underPrice;
     IntraOrderSet.Data overOrders;
     IntraOrderSet.Data underOrders;
+  }
+
+  struct UnfilledOrder {
+    address user;
+    uint256 idx;
+    uint256 epoch;
+    uint8 strike;
+    Position position;
+    uint256 price;
+    uint256 unit;
   }
 
   struct FilledOrder {
@@ -191,13 +165,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     bool byAdmin
   );
 
-  event Refund(
-    address indexed sender,
-    uint256 indexed epoch,
-    uint8 indexed strike,
-    uint256 amount,
-    bool byAdmin
-  );
+  event Refund(address indexed sender, uint256 indexed epoch, uint256 amount, bool byAdmin);
 
   event StartRound(
     uint256 indexed epoch,
@@ -210,7 +178,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   event EndRound(uint256 indexed epoch, uint256 price);
 
-  event CommissionCalculated(uint256 indexed epoch, uint8 indexed strike, uint256 treasuryAmount);
+  event CommissionCalculated(uint256 indexed epoch, uint256 treasuryAmount);
 
   modifier onlyAdmin() {
     require(msg.sender == adminAddress, "E01");
@@ -378,16 +346,12 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     );
   }
 
-  function refund(uint256 epoch, uint8 strike) external nonReentrant {
-    _refund(epoch, strike, msg.sender, false);
+  function refund(uint256 epoch) external nonReentrant {
+    _refund(epoch, msg.sender, false);
   }
 
-  function refundByAdmin(
-    uint256 epoch,
-    uint8 strike,
-    address _user
-  ) external nonReentrant whenPaused onlyAdmin {
-    _refund(epoch, strike, _user, true);
+  function refundByAdmin(uint256 epoch, address _user) external nonReentrant whenPaused onlyAdmin {
+    _refund(epoch, _user, true);
   }
 
   function claim(uint256 epoch, uint256 idx) external nonReentrant {
@@ -453,11 +417,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
     // end current round
     _safeEndRound(currentEpoch, uint64(pythPrice));
-
-    Round storage endedRound = rounds[currentEpoch];
-    for (uint i = 0; i < endedRound.availableOptions.length; i++) {
-      _calculateCommission(currentEpoch, endedRound.availableOptions[i]);
-    }
+    _calculateCommission(currentEpoch);
 
     // increase currentEpoch and start next round
     currentEpoch = currentEpoch + 1;
@@ -581,57 +541,76 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     return (underOrder.price, overOrder.price);
   }
 
-  function getRoundUserFilledOrderIdx(
+  function getRoundUserFilledOrders(
     uint256 epoch,
     address user
-  ) public view returns (uint256[] memory) {
-    return rounds[epoch].userFilledOrder[user];
+  ) public view returns (FilledOrder[] memory) {
+    Round storage round = rounds[epoch];
+    uint256[] storage orderIds = round.userFilledOrder[user];
+    FilledOrder[] memory orders = new FilledOrder[](orderIds.length);
+    for (uint256 i = 0; i < orderIds.length; i++) {
+      orders[i] = round.filledOrders[orderIds[i]];
+    }
+    return orders;
   }
 
-  function getFilledOrder(uint256 epoch, uint256 idx) public view returns (FilledOrder memory) {
-    return rounds[epoch].filledOrders[idx];
-  }
-
-  function getUnfilledOrderIdx(
+  function getRoundUserUnfilledOrders(
     uint256 epoch,
-    uint8 strike,
-    Position position
-  ) public view returns (uint256[] memory) {
-    Option storage option = rounds[epoch].options[strike];
-    IntraOrderSet.Data storage orders = position == Position.Over
-      ? option.overOrders
-      : option.underOrders;
+    address user
+  ) public view returns (UnfilledOrder[] memory) {
+    Round storage round = rounds[epoch];
 
-    uint256 idx = orders.first();
-    uint256 length = 0;
-    while (idx != IntraOrderSet.QUEUE_START && idx != IntraOrderSet.QUEUE_END) {
-      length++;
-      idx = orders.next(idx);
+    uint256 count = 0;
+
+    // calculate count (length of result)
+    for (uint256 i = 0; i < round.availableOptions.length; i++) {
+      Option storage option = round.options[round.availableOptions[i]];
+      for (uint p = 0; p < 2; p++) {
+        IntraOrderSet.Data storage orders = p == 0 ? option.overOrders : option.underOrders;
+        uint256 idx = orders.first();
+        while (idx != IntraOrderSet.QUEUE_START && idx != IntraOrderSet.QUEUE_END) {
+          IntraOrderSet.IntraOrder memory order = orders.orderMap[idx];
+          if (order.user == user) {
+            count++;
+          }
+          idx = orders.next(idx);
+        }
+      }
     }
 
-    uint256[] memory result = new uint256[](length);
-    idx = orders.first();
-    length = 0;
+    UnfilledOrder[] memory result = new UnfilledOrder[](count);
+    uint256 resultIndex = 0;
 
-    while (idx != IntraOrderSet.QUEUE_START && idx != IntraOrderSet.QUEUE_END) {
-      result[length] = idx;
-      idx = orders.next(idx);
+    for (uint256 i = 0; i < round.availableOptions.length; i++) {
+      Option storage option = round.options[round.availableOptions[i]];
+
+      for (uint p = 0; p < 2; p++) {
+        IntraOrderSet.Data storage orders = p == 0 ? option.overOrders : option.underOrders;
+        uint256 idx = orders.first();
+        uint256 length = 0;
+        while (idx != IntraOrderSet.QUEUE_START && idx != IntraOrderSet.QUEUE_END) {
+          length++;
+
+          IntraOrderSet.IntraOrder memory order = orders.orderMap[idx];
+          if (order.user == user) {
+            result[resultIndex] = UnfilledOrder(
+              user,
+              order.idx,
+              epoch,
+              option.strike,
+              p == 0 ? Position.Over : Position.Under,
+              order.price,
+              order.unit
+            );
+            resultIndex++;
+          }
+
+          idx = orders.next(idx);
+        }
+      }
     }
 
     return result;
-  }
-
-  function getUnfilledOrder(
-    uint256 epoch,
-    uint8 strike,
-    Position position,
-    uint256 idx
-  ) public view returns (IntraOrderSet.IntraOrder memory) {
-    Option storage option = rounds[epoch].options[strike];
-    IntraOrderSet.Data storage orders = position == Position.Over
-      ? option.overOrders
-      : option.underOrders;
-    return orders.orderMap[idx];
   }
 
   function getTotalMarketPrice(
@@ -682,16 +661,17 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     return (totalUnit, totalPrice);
   }
 
-  function refundable(uint256 epoch, uint8 strike, address user) public view returns (bool) {
+  function getUnfilledAmount(uint256 epoch, address user) public view returns (uint256) {
     Round storage round = rounds[epoch];
-    if (block.timestamp <= round.closeTimestamp + bufferSeconds) return false;
 
-    Option storage option = round.options[strike];
+    uint256 result;
+    for (uint256 s = 0; s < round.availableOptions.length; s++) {
+      Option storage option = round.options[round.availableOptions[s]];
 
-    if (_refundable(option.overOrders, user)) return true; // check over orders
-    if (_refundable(option.underOrders, user)) return true; // check under orders
-
-    return false;
+      result += _getUnfilledAmount(option.overOrders, user);
+      result += _getUnfilledAmount(option.underOrders, user);
+    }
+    return result;
   }
 
   function claimable(uint256 epoch, address user) public view returns (bool) {
@@ -917,47 +897,52 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     }
   }
 
-  function _refundable(
+  function _getUnfilledAmount(
     IntraOrderSet.Data storage orders,
     address user
-  ) internal view returns (bool) {
+  ) internal view returns (uint256) {
     uint256 idx = orders.first();
+    uint256 result;
     while (idx > IntraOrderSet.QUEUE_START && idx < IntraOrderSet.QUEUE_END) {
       IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
-      if (order.user == user && order.price > 0 && order.unit > 0) return true;
+      if (order.user == user && order.price > 0 && order.unit > 0) {
+        result += (order.price * order.unit);
+      }
       idx = orders.nextMap[idx];
     }
-    return false;
+    return result;
   }
 
-  function _refund(uint256 epoch, uint8 strike, address user, bool byAdmin) internal {
+  function _refund(uint256 epoch, address user, bool byAdmin) internal {
     Round storage round = rounds[epoch];
     require(block.timestamp > round.closeTimestamp + bufferSeconds, "E11");
 
-    Option storage option = round.options[strike];
     uint256 totalAmount;
+    for (uint256 s = 0; s < round.availableOptions.length; s++) {
+      Option storage option = round.options[round.availableOptions[s]];
 
-    for (int i = 0; i < 2; i++) {
-      IntraOrderSet.Data storage orders = i == 0 ? option.overOrders : option.underOrders;
-      uint256 idx = orders.first();
-      while (idx > IntraOrderSet.QUEUE_START && idx < IntraOrderSet.QUEUE_END) {
-        IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
-        if (order.user == user && order.price > 0 && order.unit > 0) {
-          // refund
-          totalAmount += order.price * order.unit;
+      for (int i = 0; i < 2; i++) {
+        IntraOrderSet.Data storage orders = i == 0 ? option.overOrders : option.underOrders;
+        uint256 idx = orders.first();
+        while (idx > IntraOrderSet.QUEUE_START && idx < IntraOrderSet.QUEUE_END) {
+          IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
+          if (order.user == user && order.price > 0 && order.unit > 0) {
+            // refund
+            totalAmount += order.price * order.unit;
 
-          uint256 prevIdx = idx;
-          idx = orders.nextMap[prevIdx];
-          orders.remove(prevIdx);
-        } else {
-          idx = orders.nextMap[idx];
+            uint256 prevIdx = idx;
+            idx = orders.nextMap[prevIdx];
+            orders.remove(prevIdx);
+          } else {
+            idx = orders.nextMap[idx];
+          }
         }
       }
     }
 
     if (totalAmount > 0) {
       token.safeTransfer(user, totalAmount);
-      emit Refund(user, epoch, strike, totalAmount, byAdmin);
+      emit Refund(user, epoch, totalAmount, byAdmin);
     }
   }
 
@@ -1069,33 +1054,32 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     }
   }
 
-  function _calculateCommission(uint256 epoch, uint8 strike) internal {
+  function _calculateCommission(uint256 epoch) internal {
     uint256 treasuryAmt;
 
     Round storage round = rounds[epoch];
-    Option storage option = round.options[strike];
 
-    uint256 strikePrice = (round.startPrice * uint256(option.strike)) / 100;
+    uint256 last = round.filledOrderCounter.nextId();
 
-    bool isTie = strikePrice == round.closePrice;
-    bool isOverWin = strikePrice < round.closePrice;
-    // bool isUnderWin = strikePrice > round.closePrice;
+    for (uint i = 1; i < last; i++) {
+      FilledOrder storage order = round.filledOrders[i];
 
-    if (!isTie) {
-      uint256 last = round.filledOrderCounter.nextId();
-      for (uint i = 1; i < last; i++) {
-        FilledOrder storage order = round.filledOrders[i];
-        uint256 fee = ((isOverWin ? order.underPrice : order.overPrice) *
-          order.unit *
-          commissionfee) / BASE;
-        treasuryAmt += fee;
-      }
+      uint256 strikePrice = (round.startPrice * uint256(order.strike)) / 100;
+      bool isTie = strikePrice == round.closePrice;
+      if (isTie) continue;
+
+      bool isOverWin = strikePrice < round.closePrice;
+
+      uint256 fee = ((isOverWin ? order.underPrice : order.overPrice) *
+        order.unit *
+        commissionfee) / BASE;
+      treasuryAmt += fee;
     }
 
     // Add to treasury
     treasuryAmount += treasuryAmt;
 
-    emit CommissionCalculated(epoch, strike, treasuryAmt);
+    emit CommissionCalculated(epoch, treasuryAmt);
   }
 
   function _safeEndRound(uint256 epoch, uint256 price) internal {
@@ -1133,6 +1117,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   function _initOption(uint256 epoch, uint8 strike, uint256 startPrice) internal {
     rounds[epoch].availableOptions.push(strike);
+    rounds[epoch].options[strike].strike = strike;
     rounds[epoch].options[strike].overOrders.initializeEmptyList();
     rounds[epoch].options[strike].underOrders.initializeEmptyList();
 
