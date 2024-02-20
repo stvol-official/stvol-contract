@@ -690,13 +690,12 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       bool isOverWin = strikePrice < round.closePrice;
       bool isUnderWin = strikePrice > round.closePrice;
 
-      if (filledOrder.overUser == user) {
+      if (filledOrder.overUser == user && !filledOrder.isOverClaimed) {
         // my position was over
-        if (filledOrder.isOverClaimed) continue;
         if (isTie || isOverWin) return true;
-      } else if (filledOrder.underUser == user) {
+      }
+      if (filledOrder.underUser == user && !filledOrder.isUnderClaimed) {
         // my position was under
-        if (filledOrder.isUnderClaimed) continue;
         if (isTie || isUnderWin) return true;
       }
     }
@@ -828,7 +827,9 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       false
     );
     round.userFilledOrder[msg.sender].push(txId);
-    round.userFilledOrder[counterOrder.user].push(txId);
+    if (msg.sender != counterOrder.user) {
+      round.userFilledOrder[counterOrder.user].push(txId);
+    }
 
     emit OrderFilled(
       order.epoch,
@@ -960,8 +961,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     bool isUnderWin = strikePrice > round.closePrice;
 
     uint256 reward = 0;
-    if (order.overUser == user) {
-      if (order.isOverClaimed) return 0;
+    if (order.overUser == user && !order.isOverClaimed) {
       if (isTie) {
         reward += order.overPrice * order.unit;
         order.isOverClaimed = true;
@@ -971,8 +971,9 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         reward += totalAmount - fee;
         order.isOverClaimed = true;
       }
-    } else if (order.underUser == user) {
-      if (order.isUnderClaimed) return 0;
+    }
+
+    if (order.underUser == user && !order.isUnderClaimed) {
       if (isTie) {
         reward += order.underPrice * order.unit;
         order.isUnderClaimed = true;
@@ -991,12 +992,11 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     FilledOrder storage order
   ) internal returns (uint256) {
     uint256 reward = 0;
-    if (order.overUser == user) {
-      if (order.isOverClaimed) return 0;
+    if (order.overUser == user && !order.isOverClaimed) {
       reward += order.overPrice * order.unit;
       order.isOverClaimed = true;
-    } else if (order.underUser == user) {
-      if (order.isUnderClaimed) return 0;
+    }
+    if (order.underUser == user && !order.isUnderClaimed) {
       reward += order.underPrice * order.unit;
       order.isUnderClaimed = true;
     }
