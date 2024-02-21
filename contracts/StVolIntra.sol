@@ -46,6 +46,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   mapping(uint256 => Round) public rounds; // (key: epoch)
   mapping(uint256 => AutoIncrementing.Counter) private counters; // (key: epoch)
 
+  mapping(address => uint256[]) public userRounds;
+
   enum Position {
     Over,
     Under
@@ -262,6 +264,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       token.safeTransfer(msg.sender, transferedToken - usedToken);
     }
 
+    _addUserRound(epoch);
+
     emit PlaceOrder(
       msg.sender,
       epoch,
@@ -332,6 +336,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       token.safeTransfer(msg.sender, transferedToken - totalAmount);
     }
 
+    _addUserRound(epoch);
+
     emit PlaceOrder(
       msg.sender,
       epoch,
@@ -354,32 +360,17 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     _refund(epoch, _user, true);
   }
 
-  function claim(uint256 epoch, uint256 idx) external nonReentrant {
+  function collectRound(uint256 epoch) external {
+    // claim + refund
     require(rounds[epoch].closeTimestamp != 0, "E11");
     require(block.timestamp > rounds[epoch].closeTimestamp, "E11");
 
-    Round storage round = rounds[epoch];
-    FilledOrder storage order = round.filledOrders[idx];
-
-    uint256 reward = 0;
-    if (round.oracleCalled) {
-      // Round valid, claim rewards
-      reward += _calculateOrderReward(msg.sender, order);
-    } else {
-      // Round invalid, refund Participate amount (after bufferSeconds)
-      require(block.timestamp > round.closeTimestamp + bufferSeconds, "E13");
-
-      reward += _calculateOrderRefund(msg.sender, order);
-    }
+    uint256 reward = _claimReward(epoch, msg.sender);
 
     if (reward > 0) {
       token.safeTransfer(msg.sender, reward);
-      if (round.oracleCalled) {
-        emit ClaimOrder(msg.sender, epoch, idx, reward);
-      } else {
-        emit RefundFilledOrder(msg.sender, epoch, idx, reward, false);
-      }
     }
+    _refund(epoch, msg.sender, false);
   }
 
   function claimRound(uint256 epoch) external nonReentrant {
@@ -495,29 +486,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     commissionfee = _commissionfee;
   }
 
-  function addOptionStrike(uint8 strike) external onlyAdmin {
-    int idx = -1;
-    for (uint i = 0; i < availableOptionStrikes.length; i++) {
-      if (strike == availableOptionStrikes[i]) {
-        idx = int(i);
-        break;
-      }
-    }
-    require(idx == -1, "Already Exists");
-    availableOptionStrikes.push(strike);
-  }
-
-  function removeOptionStrike(uint8 strike) external onlyAdmin {
-    int idx = -1;
-    for (uint i = 0; i < availableOptionStrikes.length; i++) {
-      if (strike == availableOptionStrikes[i]) {
-        idx = int(i);
-        break;
-      }
-    }
-    require(idx != -1, "Not Exists");
-    availableOptionStrikes[uint(idx)] = availableOptionStrikes[availableOptionStrikes.length - 1];
-    availableOptionStrikes.pop();
+  function setOptionStrikes(uint8[] calldata _strikes) external onlyAdmin {
+    availableOptionStrikes = _strikes;
   }
 
   function setAdmin(address _adminAddress) external onlyOwner {
@@ -608,6 +578,31 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
           idx = orders.next(idx);
         }
       }
+    }
+
+    return result;
+  }
+
+  function getUserPlacedRounds(
+    address user,
+    uint size,
+    uint page
+  ) public view returns (uint256[] memory) {
+    uint256[] storage roundsEpoch = userRounds[user];
+
+    uint startIndex = size * (page - 1);
+    if (startIndex > roundsEpoch.length) {
+      startIndex = roundsEpoch.length;
+    }
+    uint endIndex = startIndex + size;
+    if (endIndex > roundsEpoch.length) {
+      endIndex = roundsEpoch.length;
+    }
+    uint actualSize = endIndex - startIndex;
+
+    uint256[] memory result = new uint256[](actualSize);
+    for (uint i = 0; i < actualSize; i++) {
+      result[i] = roundsEpoch[roundsEpoch.length - startIndex - i - 1];
     }
 
     return result;
@@ -916,7 +911,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   function _refund(uint256 epoch, address user, bool byAdmin) internal {
     Round storage round = rounds[epoch];
-    require(block.timestamp > round.closeTimestamp + bufferSeconds, "E11");
+    require(block.timestamp > round.closeTimestamp, "E11");
 
     uint256 totalAmount;
     for (uint256 s = 0; s < round.availableOptions.length; s++) {
@@ -1115,6 +1110,13 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     emit StartRound(epoch, initDate, rounds[epoch].startPrice, rounds[epoch].availableOptions);
   }
 
+  function _addUserRound(uint256 epoch) internal {
+    uint256[] storage epochArray = userRounds[msg.sender];
+    if (epochArray.length == 0 || epochArray[epochArray.length - 1] != epoch) {
+      epochArray.push(epoch);
+    }
+  }
+
   function _initOption(uint256 epoch, uint8 strike, uint256 startPrice) internal {
     rounds[epoch].availableOptions.push(strike);
     rounds[epoch].options[strike].strike = strike;
@@ -1124,17 +1126,5 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 strikePrice = (startPrice * strike) / 100;
 
     emit OptionCreated(epoch, strike, strikePrice);
-  }
-
-  /**
-   * @notice Returns true if `account` is a contract.
-   * @param account: account address
-   */
-  function _isContract(address account) internal view returns (bool) {
-    uint256 size;
-    assembly {
-      size := extcodesize(account)
-    }
-    return size > 0;
   }
 }
