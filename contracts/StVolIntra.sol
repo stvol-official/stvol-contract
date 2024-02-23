@@ -663,39 +663,23 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     for (uint256 s = 0; s < round.availableOptions.length; s++) {
       Option storage option = round.options[round.availableOptions[s]];
 
-      result += _getUnfilledAmount(option.overOrders, user);
-      result += _getUnfilledAmount(option.underOrders, user);
+      result += option.overOrders.getUserAmount(user);
+      result += option.underOrders.getUserAmount(user);
     }
     return result;
   }
 
-  function claimable(uint256 epoch, address user) public view returns (bool) {
-    Round storage round = rounds[epoch];
-    if (!round.oracleCalled) return false;
+  function getOrderbook(
+    uint256 epoch,
+    uint8 strike,
+    Position position
+  ) public view returns (IntraOrderSet.IntraOrder[] memory) {
+    Option storage option = rounds[epoch].options[strike];
+    IntraOrderSet.Data storage orders = position == Position.Over
+      ? option.overOrders
+      : option.underOrders;
 
-    uint256[] memory myFilledOrders = round.userFilledOrder[user];
-
-    for (uint i = 0; i < myFilledOrders.length; i++) {
-      FilledOrder memory filledOrder = round.filledOrders[myFilledOrders[i]];
-
-      Option storage option = round.options[filledOrder.strike];
-      uint256 strikePrice = (round.startPrice * uint256(option.strike)) / 100;
-
-      bool isTie = strikePrice == round.closePrice;
-      bool isOverWin = strikePrice < round.closePrice;
-      bool isUnderWin = strikePrice > round.closePrice;
-
-      if (filledOrder.overUser == user && !filledOrder.isOverClaimed) {
-        // my position was over
-        if (isTie || isOverWin) return true;
-      }
-      if (filledOrder.underUser == user && !filledOrder.isUnderClaimed) {
-        // my position was under
-        if (isTie || isUnderWin) return true;
-      }
-    }
-
-    return false;
+    return orders.toArray();
   }
 
   /* internal functions */
@@ -893,22 +877,6 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     }
   }
 
-  function _getUnfilledAmount(
-    IntraOrderSet.Data storage orders,
-    address user
-  ) internal view returns (uint256) {
-    uint256 idx = orders.first();
-    uint256 result;
-    while (idx > IntraOrderSet.QUEUE_START && idx < IntraOrderSet.QUEUE_END) {
-      IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
-      if (order.user == user && order.price > 0 && order.unit > 0) {
-        result += (order.price * order.unit);
-      }
-      idx = orders.nextMap[idx];
-    }
-    return result;
-  }
-
   function _refund(uint256 epoch, address user, bool byAdmin) internal {
     Round storage round = rounds[epoch];
     require(block.timestamp > round.closeTimestamp, "E11");
@@ -1008,7 +976,6 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
     if (round.oracleCalled) {
       // Round valid, claim rewards
-      require(claimable(epoch, user), "E12");
       uint256[] memory userFilledOrderIdx = round.userFilledOrder[user];
       for (uint i = 0; i < userFilledOrderIdx.length; i++) {
         FilledOrder storage order = round.filledOrders[userFilledOrderIdx[i]];

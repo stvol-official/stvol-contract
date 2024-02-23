@@ -53,14 +53,8 @@ library IntraOrderSet {
     IntraOrder memory elementToInsert,
     uint256 idxBeforeNewOne
   ) internal returns (bool) {
-    require(
-      elementToInsert.price != 0,
-      "Inserting zero price is not supported"
-    );
-    require(
-      elementToInsert.unit != 0,
-      "Inserting zero unit is not supported"
-    );
+    require(elementToInsert.price != 0, "Inserting zero price is not supported");
+    require(elementToInsert.unit != 0, "Inserting zero unit is not supported");
 
     require(
       elementToInsert.idx > QUEUE_START && elementToInsert.idx < QUEUE_END,
@@ -108,10 +102,7 @@ library IntraOrderSet {
   /// The element is removed from the linked list, but the node retains
   /// information on which predecessor it had, so that a node in the chain
   /// can be reached by following the predecessor chain of deleted elements.
-  function removeKeepHistory(
-    Data storage self,
-    uint256 idxToRemove
-  ) internal returns (bool) {
+  function removeKeepHistory(Data storage self, uint256 idxToRemove) internal returns (bool) {
     if (!contains(self, idxToRemove)) {
       return false;
     }
@@ -136,10 +127,7 @@ library IntraOrderSet {
     return result;
   }
 
-  function contains(
-    Data storage self,
-    uint256 idx
-  ) internal view returns (bool) {
+  function contains(Data storage self, uint256 idx) internal view returns (bool) {
     if (idx == QUEUE_START) {
       return false;
     }
@@ -174,12 +162,43 @@ library IntraOrderSet {
     // returns QUEUE_END when it is empty
   }
 
-  function next(
-    Data storage self,
-    uint256 idx
-  ) internal view returns (uint256) {
+  function next(Data storage self, uint256 idx) internal view returns (uint256) {
     uint256 nextIdx = self.nextMap[idx];
     return nextIdx;
     // returns QUEUE_START(0) when it is non-existent element
+  }
+
+  function toArray(Data storage self) internal view returns (IntraOrder[] memory) {
+    uint256 idx = self.nextMap[QUEUE_START];
+    uint256 count;
+    while (idx > QUEUE_START && idx < QUEUE_END) {
+      count++;
+      idx = self.nextMap[idx];
+    }
+
+    IntraOrder[] memory result = new IntraOrder[](count);
+
+    idx = self.nextMap[QUEUE_START];
+    uint i;
+    while (idx > QUEUE_START && idx < QUEUE_END) {
+      IntraOrder storage order = self.orderMap[idx];
+      result[i] = order;
+      idx = self.nextMap[idx];
+      i++;
+    }
+    return result;
+  }
+
+  function getUserAmount(Data storage self, address user) internal view returns (uint256) {
+    uint256 idx = self.nextMap[QUEUE_START];
+    uint256 result;
+    while (idx > QUEUE_START && idx < QUEUE_END) {
+      IntraOrder storage order = self.orderMap[idx];
+      if (order.user == user && order.price > 0 && order.unit > 0) {
+        result += (order.price * order.unit);
+      }
+      idx = self.nextMap[idx];
+    }
+    return result;
   }
 }
