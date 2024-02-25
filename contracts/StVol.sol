@@ -643,6 +643,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             round.oracleCalled &&
             orderInfo.amount != 0 &&
             !orderInfo.claimed &&
+            !orderInfo.isCancelled && 
             isPossible;
     }
 
@@ -655,6 +656,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         Round storage round = rounds[_epoch];
         uint256 refundAmt = 0;
         bool claimed = false;
+        bool isCancelled = false;
 
         if (_idx > 0) {
             OrderInfo memory orderInfo = _getOrderInfoByIdx(
@@ -665,6 +667,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             );
             refundAmt += orderInfo.amount;
             claimed = orderInfo.claimed;
+            isCancelled = orderInfo.isCancelled;
         } else {
             refundAmt = _getUndeclaredAmt(_epoch, _strike, _user);
         }
@@ -672,6 +675,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         return
             !round.oracleCalled &&
             !claimed &&
+            !isCancelled &&
             block.timestamp > round.closeTimestamp + bufferSeconds &&
             refundAmt != 0;
     }
