@@ -4,23 +4,16 @@ import config from "../config";
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const STVOL_NAME = "StVol";
-  const PYTH_PRICE_FEED = "BTC_USD";
+  const STVOL_NAME = "StVolBlast";
+  const PYTH_PRICE_FEED = "ETH_USD";
 
   // Check if the network is supported.
-  if (networkName === "goerli"
-    || networkName === "mainnet"
-    || networkName === "arbitrum"
-    || networkName === "arbitrum_goerli"
-    || networkName === "arbitrum_sepolia"
-    || networkName === "sepolia"
-    || networkName === "blast_sepolia"
+  if (networkName === "blast_sepolia"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 
     // Check if the addresses in the config are set.
     if (
-      config.Address.Usdc[networkName] === ethers.constants.AddressZero ||
       config.Address.Oracle[networkName] === ethers.constants.AddressZero ||
       config.Address.Admin[networkName] === ethers.constants.AddressZero ||
       config.Address.Operator[networkName] === ethers.constants.AddressZero ||
@@ -34,7 +27,6 @@ const main = async () => {
     console.log("Compiled contracts...");
 
     console.log("===========================================");
-    console.log("USDC: %s", config.Address.Usdc[networkName]);
     console.log("Oracle: %s", config.Address.Oracle[networkName]);
     console.log("Admin: %s", config.Address.Admin[networkName]);
     console.log("Operator: %s", config.Address.Operator[networkName]);
@@ -45,7 +37,6 @@ const main = async () => {
     // Deploy contracts.
     const StVol = await ethers.getContractFactory(STVOL_NAME);
     const stVolContract = await StVol.deploy(
-      config.Address.Usdc[networkName],
       config.Address.Oracle[networkName],
       config.Address.Admin[networkName],
       config.Address.Operator[networkName],
@@ -62,7 +53,6 @@ const main = async () => {
       network: ethers.provider.network,
       contract: `contracts/${STVOL_NAME}.sol:${STVOL_NAME}`,
       constructorArguments: [
-        config.Address.Usdc[networkName],
         config.Address.Oracle[networkName],
         config.Address.Admin[networkName],
         config.Address.Operator[networkName],

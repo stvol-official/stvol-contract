@@ -8,7 +8,7 @@ const main = async () => {
   const decimal = 6;
 
   // Check if the network is supported.
-  if (networkName === "goerli" || networkName === "arbitrum_sepolia") {
+  if (networkName === "goerli" || networkName === "arbitrum_sepolia" || networkName === "blast_sepolia") {
     console.log(`Deploying to ${networkName} network...`);
 
     // Compile contracts.

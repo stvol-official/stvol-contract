@@ -14,6 +14,7 @@ const main = async () => {
     || networkName === "arbitrum_goerli"
     || networkName === "arbitrum_sepolia"
     || networkName === "sepolia"
+    || networkName === "blast_sepolia"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 
