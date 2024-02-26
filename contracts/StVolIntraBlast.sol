@@ -60,6 +60,9 @@ contract StVolIntraBlast is StVolIntra {
     WETH.configure(YieldMode.CLAIMABLE); //configure claimable yield for WETH
 
     BLAST.configureClaimableGas();
+
+    ONE_TOKEN = 10 ** 18;
+    HUNDRED_TOKEN = 100 * ONE_TOKEN;
   }
 
   function getClaimableYield(address tokenAddress) external view onlyOwner returns (uint256) {

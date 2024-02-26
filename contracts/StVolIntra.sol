@@ -37,11 +37,13 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   uint256 public treasuryAmount; // treasury amount that was not claimed
   uint256 public participantRate; // participant distribute rate (e.g. 200 = 2%, 150 = 1.50%)
   uint256 public currentEpoch; // current epoch for round
-  uint256 public constant BASE = 10000; // 100%
-  uint256 public constant MAX_COMMISSION_FEE = 200; // 2%
+  uint256 private constant BASE = 10000; // 100%
+  uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
   // uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
-  uint256 public constant DEFAULT_INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
-  uint256 public constant DEFAULT_BUFFER_SECONDS = 600; // 10 * 60 (10min)
+  uint256 internal ONE_TOKEN = 10 ** 6; // 6 for usdc, 18 for usdb
+  uint256 internal HUNDRED_TOKEN = 100 * ONE_TOKEN;
+  uint256 private constant DEFAULT_INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
+  uint256 private constant DEFAULT_BUFFER_SECONDS = 600; // 10 * 60 (10min)
 
   mapping(uint256 => Round) public rounds; // (key: epoch)
   mapping(uint256 => AutoIncrementing.Counter) private counters; // (key: epoch)
@@ -234,8 +236,11 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
       "E08"
     );
-    require(price >= 1000000 && price <= 99000000, "The price must be between 1 and 99.");
-    require(price % 1000000 == 0, "The price must be an integer.");
+    require(
+      price >= ONE_TOKEN && price <= HUNDRED_TOKEN - ONE_TOKEN,
+      "The price must be between 1 and 99."
+    );
+    require(price % ONE_TOKEN == 0, "The price must be an integer.");
     require(unit > 0, "The unit must be greater than 0.");
 
     uint256 transferedToken = price * unit;
@@ -320,7 +325,10 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
       "E08"
     );
-    require(price >= 1000000 && price <= 99000000, "The price must be between 1 and 99.");
+    require(
+      price >= ONE_TOKEN && price <= HUNDRED_TOKEN - ONE_TOKEN,
+      "The price must be between 1 and 99."
+    );
     require(unit > 0, "The unit must be greater than 0.");
 
     uint256 transferedToken = price * unit;
@@ -376,8 +384,6 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint64 initDate,
     bool isFixed
   ) external payable whenNotPaused onlyOperator {
-    require(genesisStartOnce, "E14");
-
     (int64 pythPrice, uint publishTime) = _getPythPrice(priceUpdateData, initDate, isFixed);
 
     require(
@@ -385,10 +391,10 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       "E15"
     );
 
-    _startRound(currentEpoch, initDate, uint64(pythPrice));
-
     // increase currentEpoch and start next round
     currentEpoch = currentEpoch + 1;
+
+    _startRound(currentEpoch, initDate, uint64(pythPrice));
 
     if (genesisStartOnce) {
       // end prev round
@@ -588,7 +594,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 myPrice = HUNDRED_TOKEN - counterOrder.price;
       uint256 txUnit = (unit - totalUnit) < counterOrder.unit
         ? unit - totalUnit
         : counterOrder.unit; // min
@@ -663,13 +669,13 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      if (counterOrder.price + order.price < 100000000) {
+      if (counterOrder.price + order.price < HUNDRED_TOKEN) {
         // 100 usdc
         // no more matched counter orders
         break;
       }
 
-      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 myPrice = HUNDRED_TOKEN - counterOrder.price;
       uint256 txUnit = leftUnit < counterOrder.unit ? leftUnit : counterOrder.unit; // min
 
       _createFilledOrder(
@@ -712,7 +718,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      uint256 myPrice = 100000000 - counterOrder.price;
+      uint256 myPrice = HUNDRED_TOKEN - counterOrder.price;
       uint256 txUnit = (order.unit - totalUnit) < counterOrder.unit
         ? order.unit - totalUnit
         : counterOrder.unit; // min
