@@ -112,7 +112,7 @@ library LimitOrderSet {
     self.nextMap[elementToInsert.idx] = current;
     self.orderMap[elementToInsert.idx] = elementToInsert;
 
-    viewOrderHist(self);
+    // viewOrderHist(self);
     return true;
   }
 

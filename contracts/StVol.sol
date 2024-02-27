@@ -519,11 +519,6 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         operatorVaultAddress = _operatorVaultAddress;
     }
 
-    function setOracle(address _oracle) external whenPaused onlyAdmin {
-        require(_oracle != address(0), "E31");
-        oracle = IPyth(_oracle);
-    }
-
     function setCommissionfee(
         uint256 _commissionfee
     ) external whenPaused onlyAdmin {
