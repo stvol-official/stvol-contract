@@ -79,7 +79,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     uint256 public constant DEFAULT_BUFFER_SECONDS = 1800; // 30 * 60 (30min)
 
     mapping(uint256 => Round) public rounds; // (key: epoch)
-    mapping(uint256 => AutoIncrementing.Counter) private _counters; // (key: epoch)
+    mapping(uint256 => mapping(Position => AutoIncrementing.Counter))
+        private _counters; // (key: epoch => position)
 
     enum Position {
         Over,
@@ -205,7 +206,13 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 rewardAmount,
         uint256 treasuryAmount
     );
-    event OpenRound(uint256 indexed epoch, uint256 openTimestamp, uint256 startTimestamp, uint256 closeTimestamp, uint8[] strikes);
+    event OpenRound(
+        uint256 indexed epoch,
+        uint256 openTimestamp,
+        uint256 startTimestamp,
+        uint256 closeTimestamp,
+        uint8[] strikes
+    );
     modifier onlyAdmin() {
         require(msg.sender == adminAddress, "E01");
         _;
@@ -262,7 +269,8 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     function cancelMarketOrder(
         uint256 _epoch,
         uint256 _idx,
-        uint8 _strike
+        uint8 _strike,
+        Position _position
     ) external nonReentrant {
         require(rounds[_epoch].openTimestamp != 0, "E21");
         require(block.timestamp < rounds[_epoch].startTimestamp, "E22");
@@ -271,9 +279,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
         // Update user data
         OrderInfo storage orderInfo = _getOrderInfoByIdx(
-            _idx,
             _epoch,
             _strike,
+            _position,
+            _idx,
             msg.sender
         );
         require(!orderInfo.isCancelled && !orderInfo.claimed, "E03");
@@ -305,6 +314,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     function claim(
         uint256 _epoch,
         uint8 _strike,
+        Position _position,
         uint256 _idx
     ) external nonReentrant {
         uint256 reward; // Initializes reward
@@ -317,15 +327,19 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         Round storage round = rounds[_epoch];
         Option storage option = round.options[_strike];
         OrderInfo storage orderInfo = _getOrderInfoByIdx(
-            _idx,
             _epoch,
             _strike,
+            _position,
+            _idx,
             msg.sender
         );
 
         // Round valid, claim rewards
         if (round.oracleCalled) {
-            require(claimable(_epoch, _strike, _idx, msg.sender), "E12");
+            require(
+                claimable(_epoch, _strike, _position, _idx, msg.sender),
+                "E12"
+            );
             if (
                 (option.overAmount > 0 && option.underAmount > 0) &&
                 (round.startPrice != round.closePrice)
@@ -336,7 +350,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             }
         } else {
             // Round invalid, refund Participate amount
-            require(refundable(_epoch, _strike, _idx, msg.sender), "E13");
+            require(
+                refundable(_epoch, _strike, _position, _idx, msg.sender),
+                "E13"
+            );
         }
         orderInfo.claimed = true;
         reward = orderInfo.amount + addedReward;
@@ -502,11 +519,6 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         operatorVaultAddress = _operatorVaultAddress;
     }
 
-    function setOracle(address _oracle) external whenPaused onlyAdmin {
-        require(_oracle != address(0), "E31");
-        oracle = IPyth(_oracle);
-    }
-
     function setCommissionfee(
         uint256 _commissionfee
     ) external whenPaused onlyAdmin {
@@ -567,7 +579,15 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                     uint256 addedReward = 0;
                     OrderInfo storage ledger = orderInfos[j];
 
-                    if (claimable(epoch, option.strike, ledger.idx, _user)) {
+                    if (
+                        claimable(
+                            epoch,
+                            option.strike,
+                            ledger.position,
+                            ledger.idx,
+                            _user
+                        )
+                    ) {
                         // Round vaild, claim rewards
                         if (
                             (option.overAmount > 0 && option.underAmount > 0) &&
@@ -581,7 +601,13 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                     } else {
                         // Round invaild, refund bet amount
                         if (
-                            refundable(epoch, option.strike, ledger.idx, _user)
+                            refundable(
+                                epoch,
+                                option.strike,
+                                ledger.position,
+                                ledger.idx,
+                                _user
+                            )
                         ) {
                             addedReward += ledger.amount;
                         }
@@ -600,7 +626,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                     }
                 }
                 // refund limit-order amount
-                if (refundable(epoch, option.strike, 0, _user)) {
+                if (
+                    refundable(epoch, option.strike, Position.Over, 0, _user) ||
+                    refundable(epoch, option.strike, Position.Under, 0, _user)
+                ) {
                     reward += _getUndeclaredAmt(epoch, option.strike, _user);
                 }
             }
@@ -613,15 +642,17 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     function claimable(
         uint256 _epoch,
         uint8 _strike,
+        Position _position,
         uint256 _idx,
         address _user
     ) public view returns (bool) {
         Round storage round = rounds[_epoch];
         Option storage option = round.options[_strike];
         OrderInfo memory orderInfo = _getOrderInfoByIdx(
-            _idx,
             _epoch,
             _strike,
+            _position,
+            _idx,
             _user
         );
 
@@ -643,13 +674,14 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             round.oracleCalled &&
             orderInfo.amount != 0 &&
             !orderInfo.claimed &&
-            !orderInfo.isCancelled && 
+            !orderInfo.isCancelled &&
             isPossible;
     }
 
     function refundable(
         uint256 _epoch,
         uint8 _strike,
+        Position _position,
         uint256 _idx,
         address _user
     ) public view returns (bool) {
@@ -660,9 +692,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
         if (_idx > 0) {
             OrderInfo memory orderInfo = _getOrderInfoByIdx(
-                _idx,
                 _epoch,
                 _strike,
+                _position,
+                _idx,
                 _user
             );
             refundAmt += orderInfo.amount;
@@ -796,7 +829,13 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
             _initOption(_epoch, availableOptionStrikes[i]);
         }
         uint8[] memory strikes = availableOptionStrikes;
-        emit OpenRound(_epoch, rounds[_epoch].openTimestamp, rounds[_epoch].startTimestamp, rounds[_epoch].closeTimestamp, strikes);
+        emit OpenRound(
+            _epoch,
+            rounds[_epoch].openTimestamp,
+            rounds[_epoch].startTimestamp,
+            rounds[_epoch].closeTimestamp,
+            strikes
+        );
     }
 
     function _initOption(uint256 _epoch, uint8 _strike) internal {
@@ -824,7 +863,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         uint256 _amount
     ) internal {
         Option storage option = rounds[_epoch].options[_strike];
-        uint256 idx = _counters[_epoch].nextId();
+        uint256 idx = _counters[_epoch][_position].nextId();
 
         option.ledgers[_user].push(
             OrderInfo(idx, _position, _amount, false, false)
@@ -866,7 +905,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         LimitOrderSet.Data storage limitOrders = _position == Position.Over
             ? option.overLimitOrders
             : option.underLimitOrders;
-        uint256 idx = _counters[_epoch].nextId();
+        uint256 idx = _counters[_epoch][_position].nextId();
         limitOrders.insert(
             LimitOrderSet.LimitOrder(
                 idx,
@@ -937,7 +976,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
 
     function _placeLimitOrders(uint256 _epoch, uint8 _strike) internal {
         Option storage option = rounds[_epoch].options[_strike];
-        RoundAmount memory ra = RoundAmount(
+        RoundAmount memory optionAmount = RoundAmount(
             option.totalAmount,
             option.overAmount,
             option.underAmount
@@ -960,14 +999,14 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                 LimitOrderSet.LimitOrder storage order = sortedOverLimitOrders
                     .orderMap[idx];
 
-                uint expectedPayout = ((ra.totalAmount + order.amount) * BASE) /
-                    (ra.overAmount + order.amount);
+                uint expectedPayout = ((optionAmount.totalAmount + order.amount) * BASE) /
+                    (optionAmount.overAmount + order.amount);
                 if (
                     order.payout <= expectedPayout &&
                     order.status == LimitOrderSet.LimitOrderStatus.Undeclared
                 ) {
-                    ra.totalAmount += order.amount;
-                    ra.overAmount += order.amount;
+                    optionAmount.totalAmount += order.amount;
+                    optionAmount.overAmount += order.amount;
                     order.status = LimitOrderSet.LimitOrderStatus.Approve;
                 }
                 idx = sortedOverLimitOrders.next(idx);
@@ -984,19 +1023,18 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                 LimitOrderSet.LimitOrder storage order = sortedUnderLimitOrders
                     .orderMap[idx];
 
-                uint expectedPayout = ((ra.totalAmount + order.amount) * BASE) /
-                    (ra.underAmount + order.amount);
+                uint expectedPayout = ((optionAmount.totalAmount + order.amount) * BASE) /
+                    (optionAmount.underAmount + order.amount);
                 if (
                     order.payout <= expectedPayout &&
                     order.status == LimitOrderSet.LimitOrderStatus.Undeclared
                 ) {
-                    ra.totalAmount += order.amount;
-                    ra.underAmount += order.amount;
+                    optionAmount.totalAmount += order.amount;
+                    optionAmount.underAmount += order.amount;
                     order.status = LimitOrderSet.LimitOrderStatus.Approve;
+                    applyPayout = true;
                 }
                 idx = sortedUnderLimitOrders.next(idx);
-
-                applyPayout = true;
             }
         } while (applyPayout);
 
@@ -1100,9 +1138,10 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
     }
 
     function _getOrderInfoByIdx(
-        uint256 _idx,
         uint256 _epoch,
         uint8 _strike,
+        Position _position,
+        uint256 _idx,
         address _user
     ) internal view returns (OrderInfo storage) {
         Option storage option = rounds[_epoch].options[_strike];
@@ -1110,7 +1149,9 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         int selectedIdx = -1;
 
         for (uint i = 0; i < orderInfos.length; i++) {
-            if (orderInfos[i].idx == _idx) {
+            if (
+                orderInfos[i].idx == _idx && orderInfos[i].position == _position
+            ) {
                 selectedIdx = int(i);
                 break;
             }
