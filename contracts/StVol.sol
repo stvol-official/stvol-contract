@@ -194,6 +194,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         address indexed sender,
         uint256 indexed epoch,
         uint8 indexed strike,
+        Position position,
         uint256 idx,
         uint256 amount
     );
@@ -358,7 +359,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
         orderInfo.claimed = true;
         reward = orderInfo.amount + addedReward;
 
-        emit Claim(msg.sender, _epoch, _strike, _idx, reward);
+        emit Claim(msg.sender, _epoch, _strike, _position, _idx, reward);
 
         if (reward > 0) {
             token.safeTransfer(msg.sender, reward);
@@ -620,6 +621,7 @@ contract StVol is Ownable, Pausable, ReentrancyGuard {
                             _user,
                             epoch,
                             option.strike,
+                            ledger.position,
                             ledger.idx,
                             addedReward
                         );
