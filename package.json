@@ -10,6 +10,8 @@
     "deploy:goerli": "npx hardhat run --network goerli scripts/deploy-btc-stvol.ts",
     "deploy:sepolia": "npx hardhat run --network sepolia scripts/deploy-eth-stvol.ts",
     "deploy:blast-sepolia": "npx hardhat run --network blast_sepolia scripts/deploy-blast-stvol.ts",
+    "deploy-eth:blast-sepolia": "npx hardhat run --network blast_sepolia scripts/deploy-eth-stvol.ts",
+    "deploy-btc:blast-sepolia": "npx hardhat run --network blast_sepolia scripts/deploy-btc-stvol.ts",
     "deploy:arbitrum-sepolia": "npx hardhat run --network arbitrum_sepolia scripts/deploy-eth-stvol.ts",
     "deploy-eth:arbitrum": "npx hardhat run --network arbitrum scripts/deploy-eth-stvol.ts",
     "deploy-btc:arbitrum": "npx hardhat run --network arbitrum scripts/deploy-btc-stvol.ts",

@@ -3,9 +3,9 @@ import { ethers, network, run } from "hardhat";
 const main = async () => {
   // Get network data from Hardhat config.
   const networkName = network.name;
-  const name = "STVOL TEST USDC";
-  const symbol = "USDC";
-  const decimal = 6;
+  const name = "STVOL TEST USDB";
+  const symbol = "USDB";
+  const decimal = 18;
 
   // Check if the network is supported.
   if (networkName === "goerli" || networkName === "arbitrum_sepolia" || networkName === "blast_sepolia") {
