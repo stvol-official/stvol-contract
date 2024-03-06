@@ -4,7 +4,7 @@ const main = async () => {
   // Get network data from Hardhat config.
   const networkName = network.name;
   const name = "STVOL TEST USDB";
-  const symbol = "USDB";
+  const symbol = "vUSDB";
   const decimal = 18;
 
   // Check if the network is supported.

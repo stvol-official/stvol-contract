@@ -8,7 +8,7 @@ export default {
       sepolia: "0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0",
       goerli: "0xc87095a378DEb619BA55Fff67f40fC1e7C0b219C",
       // blast_sepolia: "0x4200000000000000000000000000000000000022", // blast USDB
-      blast_sepolia: "0xaDbd87F5960Be91cCE1d7D5A0a66b36d316C199c", // stvol USDB
+      blast_sepolia: "0x9C75DA71284E9F912C9237253F21f90223D7034a", // stvol vUSDB
     },
     Oracle: {
       mainnet: "0x4305FB66699C3B2702D4d05CF36551390A4c69C6",
