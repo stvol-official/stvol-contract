@@ -2,6 +2,7 @@
 pragma solidity ^0.8.4;
 pragma abicoder v2;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { StVolIntra } from "./StVolIntra.sol";
 
 enum YieldMode {
@@ -23,18 +24,30 @@ interface IERC20Rebasing {
   function getClaimableAmount(address account) external view returns (uint256);
 }
 
+enum GasMode {
+  VOID,
+  CLAIMABLE
+}
+
 interface IBlast {
   // Note: the full interface for IBlast can be found below
   function configureClaimableGas() external;
 
-  function readClaimableYield(address contractAddress) external view returns (uint256);
-
   function claimAllGas(address contractAddress, address recipient) external returns (uint256);
+
+  function claimMaxGas(address contractAddress, address recipientOfGas) external returns (uint256);
+
+  function readGasParams(
+    address contractAddress
+  )
+    external
+    view
+    returns (uint256 etherSeconds, uint256 etherBalance, uint256 lastUpdated, GasMode);
 }
 
 contract StVolIntraBlast is StVolIntra {
   // NOTE: these addresses will be slightly different on the Blast mainnet
-  IERC20Rebasing public constant USDB = IERC20Rebasing(0x4200000000000000000000000000000000000022);
+  IERC20 public constant USDB = IERC20(0xaDbd87F5960Be91cCE1d7D5A0a66b36d316C199c);
   IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
   IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
 
@@ -56,7 +69,7 @@ contract StVolIntraBlast is StVolIntra {
       _priceId
     )
   {
-    USDB.configure(YieldMode.CLAIMABLE); //configure claimable yield for USDB
+    // USDB.configure(YieldMode.CLAIMABLE); //configure claimable yield for USDB
     WETH.configure(YieldMode.CLAIMABLE); //configure claimable yield for WETH
 
     BLAST.configureClaimableGas();
@@ -78,11 +91,20 @@ contract StVolIntraBlast is StVolIntra {
     token.claim(recipient, claimAmount);
   }
 
-  function getClaimableGas() external view onlyOwner returns (uint256) {
-    return BLAST.readClaimableYield(address(this));
+  function getClaimableGas()
+    external
+    view
+    onlyOwner
+    returns (uint256 etherSeconds, uint256 etherBalance, uint256 lastUpdated, GasMode)
+  {
+    return BLAST.readGasParams(address(this));
   }
 
-  function claimGas(address recipient) external onlyOwner returns (uint256) {
+  function claimAllGas(address recipient) external onlyOwner returns (uint256) {
     return BLAST.claimAllGas(address(this), recipient);
+  }
+
+  function claimMaxGas(address recipient) external onlyOwner returns (uint256) {
+    return BLAST.claimMaxGas(address(this), recipient);
   }
 }
