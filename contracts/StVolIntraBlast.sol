@@ -47,7 +47,7 @@ interface IBlast {
 
 contract StVolIntraBlast is StVolIntra {
   // NOTE: these addresses will be slightly different on the Blast mainnet
-  IERC20 public constant USDB = IERC20(0xaDbd87F5960Be91cCE1d7D5A0a66b36d316C199c);
+  IERC20 public constant USDB = IERC20(0x0B8a205c26ECFc423DE29a8EF18e1229a0Cc4F47);
   IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
   IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
 

@@ -3,24 +3,21 @@ import "@nomiclabs/hardhat-truffle5";
 import "@nomiclabs/hardhat-waffle";
 // import "@nomiclabs/hardhat-etherscan";
 import "@nomicfoundation/hardhat-verify";
-import '@typechain/hardhat';
+import "@typechain/hardhat";
 import "solidity-coverage";
 import "hardhat-abi-exporter";
 import "hardhat-gas-reporter";
 
-import * as fs from 'fs';
-import * as dotenv from 'dotenv'
+import * as fs from "fs";
+import * as dotenv from "dotenv";
 
-dotenv.config()
+dotenv.config();
 
-const mnemonic = fs.existsSync('.secret')
-  ? fs
-    .readFileSync('.secret')
-    .toString()
-    .trim()
-  : "test test test test test test test test test test test junk"
+const mnemonic = fs.existsSync(".secret")
+  ? fs.readFileSync(".secret").toString().trim()
+  : "test test test test test test test test test test test junk";
 
-const infuraKey = process.env.INFURA_KEY
+const infuraKey = process.env.INFURA_KEY;
 
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
@@ -101,6 +98,12 @@ export default {
     compilers: [
       {
         version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       },
       {
         version: "0.8.4",
@@ -110,14 +113,12 @@ export default {
             runs: 200,
           },
         },
-
-      }
-
-    ]
+      },
+    ],
   },
   typechain: {
-    outDir: 'typechain',
-    target: 'ethers-v5',
+    outDir: "typechain",
+    target: "ethers-v5",
   },
   contractSizer: {
     alphaSort: true,
@@ -147,7 +148,7 @@ export default {
         chainId: 168587773,
         urls: {
           apiURL: "https://api.routescan.io/v2/network/testnet/evm/168587773/etherscan",
-          browserURL: "https://testnet.blastscan.io"
+          browserURL: "https://testnet.blastscan.io",
         },
       },
     ],

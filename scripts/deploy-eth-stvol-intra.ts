@@ -4,16 +4,18 @@ import config from "../config";
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const STVOL_NAME = "StVolIntra";
+  const STVOL_NAME = "StVolIntraBlast";
   const PYTH_PRICE_FEED = "ETH_USD";
 
   // Check if the network is supported.
-  if (networkName === "goerli"
-    || networkName === "mainnet"
-    || networkName === "arbitrum"
-    || networkName === "arbitrum_goerli"
-    || networkName === "arbitrum_sepolia"
-    || networkName === "sepolia"
+  if (
+    networkName === "goerli" ||
+    networkName === "mainnet" ||
+    networkName === "arbitrum" ||
+    networkName === "arbitrum_goerli" ||
+    networkName === "arbitrum_sepolia" ||
+    networkName === "sepolia" ||
+    networkName === "blast_sepolia"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 
@@ -44,7 +46,7 @@ const main = async () => {
     // Deploy contracts.
     const StVol = await ethers.getContractFactory(STVOL_NAME);
     const stVolContract = await StVol.deploy(
-      config.Address.Usdc[networkName],
+      // config.Address.Usdc[networkName],
       config.Address.Oracle[networkName],
       config.Address.Admin[networkName],
       config.Address.Operator[networkName],
@@ -61,16 +63,16 @@ const main = async () => {
       network: ethers.provider.network,
       contract: `contracts/${STVOL_NAME}.sol:${STVOL_NAME}`,
       constructorArguments: [
-        config.Address.Usdc[networkName],
+        // config.Address.Usdc[networkName],
         config.Address.Oracle[networkName],
         config.Address.Admin[networkName],
         config.Address.Operator[networkName],
         config.Address.OperatorVault[networkName],
         config.CommissionFee[networkName],
-        config.PythPriceId[networkName][PYTH_PRICE_FEED]
-      ]
+        config.PythPriceId[networkName][PYTH_PRICE_FEED],
+      ],
     });
-    console.log('verify the contractAction done');
+    console.log("verify the contractAction done");
   } else {
     console.log(`Deploying to ${networkName} network is not supported...`);
   }
