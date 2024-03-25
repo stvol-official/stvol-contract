@@ -398,7 +398,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
     if (genesisStartOnce) {
       // end prev round
-      _safeEndRound(currentEpoch - 1, uint64(pythPrice));
+      _endRound(currentEpoch - 1, uint64(pythPrice), initDate);
       _calculateCommission(currentEpoch - 1);
     } else {
       genesisStartOnce = true;
@@ -1014,19 +1014,10 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     emit CommissionCalculated(epoch, treasuryAmt);
   }
 
-  function _safeEndRound(uint256 epoch, uint256 price) internal {
+  function _endRound(uint256 epoch, uint256 price, uint256 initDate) internal {
     require(rounds[epoch].startTimestamp != 0, "E26");
 
-    /* TODO: what is the side effect?
-    require(block.timestamp >= rounds[epoch].closeTimestamp, "E27");
-    require(
-      block.timestamp <= rounds[epoch].closeTimestamp + bufferSeconds,
-      "E28"
-    );
-    */
-
-    // close round forcely
-    rounds[epoch].closeTimestamp = block.timestamp;
+    rounds[epoch].closeTimestamp = initDate;
 
     rounds[epoch].closePrice = uint256(price);
     rounds[epoch].oracleCalled = true;
