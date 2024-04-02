@@ -2,6 +2,7 @@
 pragma solidity ^0.8.4;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { StVolIntra } from "./StVolIntra.sol";
 
@@ -51,15 +52,15 @@ contract StVolIntraBlast is StVolIntra {
   IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
   IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
 
-  constructor(
+  function initialize(
     address _oracleAddress,
     address _adminAddress,
     address _operatorAddress,
     address _operatorVaultAddress,
     uint256 _commissionfee,
     bytes32 _priceId
-  )
-    StVolIntra(
+  ) public initializer {
+    StVolIntra._initialize(
       address(USDB),
       _oracleAddress,
       _adminAddress,
@@ -67,15 +68,21 @@ contract StVolIntraBlast is StVolIntra {
       _operatorVaultAddress,
       _commissionfee,
       _priceId
-    )
-  {
+    );
+
     // USDB.configure(YieldMode.CLAIMABLE); //configure claimable yield for USDB
     WETH.configure(YieldMode.CLAIMABLE); //configure claimable yield for WETH
 
     BLAST.configureClaimableGas();
 
-    ONE_TOKEN = 10 ** 18;
-    HUNDRED_TOKEN = 100 * ONE_TOKEN;
+    MainStorage storage $ = _getMainStorage();
+    $.ONE_TOKEN = 10 ** 18;
+    $.HUNDRED_TOKEN = 100 * $.ONE_TOKEN;
+  }
+
+  /// @custom:oz-upgrades-unsafe-allow constructor
+  constructor() {
+    _disableInitializers();
   }
 
   function getClaimableYield(address tokenAddress) external view onlyOwner returns (uint256) {

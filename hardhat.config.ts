@@ -1,13 +1,15 @@
-//import "@nomiclabs/hardhat-ethers";
 //import "@nomiclabs/hardhat-truffle5";
 //import "@nomiclabs/hardhat-waffle";
-// import "@nomiclabs/hardhat-etherscan";
-import "@nomicfoundation/hardhat-verify";
-//import "@typechain/hardhat";
-import "solidity-coverage";
+//import "@nomiclabs/hardhat-etherscan";
 //import "hardhat-abi-exporter";
 //import "hardhat-gas-reporter";
+
+import "@nomicfoundation/hardhat-verify";
+import "solidity-coverage";
 import "@openzeppelin/hardhat-upgrades";
+import "@typechain/hardhat";
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-chai-matchers";
 
 import * as fs from "fs";
 import * as dotenv from "dotenv";
@@ -104,6 +106,7 @@ export default {
             enabled: true,
             runs: 200,
           },
+          viaIR: true,
         },
       },
       {
@@ -111,15 +114,16 @@ export default {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 400,
           },
+          viaIR: true,
         },
       },
     ],
   },
   typechain: {
     outDir: "typechain",
-    target: "ethers-v5",
+    target: "ethers-v6",
   },
   contractSizer: {
     alphaSort: true,

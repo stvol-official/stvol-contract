@@ -2,9 +2,10 @@
 pragma solidity ^0.8.4;
 pragma abicoder v2;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
@@ -12,43 +13,46 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "./utils/AutoIncrementing.sol";
 import "./libraries/IntraOrderSet.sol";
 
-contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
+contract StVolIntra is
+  Initializable,
+  OwnableUpgradeable,
+  PausableUpgradeable,
+  ReentrancyGuardUpgradeable
+{
   using SafeERC20 for IERC20;
   using AutoIncrementing for AutoIncrementing.Counter;
   using IntraOrderSet for IntraOrderSet.Data;
 
-  IERC20 public immutable token; // Prediction token
-
-  IPyth public oracle;
-
-  bool public genesisStartOnce = false;
-
-  bytes32 public priceId; // address of the pyth price
-  address public adminAddress; // address of the admin
-  address public operatorAddress; // address of the operator
-  address public operatorVaultAddress; // address of the operator vault
-
-  uint256 public bufferSeconds; // number of seconds for valid execution of a participate round
-  uint256 public intervalSeconds; // interval in seconds between two participate rounds
-
-  uint256[] public availableOptionStrikes; // available option markets. handled by Admin
-
-  uint256 public commissionfee; // commission rate (e.g. 200 = 2%, 150 = 1.50%)
-  uint256 public treasuryAmount; // treasury amount that was not claimed
-  uint256 public participantRate; // participant distribute rate (e.g. 200 = 2%, 150 = 1.50%)
-  uint256 public currentEpoch; // current epoch for round
   uint256 private constant BASE = 10000; // 100%
   uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
-  // uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
-  uint256 internal ONE_TOKEN = 10 ** 6; // 6 for usdc, 18 for usdb
-  uint256 internal HUNDRED_TOKEN = 100 * ONE_TOKEN;
-  uint256 private constant DEFAULT_INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
-  uint256 private constant DEFAULT_BUFFER_SECONDS = 600; // 10 * 60 (10min)
+  uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
+  uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
 
-  mapping(uint256 => Round) public rounds; // (key: epoch)
-  mapping(uint256 => AutoIncrementing.Counter) private counters; // (key: epoch)
+  /// @custom:storage-location erc7201:stvolintra.main
+  struct MainStorage {
+    IERC20 token; // Prediction token
+    IPyth oracle;
+    bool genesisStartOnce;
+    bytes32 priceId; // address of the pyth price
+    address adminAddress; // address of the admin
+    address operatorAddress; // address of the operator
+    address operatorVaultAddress; // address of the operator vault
+    uint256[] availableOptionStrikes; // available option markets. handled by Admin
+    uint256 commissionfee; // commission rate (e.g. 200 = 2%, 150 = 1.50%)
+    uint256 treasuryAmount; // treasury amount that was not claimed
+    uint256 participantRate; // participant distribute rate (e.g. 200 = 2%, 150 = 1.50%)
+    uint256 currentEpoch; // current epoch for round
+    // uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
+    uint256 ONE_TOKEN; // = 10 ** 6; // 6 for usdc, 18 for usdb
+    uint256 HUNDRED_TOKEN; // = 100 * ONE_TOKEN;
+    mapping(uint256 => Round) rounds; // (key: epoch)
+    mapping(uint256 => AutoIncrementing.Counter) counters; // (key: epoch)
+    mapping(address => uint256[]) userRounds;
+  }
 
-  mapping(address => uint256[]) private userRounds;
+  // keccak256(abi.encode(uint256(keccak256("stvolintra.main")) - 1)) & ~bytes32(uint256(0xff));
+  bytes32 private constant MAIN_STORAGE_LOCATION =
+    0x7a65f8a7f0699ecafbd94beec796a5360bef816ff7d5a8e7400fc19cdd9c7400;
 
   enum Position {
     Over,
@@ -184,16 +188,24 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   event CommissionCalculated(uint256 indexed epoch, uint256 treasuryAmount);
 
+  function _getMainStorage() internal pure returns (MainStorage storage $) {
+    assembly {
+      $.slot := MAIN_STORAGE_LOCATION
+    }
+  }
+
   modifier onlyAdmin() {
-    require(msg.sender == adminAddress, "E01");
+    MainStorage storage $ = _getMainStorage();
+    require(msg.sender == $.adminAddress, "E01");
     _;
   }
   modifier onlyOperator() {
-    require(msg.sender == operatorAddress, "E02");
+    MainStorage storage $ = _getMainStorage();
+    require(msg.sender == $.operatorAddress, "E02");
     _;
   }
 
-  constructor(
+  function _initialize(
     address _token,
     address _oracleAddress,
     address _adminAddress,
@@ -201,27 +213,29 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     address _operatorVaultAddress,
     uint256 _commissionfee,
     bytes32 _priceId
-  ) Ownable(msg.sender) {
-    
+  ) public onlyInitializing {
+    __Ownable_init(msg.sender);
+    __Pausable_init();
+    __ReentrancyGuard_init();
+
     require(_commissionfee <= MAX_COMMISSION_FEE, "E04");
 
-    token = IERC20(_token);
-    oracle = IPyth(_oracleAddress);
-    adminAddress = _adminAddress;
-    operatorAddress = _operatorAddress;
-    operatorVaultAddress = _operatorVaultAddress;
-    commissionfee = _commissionfee;
-    priceId = _priceId;
+    MainStorage storage $ = _getMainStorage();
 
-    intervalSeconds = DEFAULT_INTERVAL_SECONDS;
-    bufferSeconds = DEFAULT_BUFFER_SECONDS;
+    $.token = IERC20(_token);
+    $.oracle = IPyth(_oracleAddress);
+    $.adminAddress = _adminAddress;
+    $.operatorAddress = _operatorAddress;
+    $.operatorVaultAddress = _operatorVaultAddress;
+    $.commissionfee = _commissionfee;
+    $.priceId = _priceId;
 
     // init available option makets
-    availableOptionStrikes.push(9900);
-    availableOptionStrikes.push(9950);
-    availableOptionStrikes.push(10000); // 100%
-    availableOptionStrikes.push(10050);
-    availableOptionStrikes.push(10100);
+    $.availableOptionStrikes.push(9900);
+    $.availableOptionStrikes.push(9950);
+    $.availableOptionStrikes.push(10000); // 100%
+    $.availableOptionStrikes.push(10050);
+    $.availableOptionStrikes.push(10100);
   }
 
   function placeLimitOrder(
@@ -232,29 +246,30 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 unit,
     uint256 prevIdx
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
+    MainStorage storage $ = _getMainStorage();
+    require(epoch == $.currentEpoch, "E07");
     require(
-      rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
+      $.rounds[epoch].startTimestamp != 0 && block.timestamp < $.rounds[epoch].closeTimestamp,
       "E08"
     );
     require(
-      price >= ONE_TOKEN && price <= HUNDRED_TOKEN - ONE_TOKEN,
+      price >= $.ONE_TOKEN && price <= $.HUNDRED_TOKEN - $.ONE_TOKEN,
       "The price must be between 1 and 99."
     );
-    require(price % ONE_TOKEN == 0, "The price must be an integer.");
+    require(price % $.ONE_TOKEN == 0, "The price must be an integer.");
     require(unit > 0, "The unit must be greater than 0.");
 
     uint256 transferedToken = price * unit;
-    token.safeTransferFrom(msg.sender, address(this), transferedToken);
+    $.token.safeTransferFrom(msg.sender, address(this), transferedToken);
 
-    uint256 idx = counters[epoch].nextId();
+    uint256 idx = $.counters[epoch].nextId();
 
     uint256 usedToken;
     uint256 leftUnit;
     (usedToken, leftUnit) = _matchLimitOrders(Order(idx, epoch, strike, position, price, unit));
 
     if (leftUnit > 0) {
-      Option storage option = rounds[epoch].options[strike];
+      Option storage option = $.rounds[epoch].options[strike];
       IntraOrderSet.Data storage orders = position == Position.Over
         ? option.overOrders
         : option.underOrders;
@@ -267,7 +282,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     }
 
     if (transferedToken > usedToken) {
-      token.safeTransfer(msg.sender, transferedToken - usedToken);
+      $.token.safeTransfer(msg.sender, transferedToken - usedToken);
     }
 
     _addUserRound(epoch);
@@ -292,14 +307,15 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     Position position,
     uint256 idx
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
+    MainStorage storage $ = _getMainStorage();
+    require(epoch == $.currentEpoch, "E07");
     require(
-      rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
+      $.rounds[epoch].startTimestamp != 0 && block.timestamp < $.rounds[epoch].closeTimestamp,
       "E08"
     );
     require(idx > 0, "The idx must be greater than 0.");
 
-    Option storage option = rounds[epoch].options[strike];
+    Option storage option = $.rounds[epoch].options[strike];
     IntraOrderSet.Data storage orders = position == Position.Over
       ? option.overOrders
       : option.underOrders;
@@ -312,7 +328,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     orders.remove(idx);
 
     uint256 refundAmount = price * unit;
-    token.safeTransfer(msg.sender, refundAmount);
+    $.token.safeTransfer(msg.sender, refundAmount);
     emit CancelLimitOrder(msg.sender, epoch, idx, strike, position, price, unit);
   }
 
@@ -323,28 +339,30 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 price, // expected average price
     uint256 unit // max unit of the order
   ) external whenNotPaused nonReentrant {
-    require(epoch == currentEpoch, "E07");
+    MainStorage storage $ = _getMainStorage();
+
+    require(epoch == $.currentEpoch, "E07");
     require(
-      rounds[epoch].startTimestamp != 0 && block.timestamp < rounds[epoch].closeTimestamp,
+      $.rounds[epoch].startTimestamp != 0 && block.timestamp < $.rounds[epoch].closeTimestamp,
       "E08"
     );
     require(
-      price >= ONE_TOKEN && price <= HUNDRED_TOKEN - ONE_TOKEN,
+      price >= $.ONE_TOKEN && price <= $.HUNDRED_TOKEN - $.ONE_TOKEN,
       "The price must be between 1 and 99."
     );
     require(unit > 0, "The unit must be greater than 0.");
 
     uint256 transferedToken = price * unit;
-    token.safeTransferFrom(msg.sender, address(this), transferedToken);
+    $.token.safeTransferFrom(msg.sender, address(this), transferedToken);
 
-    uint256 idx = counters[epoch].nextId();
+    uint256 idx = $.counters[epoch].nextId();
 
     uint256 totalUnit;
     uint256 totalAmount;
     (totalUnit, totalAmount) = _matchMarketOrders(Order(idx, epoch, strike, position, price, unit));
 
     if (transferedToken > totalAmount) {
-      token.safeTransfer(msg.sender, transferedToken - totalAmount);
+      $.token.safeTransfer(msg.sender, transferedToken - totalAmount);
     }
 
     _addUserRound(epoch);
@@ -390,21 +408,23 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     (int64 pythPrice, uint publishTime) = _getPythPrice(priceUpdateData, initDate, isFixed);
 
     require(
-      publishTime >= initDate - bufferSeconds && publishTime <= initDate + bufferSeconds,
+      publishTime >= initDate - BUFFER_SECONDS && publishTime <= initDate + BUFFER_SECONDS,
       "E15"
     );
 
+    MainStorage storage $ = _getMainStorage();
+
     // increase currentEpoch and start next round
-    currentEpoch = currentEpoch + 1;
+    $.currentEpoch = $.currentEpoch + 1;
 
-    _startRound(currentEpoch, initDate, uint64(pythPrice));
+    _startRound($.currentEpoch, initDate, uint64(pythPrice));
 
-    if (genesisStartOnce) {
+    if ($.genesisStartOnce) {
       // end prev round
-      _endRound(currentEpoch - 1, uint64(pythPrice), initDate);
-      _calculateCommission(currentEpoch - 1);
+      _endRound($.currentEpoch - 1, uint64(pythPrice), initDate);
+      _calculateCommission($.currentEpoch - 1);
     } else {
-      genesisStartOnce = true;
+      $.genesisStartOnce = true;
     }
   }
 
@@ -413,66 +433,68 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   }
 
   function claimTreasury() external nonReentrant onlyAdmin {
-    uint256 currentTreasuryAmount = treasuryAmount;
-    treasuryAmount = 0;
-    token.safeTransfer(operatorVaultAddress, currentTreasuryAmount);
+    MainStorage storage $ = _getMainStorage();
+    uint256 currentTreasuryAmount = $.treasuryAmount;
+    $.treasuryAmount = 0;
+    $.token.safeTransfer($.operatorVaultAddress, currentTreasuryAmount);
   }
 
   function withdraw(uint amount) external onlyAdmin {
     require(amount <= address(this).balance);
-    payable(adminAddress).transfer(address(this).balance);
+    MainStorage storage $ = _getMainStorage();
+    payable($.adminAddress).transfer(address(this).balance);
   }
 
   function unpause() external whenPaused onlyAdmin {
-    genesisStartOnce = false;
+    MainStorage storage $ = _getMainStorage();
+    $.genesisStartOnce = false;
     _unpause();
-  }
-
-  function setBufferAndIntervalSeconds(
-    uint256 _bufferSeconds,
-    uint256 _intervalSeconds
-  ) external whenPaused onlyAdmin {
-    require(_bufferSeconds < _intervalSeconds, "E30");
-    bufferSeconds = _bufferSeconds;
-    intervalSeconds = _intervalSeconds;
   }
 
   function setOperator(address _operatorAddress) external onlyAdmin {
     require(_operatorAddress != address(0), "E31");
-    operatorAddress = _operatorAddress;
+    MainStorage storage $ = _getMainStorage();
+    $.operatorAddress = _operatorAddress;
   }
 
   function setOperatorVault(address _operatorVaultAddress) external onlyAdmin {
     require(_operatorVaultAddress != address(0), "E31");
-    operatorVaultAddress = _operatorVaultAddress;
+    MainStorage storage $ = _getMainStorage();
+    $.operatorVaultAddress = _operatorVaultAddress;
   }
 
   function setOracle(address _oracle) external whenPaused onlyAdmin {
     require(_oracle != address(0), "E31");
-    oracle = IPyth(_oracle);
+    MainStorage storage $ = _getMainStorage();
+    $.oracle = IPyth(_oracle);
   }
 
   function setCommissionfee(uint256 _commissionfee) external whenPaused onlyAdmin {
     require(_commissionfee <= MAX_COMMISSION_FEE, "E04");
-    commissionfee = _commissionfee;
+    MainStorage storage $ = _getMainStorage();
+    $.commissionfee = _commissionfee;
   }
 
   function setOptionStrikes(uint256[] calldata _strikes) external onlyAdmin {
-    availableOptionStrikes = _strikes;
+    MainStorage storage $ = _getMainStorage();
+    $.availableOptionStrikes = _strikes;
   }
 
   function setAdmin(address _adminAddress) external onlyOwner {
     require(_adminAddress != address(0), "E31");
-    adminAddress = _adminAddress;
+    MainStorage storage $ = _getMainStorage();
+    $.adminAddress = _adminAddress;
   }
 
   /* public views */
   function getAvailableOptionsInRound(uint256 epoch) public view returns (uint256[] memory) {
-    return rounds[epoch].availableOptions;
+    MainStorage storage $ = _getMainStorage();
+    return $.rounds[epoch].availableOptions;
   }
 
   function getHighestPrices(uint256 epoch, uint256 strike) public view returns (uint256, uint256) {
-    Option storage option = rounds[epoch].options[strike];
+    MainStorage storage $ = _getMainStorage();
+    Option storage option = $.rounds[epoch].options[strike];
 
     return (
       option.underOrders.orderMap[option.underOrders.first()].price,
@@ -484,7 +506,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 epoch,
     address user
   ) public view returns (FilledOrder[] memory) {
-    Round storage round = rounds[epoch];
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
     uint256[] storage orderIds = round.userFilledOrder[user];
     FilledOrder[] memory orders = new FilledOrder[](orderIds.length);
     for (uint256 i = 0; i < orderIds.length; i++) {
@@ -497,7 +520,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 epoch,
     address user
   ) public view returns (UnfilledOrder[] memory) {
-    Round storage round = rounds[epoch];
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
 
     uint256 count = 0;
 
@@ -554,7 +578,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint size,
     uint page
   ) public view returns (uint256[] memory) {
-    uint256[] storage roundsEpoch = userRounds[user];
+    MainStorage storage $ = _getMainStorage();
+    uint256[] storage roundsEpoch = $.userRounds[user];
 
     uint startIndex = size * (page - 1);
     if (startIndex > roundsEpoch.length) {
@@ -580,7 +605,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     Position position,
     uint256 unit
   ) public view returns (uint256, uint256) {
-    Option storage option = rounds[epoch].options[strike];
+    MainStorage storage $ = _getMainStorage();
+    Option storage option = $.rounds[epoch].options[strike];
     IntraOrderSet.Data storage counterOrders = position == Position.Over
       ? option.underOrders
       : option.overOrders;
@@ -597,7 +623,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      uint256 myPrice = HUNDRED_TOKEN - counterOrder.price;
+      uint256 myPrice = $.HUNDRED_TOKEN - counterOrder.price;
       uint256 txUnit = (unit - totalUnit) < counterOrder.unit
         ? unit - totalUnit
         : counterOrder.unit; // min
@@ -617,7 +643,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   }
 
   function getUnfilledAmount(uint256 epoch, address user) public view returns (uint256) {
-    Round storage round = rounds[epoch];
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
 
     uint256 result;
     for (uint256 s = 0; s < round.availableOptions.length; s++) {
@@ -634,7 +661,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint256 strike,
     Position position
   ) public view returns (IntraOrderSet.IntraOrder[] memory) {
-    Option storage option = rounds[epoch].options[strike];
+    MainStorage storage $ = _getMainStorage();
+    Option storage option = $.rounds[epoch].options[strike];
     IntraOrderSet.Data storage orders = position == Position.Over
       ? option.overOrders
       : option.underOrders;
@@ -644,20 +672,22 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
   /* internal functions */
   function _collectRound(uint256 epoch, address _user) internal {
+    MainStorage storage $ = _getMainStorage();
     // claim + refund
-    require(rounds[epoch].closeTimestamp != 0, "E11");
-    require(block.timestamp > rounds[epoch].closeTimestamp, "E11");
+    require($.rounds[epoch].closeTimestamp != 0, "E11");
+    require(block.timestamp > $.rounds[epoch].closeTimestamp, "E11");
 
     uint256 reward = _claimReward(epoch, _user);
 
     if (reward > 0) {
-      token.safeTransfer(_user, reward);
+      $.token.safeTransfer(_user, reward);
     }
     _refund(epoch, _user, false);
   }
 
   function _matchLimitOrders(Order memory order) internal returns (uint256, uint256) {
-    Option storage option = rounds[order.epoch].options[order.strike];
+    MainStorage storage $ = _getMainStorage();
+    Option storage option = $.rounds[order.epoch].options[order.strike];
     IntraOrderSet.Data storage counterOrders = order.position == Position.Over
       ? option.underOrders
       : option.overOrders;
@@ -672,17 +702,17 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      if (counterOrder.price + order.price < HUNDRED_TOKEN) {
+      if (counterOrder.price + order.price < $.HUNDRED_TOKEN) {
         // 100 usdc
         // no more matched counter orders
         break;
       }
 
-      uint256 myPrice = HUNDRED_TOKEN - counterOrder.price;
+      uint256 myPrice = $.HUNDRED_TOKEN - counterOrder.price;
       uint256 txUnit = leftUnit < counterOrder.unit ? leftUnit : counterOrder.unit; // min
 
       _createFilledOrder(
-        rounds[order.epoch],
+        $.rounds[order.epoch],
         order,
         counterOrder,
         myPrice,
@@ -705,7 +735,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   }
 
   function _matchMarketOrders(Order memory order) internal returns (uint256, uint256) {
-    Option storage option = rounds[order.epoch].options[order.strike];
+    MainStorage storage $ = _getMainStorage();
+    Option storage option = $.rounds[order.epoch].options[order.strike];
     IntraOrderSet.Data storage counterOrders = order.position == Position.Over
       ? option.underOrders
       : option.overOrders;
@@ -721,7 +752,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       IntraOrderSet.IntraOrder storage counterOrder = counterOrders.orderMap[counterIdx];
-      uint256 myPrice = HUNDRED_TOKEN - counterOrder.price;
+      uint256 myPrice = $.HUNDRED_TOKEN - counterOrder.price;
       uint256 txUnit = (order.unit - totalUnit) < counterOrder.unit
         ? order.unit - totalUnit
         : counterOrder.unit; // min
@@ -734,7 +765,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
       }
 
       _createFilledOrder(
-        rounds[order.epoch],
+        $.rounds[order.epoch],
         order,
         counterOrder,
         myPrice,
@@ -832,26 +863,28 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     uint64 fixedTimestamp,
     bool isFixed
   ) internal returns (int64, uint) {
+    MainStorage storage $ = _getMainStorage();
     bytes32[] memory pythPair = new bytes32[](1);
-    pythPair[0] = priceId;
+    pythPair[0] = $.priceId;
 
-    uint fee = oracle.getUpdateFee(priceUpdateData);
+    uint fee = $.oracle.getUpdateFee(priceUpdateData);
     if (isFixed) {
-      PythStructs.PriceFeed memory pythPrice = oracle.parsePriceFeedUpdates{ value: fee }(
+      PythStructs.PriceFeed memory pythPrice = $.oracle.parsePriceFeedUpdates{ value: fee }(
         priceUpdateData,
         pythPair,
         fixedTimestamp,
-        fixedTimestamp + uint64(bufferSeconds)
+        fixedTimestamp + uint64(BUFFER_SECONDS)
       )[0];
       return (pythPrice.price.price, fixedTimestamp);
     } else {
-      oracle.updatePriceFeeds{ value: fee }(priceUpdateData);
-      return (oracle.getPrice(priceId).price, oracle.getPrice(priceId).publishTime);
+      $.oracle.updatePriceFeeds{ value: fee }(priceUpdateData);
+      return ($.oracle.getPrice($.priceId).price, $.oracle.getPrice($.priceId).publishTime);
     }
   }
 
   function _refund(uint256 epoch, address user, bool byAdmin) internal {
-    Round storage round = rounds[epoch];
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
     require(block.timestamp > round.closeTimestamp, "E11");
 
     uint256 totalAmount;
@@ -878,7 +911,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     }
 
     if (totalAmount > 0) {
-      token.safeTransfer(user, totalAmount);
+      $.token.safeTransfer(user, totalAmount);
       emit Refund(user, epoch, totalAmount, byAdmin);
     }
   }
@@ -887,7 +920,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     address user,
     FilledOrder storage order
   ) internal returns (uint256) {
-    Round storage round = rounds[order.epoch];
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[order.epoch];
     Option storage option = round.options[order.strike];
 
     uint256 strikePrice = (round.startPrice * option.strike) / 10000;
@@ -903,7 +937,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         order.isOverClaimed = true;
       } else if (isOverWin) {
         uint256 totalAmount = (order.overPrice + order.underPrice) * order.unit;
-        uint256 fee = (order.underPrice * order.unit * commissionfee) / BASE;
+        uint256 fee = (order.underPrice * order.unit * $.commissionfee) / BASE;
         reward += totalAmount - fee;
         order.isOverClaimed = true;
       }
@@ -915,7 +949,7 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         order.isUnderClaimed = true;
       } else if (isUnderWin) {
         uint256 totalAmount = (order.overPrice + order.underPrice) * order.unit;
-        uint256 fee = (order.overPrice * order.unit * commissionfee) / BASE;
+        uint256 fee = (order.overPrice * order.unit * $.commissionfee) / BASE;
         reward += totalAmount - fee;
         order.isUnderClaimed = true;
       }
@@ -940,12 +974,13 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   }
 
   function _claimReward(uint256 epoch, address user) internal returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
     uint256 reward = 0; // Initializes reward
 
-    if (rounds[epoch].closeTimestamp == 0) return 0;
-    if (block.timestamp < rounds[epoch].closeTimestamp) return 0;
+    if ($.rounds[epoch].closeTimestamp == 0) return 0;
+    if (block.timestamp < $.rounds[epoch].closeTimestamp) return 0;
 
-    Round storage round = rounds[epoch];
+    Round storage round = $.rounds[epoch];
 
     if (round.oracleCalled) {
       // Round valid, claim rewards
@@ -958,8 +993,8 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
         emit ClaimRound(user, epoch, reward);
       }
     } else {
-      // Round invalid, refund Participate amount (after bufferSeconds)
-      require(block.timestamp > round.closeTimestamp + bufferSeconds, "E13");
+      // Round invalid, refund Participate amount (after BUFFER_SECONDS)
+      require(block.timestamp > round.closeTimestamp + BUFFER_SECONDS, "E13");
       uint256[] memory userFilledOrderIdx = round.userFilledOrder[user];
       for (uint i = 0; i < userFilledOrderIdx.length; i++) {
         FilledOrder storage filledOrder = round.filledOrders[userFilledOrderIdx[i]];
@@ -974,25 +1009,27 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
   }
 
   function _trasferReward(address _user) internal {
+    MainStorage storage $ = _getMainStorage();
     uint256 reward = 0; // Initializes reward
 
-    for (uint256 epoch = 1; epoch <= currentEpoch; epoch++) {
+    for (uint256 epoch = 1; epoch <= $.currentEpoch; epoch++) {
       if (
-        rounds[epoch].startTimestamp == 0 ||
-        (block.timestamp < rounds[epoch].closeTimestamp + bufferSeconds)
+        $.rounds[epoch].startTimestamp == 0 ||
+        (block.timestamp < $.rounds[epoch].closeTimestamp + BUFFER_SECONDS)
       ) continue;
 
       reward += _claimReward(epoch, _user);
     }
     if (reward > 0) {
-      token.safeTransfer(_user, reward);
+      $.token.safeTransfer(_user, reward);
     }
   }
 
   function _calculateCommission(uint256 epoch) internal {
+    MainStorage storage $ = _getMainStorage();
     uint256 treasuryAmt;
 
-    Round storage round = rounds[epoch];
+    Round storage round = $.rounds[epoch];
 
     uint256 last = round.filledOrderCounter.nextId();
 
@@ -1007,52 +1044,59 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
 
       uint256 fee = ((isOverWin ? order.underPrice : order.overPrice) *
         order.unit *
-        commissionfee) / BASE;
+        $.commissionfee) / BASE;
       treasuryAmt += fee;
     }
 
     // Add to treasury
-    treasuryAmount += treasuryAmt;
+    $.treasuryAmount += treasuryAmt;
 
     emit CommissionCalculated(epoch, treasuryAmt);
   }
 
   function _endRound(uint256 epoch, uint256 price, uint256 initDate) internal {
-    require(rounds[epoch].startTimestamp != 0, "E26");
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
+    require(round.startTimestamp != 0, "E26");
 
-    rounds[epoch].closeTimestamp = initDate;
+    round.closeTimestamp = initDate;
 
-    rounds[epoch].closePrice = uint256(price);
-    rounds[epoch].oracleCalled = true;
+    round.closePrice = uint256(price);
+    round.oracleCalled = true;
 
-    emit EndRound(epoch, rounds[epoch].closePrice);
+    emit EndRound(epoch, round.closePrice);
   }
 
   function _startRound(uint256 epoch, uint256 initDate, uint256 price) internal {
-    rounds[epoch].epoch = epoch;
-    rounds[epoch].startTimestamp = initDate;
-    rounds[epoch].closeTimestamp = initDate + intervalSeconds;
-    rounds[epoch].startPrice = price;
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
+    round.epoch = epoch;
+    round.startTimestamp = initDate;
+    round.closeTimestamp = initDate + INTERVAL_SECONDS;
+    round.startPrice = price;
 
-    for (uint i = 0; i < availableOptionStrikes.length; i++) {
-      _initOption(epoch, availableOptionStrikes[i], price);
+    for (uint i = 0; i < $.availableOptionStrikes.length; i++) {
+      _initOption(epoch, $.availableOptionStrikes[i], price);
     }
 
-    emit StartRound(epoch, initDate, rounds[epoch].startPrice, rounds[epoch].availableOptions);
+    emit StartRound(epoch, initDate, round.startPrice, round.availableOptions);
   }
 
   function _addUserRound(uint256 epoch) internal {
-    uint256[] storage epochArray = userRounds[msg.sender];
+    MainStorage storage $ = _getMainStorage();
+    uint256[] storage epochArray = $.userRounds[msg.sender];
     if (epochArray.length == 0 || epochArray[epochArray.length - 1] != epoch) {
       epochArray.push(epoch);
     }
   }
 
   function _initOption(uint256 epoch, uint256 strike, uint256 startPrice) internal {
-    rounds[epoch].availableOptions.push(strike);
-    rounds[epoch].options[strike].strike = strike;
-    rounds[epoch].options[strike].overOrders.initializeEmptyList();
-    rounds[epoch].options[strike].underOrders.initializeEmptyList();
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
+    round.availableOptions.push(strike);
+    round.options[strike].strike = strike;
+    round.options[strike].overOrders.initializeEmptyList();
+    round.options[strike].underOrders.initializeEmptyList();
 
     uint256 strikePrice = (startPrice * strike) / 10000;
 

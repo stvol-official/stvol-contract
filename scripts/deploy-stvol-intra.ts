@@ -1,4 +1,4 @@
-import { ethers, network, run } from "hardhat";
+import { ethers, network, run, upgrades } from "hardhat";
 import config from "../config";
 
 const main = async () => {
@@ -44,20 +44,19 @@ const main = async () => {
     console.log("===========================================");
 
     // Deploy contracts.
-    const StVol = await ethers.getContractFactory(STVOL_NAME);
-    const stVolContract = await StVol.deploy(
-      // config.Address.Usdc[networkName],
+    const StVolFactory = await ethers.getContractFactory(STVOL_NAME);
+    const stVolContract = await upgrades.deployProxy(StVolFactory, [
       config.Address.Oracle[networkName],
       config.Address.Admin[networkName],
       config.Address.Operator[networkName],
       config.Address.OperatorVault[networkName],
       config.CommissionFee[networkName],
       config.PythPriceId[networkName][PYTH_PRICE_FEED],
-    );
+    ]);
 
     await stVolContract.waitForDeployment();
     const stVolContractAddress = await stVolContract.getAddress();
-    console.log(`🍣 ${STVOL_NAME} Contract deployed at ${stVolContractAddress}`);
+    console.log(`🍣 ${STVOL_NAME} PROXY Contract deployed at ${stVolContractAddress}`);
 
     const network = await ethers.getDefaultProvider().getNetwork();
 
@@ -66,15 +65,7 @@ const main = async () => {
       address: stVolContractAddress,
       network: network,
       contract: `contracts/${STVOL_NAME}.sol:${STVOL_NAME}`,
-      constructorArguments: [
-        // config.Address.Usdc[networkName],
-        config.Address.Oracle[networkName],
-        config.Address.Admin[networkName],
-        config.Address.Operator[networkName],
-        config.Address.OperatorVault[networkName],
-        config.CommissionFee[networkName],
-        config.PythPriceId[networkName][PYTH_PRICE_FEED],
-      ],
+      constructorArguments: [],
     });
     console.log("verify the contractAction done");
   } else {
