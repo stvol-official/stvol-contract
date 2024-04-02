@@ -305,12 +305,14 @@ contract StVolIntra is Ownable, Pausable, ReentrancyGuard {
     IntraOrderSet.IntraOrder storage order = orders.orderMap[idx];
     require(order.user == msg.sender, "E03");
 
-    uint256 refundAmount = order.price * order.unit;
+    uint256 price = order.price;
+    uint256 unit = order.unit;
+
     orders.remove(idx);
 
+    uint256 refundAmount = price * unit;
     token.safeTransfer(msg.sender, refundAmount);
-
-    emit CancelLimitOrder(msg.sender, epoch, idx, strike, position, order.price, order.unit);
+    emit CancelLimitOrder(msg.sender, epoch, idx, strike, position, price, unit);
   }
 
   function placeMarketOrder(
