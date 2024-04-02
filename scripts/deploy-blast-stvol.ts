@@ -8,16 +8,15 @@ const main = async () => {
   const PYTH_PRICE_FEED = "ETH_USD";
 
   // Check if the network is supported.
-  if (networkName === "blast_sepolia"
-  ) {
+  if (networkName === "blast_sepolia") {
     console.log(`Deploying to ${networkName} network...`);
 
     // Check if the addresses in the config are set.
     if (
-      config.Address.Oracle[networkName] === ethers.constants.AddressZero ||
-      config.Address.Admin[networkName] === ethers.constants.AddressZero ||
-      config.Address.Operator[networkName] === ethers.constants.AddressZero ||
-      config.Address.OperatorVault[networkName] === ethers.constants.AddressZero
+      config.Address.Oracle[networkName] === ethers.ZeroAddress ||
+      config.Address.Admin[networkName] === ethers.ZeroAddress ||
+      config.Address.Operator[networkName] === ethers.ZeroAddress ||
+      config.Address.OperatorVault[networkName] === ethers.ZeroAddress
     ) {
       throw new Error("Missing addresses (Pyth Oracle and/or Admin/Operator)");
     }
@@ -45,12 +44,15 @@ const main = async () => {
       config.PythPriceId[networkName][PYTH_PRICE_FEED],
     );
 
-    await stVolContract.deployed();
-    console.log(`🍣 ${STVOL_NAME} Contract deployed at ${stVolContract.address}`);
+    await stVolContract.waitForDeployment();
+    const stVolContractAddress = await stVolContract.getAddress();
+    console.log(`🍣 ${STVOL_NAME} Contract deployed at ${stVolContractAddress}`);
+
+    const network = await ethers.getDefaultProvider().getNetwork();
 
     await run("verify:verify", {
-      address: stVolContract.address,
-      network: ethers.provider.network,
+      address: stVolContractAddress,
+      network: network,
       contract: `contracts/${STVOL_NAME}.sol:${STVOL_NAME}`,
       constructorArguments: [
         config.Address.Oracle[networkName],
@@ -58,10 +60,10 @@ const main = async () => {
         config.Address.Operator[networkName],
         config.Address.OperatorVault[networkName],
         config.CommissionFee[networkName],
-        config.PythPriceId[networkName][PYTH_PRICE_FEED]
-      ]
+        config.PythPriceId[networkName][PYTH_PRICE_FEED],
+      ],
     });
-    console.log('verify the contractAction done');
+    console.log("verify the contractAction done");
   } else {
     console.log(`Deploying to ${networkName} network is not supported...`);
   }
@@ -73,4 +75,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-

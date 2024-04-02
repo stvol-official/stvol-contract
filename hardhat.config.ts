@@ -1,12 +1,13 @@
-import "@nomiclabs/hardhat-ethers";
-import "@nomiclabs/hardhat-truffle5";
-import "@nomiclabs/hardhat-waffle";
+//import "@nomiclabs/hardhat-ethers";
+//import "@nomiclabs/hardhat-truffle5";
+//import "@nomiclabs/hardhat-waffle";
 // import "@nomiclabs/hardhat-etherscan";
 import "@nomicfoundation/hardhat-verify";
-import "@typechain/hardhat";
+//import "@typechain/hardhat";
 import "solidity-coverage";
-import "hardhat-abi-exporter";
-import "hardhat-gas-reporter";
+//import "hardhat-abi-exporter";
+//import "hardhat-gas-reporter";
+import "@openzeppelin/hardhat-upgrades";
 
 import * as fs from "fs";
 import * as dotenv from "dotenv";

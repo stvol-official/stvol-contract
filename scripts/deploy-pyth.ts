@@ -19,8 +19,9 @@ const main = async () => {
   const contract = await PythTest.deploy(pythContract, priceId);
 
   // Wait for the contract to be deployed before exiting the script.
-  await contract.deployed();
-  console.log(`Deployed to ${contract.address}`);
+  await contract.waitForDeployment();
+  const contractAddress = await contract.getAddress();
+  console.log(`Deployed to ${contractAddress}`);
 };
 
 main()

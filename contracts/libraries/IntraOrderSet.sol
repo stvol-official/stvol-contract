@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-
 import "hardhat/console.sol";
 
 library IntraOrderSet {
-  using SafeMath for uint256;
-
   // represents smallest possible value for an order under comparison of fn smallerThan()
   uint256 public constant QUEUE_START = 0;
 

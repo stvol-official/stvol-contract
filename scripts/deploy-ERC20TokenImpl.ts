@@ -8,7 +8,11 @@ const main = async () => {
   const decimal = 18;
 
   // Check if the network is supported.
-  if (networkName === "goerli" || networkName === "arbitrum_sepolia" || networkName === "blast_sepolia") {
+  if (
+    networkName === "goerli" ||
+    networkName === "arbitrum_sepolia" ||
+    networkName === "blast_sepolia"
+  ) {
     console.log(`Deploying to ${networkName} network...`);
 
     // Compile contracts.
@@ -19,15 +23,17 @@ const main = async () => {
     const contract = await ERC20TokenImpl.deploy(name, symbol, decimal);
 
     // Wait for the contract to be deployed before exiting the script.
-    await contract.deployed();
-    console.log(`Deployed to ${contract.address}`);
+    await contract.waitForDeployment();
+    const contractAddress = await contract.getAddress();
+    console.log(`Deployed to ${contractAddress}`);
+
+    const network = await ethers.getDefaultProvider().getNetwork();
 
     await run("verify:verify", {
-      address: contract.address,
-      network: ethers.provider.network,
-      constructorArguments: [name, symbol, decimal]
+      address: contractAddress,
+      network: network,
+      constructorArguments: [name, symbol, decimal],
     });
-
   } else {
     console.log(`Deploying to ${networkName} network is not supported...`);
   }
