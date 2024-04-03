@@ -45,6 +45,8 @@
     "typescript": "^5.4.3"
   },
   "dependencies": {
+    "@inquirer/input": "^2.1.1",
+    "@inquirer/select": "^2.2.1",
     "@openzeppelin/contracts-upgradeable": "^5.0.2",
     "@pythnetwork/pyth-sdk-solidity": "^2.4.1",
     "@redstone-finance/evm-connector": "^0.3.6",

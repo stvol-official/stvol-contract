@@ -3,6 +3,7 @@ pragma solidity ^0.8.4;
 pragma abicoder v2;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -15,6 +16,7 @@ import "./libraries/IntraOrderSet.sol";
 
 contract StVolIntra is
   Initializable,
+  UUPSUpgradeable,
   OwnableUpgradeable,
   PausableUpgradeable,
   ReentrancyGuardUpgradeable
@@ -37,17 +39,17 @@ contract StVolIntra is
     address adminAddress; // address of the admin
     address operatorAddress; // address of the operator
     address operatorVaultAddress; // address of the operator vault
-    uint256[] availableOptionStrikes; // available option markets. handled by Admin
     uint256 commissionfee; // commission rate (e.g. 200 = 2%, 150 = 1.50%)
     uint256 treasuryAmount; // treasury amount that was not claimed
-    uint256 participantRate; // participant distribute rate (e.g. 200 = 2%, 150 = 1.50%)
     uint256 currentEpoch; // current epoch for round
-    // uint256 public constant DEFAULT_MIN_PARTICIPATE_AMOUNT = 1000000; // 1 USDC (decimal: 6)
     uint256 ONE_TOKEN; // = 10 ** 6; // 6 for usdc, 18 for usdb
     uint256 HUNDRED_TOKEN; // = 100 * ONE_TOKEN;
+    uint256[] availableOptionStrikes; // available option markets. handled by Admin
     mapping(uint256 => Round) rounds; // (key: epoch)
     mapping(uint256 => AutoIncrementing.Counter) counters; // (key: epoch)
     mapping(address => uint256[]) userRounds;
+
+    /* you can add new variables here */
   }
 
   // keccak256(abi.encode(uint256(keccak256("stvolintra.main")) - 1)) & ~bytes32(uint256(0xff));
@@ -71,6 +73,17 @@ contract StVolIntra is
     Position position;
     uint256 price;
     uint256 unit;
+  }
+
+  struct SimpleRound {
+    uint256 epoch;
+    uint256 startTimestamp;
+    uint256 closeTimestamp;
+    uint256 startPrice;
+    uint256 closePrice;
+    uint256 startOracleId;
+    uint256 closeOracleId;
+    bool oracleCalled;
   }
 
   struct Round {
@@ -214,6 +227,7 @@ contract StVolIntra is
     uint256 _commissionfee,
     bytes32 _priceId
   ) public onlyInitializing {
+    __UUPSUpgradeable_init();
     __Ownable_init(msg.sender);
     __Pausable_init();
     __ReentrancyGuard_init();
@@ -381,31 +395,30 @@ contract StVolIntra is
     );
   }
 
+  function collectRound(uint256 epoch) external nonReentrant {
+    _collectRound(epoch, msg.sender, false);
+  }
+
+  function collectAll() external nonReentrant {
+    _collectAll(msg.sender, false);
+  }
+
   function collectRoundByAdmin(
     uint256 epoch,
     address _user
   ) external nonReentrant whenPaused onlyAdmin {
-    _collectRound(epoch, _user);
+    _collectRound(epoch, _user, true);
   }
 
-  function collectRound(uint256 epoch) external nonReentrant {
-    _collectRound(epoch, msg.sender);
-  }
-
-  function claimAll() external nonReentrant {
-    _trasferReward(msg.sender);
-  }
-
-  function redeemAll(address _user) external whenPaused onlyAdmin {
-    _trasferReward(_user);
+  function collectAllByAdmin(address _user) external whenPaused onlyAdmin {
+    _collectAll(_user, true);
   }
 
   function executeRound(
     bytes[] calldata priceUpdateData,
-    uint64 initDate,
-    bool isFixed
+    uint64 initDate
   ) external payable whenNotPaused onlyOperator {
-    (int64 pythPrice, uint publishTime) = _getPythPrice(priceUpdateData, initDate, isFixed);
+    (int64 pythPrice, uint publishTime) = _getPythPrice(priceUpdateData, initDate);
 
     require(
       publishTime >= initDate - BUFFER_SECONDS && publishTime <= initDate + BUFFER_SECONDS,
@@ -487,6 +500,48 @@ contract StVolIntra is
   }
 
   /* public views */
+  function genesisStartOnce() public view returns (bool) {
+    MainStorage storage $ = _getMainStorage();
+    return $.genesisStartOnce;
+  }
+  function currentEpoch() public view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    return $.currentEpoch;
+  }
+  function rounds(uint256 epoch) public view returns (SimpleRound memory) {
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
+
+    SimpleRound memory simpleRound = SimpleRound({
+      epoch: round.epoch,
+      startTimestamp: round.startTimestamp,
+      closeTimestamp: round.closeTimestamp,
+      startPrice: round.startPrice,
+      closePrice: round.closePrice,
+      startOracleId: round.startOracleId,
+      closeOracleId: round.closeOracleId,
+      oracleCalled: round.oracleCalled
+    });
+
+    return simpleRound;
+  }
+  function commissionfee() public view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    return $.commissionfee;
+  }
+  function treasuryAmount() public view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    return $.treasuryAmount;
+  }
+  function addresses() public view returns (address, address, address) {
+    MainStorage storage $ = _getMainStorage();
+    return ($.adminAddress, $.operatorAddress, $.operatorVaultAddress);
+  }
+  function availableOptionStrikes() public view returns (uint256[] memory) {
+    MainStorage storage $ = _getMainStorage();
+    return $.availableOptionStrikes;
+  }
+
   function getAvailableOptionsInRound(uint256 epoch) public view returns (uint256[] memory) {
     MainStorage storage $ = _getMainStorage();
     return $.rounds[epoch].availableOptions;
@@ -671,7 +726,7 @@ contract StVolIntra is
   }
 
   /* internal functions */
-  function _collectRound(uint256 epoch, address _user) internal {
+  function _collectRound(uint256 epoch, address _user, bool byAdmin) internal {
     MainStorage storage $ = _getMainStorage();
     // claim + refund
     require($.rounds[epoch].closeTimestamp != 0, "E11");
@@ -679,10 +734,11 @@ contract StVolIntra is
 
     uint256 reward = _claimReward(epoch, _user);
 
+    reward += _refund(epoch, _user, byAdmin);
+
     if (reward > 0) {
       $.token.safeTransfer(_user, reward);
     }
-    _refund(epoch, _user, false);
   }
 
   function _matchLimitOrders(Order memory order) internal returns (uint256, uint256) {
@@ -860,32 +916,28 @@ contract StVolIntra is
 
   function _getPythPrice(
     bytes[] memory priceUpdateData,
-    uint64 fixedTimestamp,
-    bool isFixed
+    uint64 timestamp
   ) internal returns (int64, uint) {
     MainStorage storage $ = _getMainStorage();
     bytes32[] memory pythPair = new bytes32[](1);
     pythPair[0] = $.priceId;
 
     uint fee = $.oracle.getUpdateFee(priceUpdateData);
-    if (isFixed) {
-      PythStructs.PriceFeed memory pythPrice = $.oracle.parsePriceFeedUpdates{ value: fee }(
-        priceUpdateData,
-        pythPair,
-        fixedTimestamp,
-        fixedTimestamp + uint64(BUFFER_SECONDS)
-      )[0];
-      return (pythPrice.price.price, fixedTimestamp);
-    } else {
-      $.oracle.updatePriceFeeds{ value: fee }(priceUpdateData);
-      return ($.oracle.getPrice($.priceId).price, $.oracle.getPrice($.priceId).publishTime);
-    }
+    PythStructs.PriceFeed memory pythPrice = $.oracle.parsePriceFeedUpdates{ value: fee }(
+      priceUpdateData,
+      pythPair,
+      timestamp,
+      timestamp + uint64(BUFFER_SECONDS)
+    )[0];
+    return (pythPrice.price.price, timestamp);
   }
 
-  function _refund(uint256 epoch, address user, bool byAdmin) internal {
+  function _refund(uint256 epoch, address user, bool byAdmin) internal returns (uint256) {
     MainStorage storage $ = _getMainStorage();
     Round storage round = $.rounds[epoch];
-    require(block.timestamp > round.closeTimestamp, "E11");
+
+    if ($.rounds[epoch].closeTimestamp == 0) return 0;
+    if (block.timestamp < $.rounds[epoch].closeTimestamp) return 0;
 
     uint256 totalAmount;
     for (uint256 s = 0; s < round.availableOptions.length; s++) {
@@ -911,15 +963,12 @@ contract StVolIntra is
     }
 
     if (totalAmount > 0) {
-      $.token.safeTransfer(user, totalAmount);
       emit Refund(user, epoch, totalAmount, byAdmin);
     }
+    return totalAmount;
   }
 
-  function _calculateOrderReward(
-    address user,
-    FilledOrder storage order
-  ) internal returns (uint256) {
+  function _claimOrderReward(address user, FilledOrder storage order) internal returns (uint256) {
     MainStorage storage $ = _getMainStorage();
     Round storage round = $.rounds[order.epoch];
     Option storage option = round.options[order.strike];
@@ -957,10 +1006,7 @@ contract StVolIntra is
     return reward;
   }
 
-  function _calculateOrderRefund(
-    address user,
-    FilledOrder storage order
-  ) internal returns (uint256) {
+  function _claimOrderRefund(address user, FilledOrder storage order) internal returns (uint256) {
     uint256 reward = 0;
     if (order.overUser == user && !order.isOverClaimed) {
       reward += order.overPrice * order.unit;
@@ -987,7 +1033,7 @@ contract StVolIntra is
       uint256[] memory userFilledOrderIdx = round.userFilledOrder[user];
       for (uint i = 0; i < userFilledOrderIdx.length; i++) {
         FilledOrder storage order = round.filledOrders[userFilledOrderIdx[i]];
-        reward += _calculateOrderReward(user, order);
+        reward += _claimOrderReward(user, order);
       }
       if (reward > 0) {
         emit ClaimRound(user, epoch, reward);
@@ -998,7 +1044,7 @@ contract StVolIntra is
       uint256[] memory userFilledOrderIdx = round.userFilledOrder[user];
       for (uint i = 0; i < userFilledOrderIdx.length; i++) {
         FilledOrder storage filledOrder = round.filledOrders[userFilledOrderIdx[i]];
-        reward += _calculateOrderRefund(msg.sender, filledOrder);
+        reward += _claimOrderRefund(user, filledOrder);
       }
       if (reward > 0) {
         emit RefundRound(user, epoch, reward);
@@ -1008,17 +1054,14 @@ contract StVolIntra is
     return reward;
   }
 
-  function _trasferReward(address _user) internal {
+  function _collectAll(address _user, bool byAdmin) internal {
     MainStorage storage $ = _getMainStorage();
     uint256 reward = 0; // Initializes reward
-
-    for (uint256 epoch = 1; epoch <= $.currentEpoch; epoch++) {
-      if (
-        $.rounds[epoch].startTimestamp == 0 ||
-        (block.timestamp < $.rounds[epoch].closeTimestamp + BUFFER_SECONDS)
-      ) continue;
-
-      reward += _claimReward(epoch, _user);
+    uint256[] storage roundsEpoch = $.userRounds[_user];
+    for (uint i = 0; i < roundsEpoch.length; i++) {
+      uint256 epoch = roundsEpoch[i];
+      reward += _claimReward(epoch, _user); // filled orders
+      reward += _refund(epoch, _user, byAdmin); // unfilled orders
     }
     if (reward > 0) {
       $.token.safeTransfer(_user, reward);
@@ -1102,4 +1145,6 @@ contract StVolIntra is
 
     emit OptionCreated(epoch, strike, strikePrice);
   }
+
+  function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }
