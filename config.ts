@@ -33,7 +33,7 @@ export default {
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      blast_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
     },
     Operator: {
       mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
@@ -42,7 +42,7 @@ export default {
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      blast_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
     },
     OperatorVault: {
       mainnet: "0xFb6B24942a19F138EF468EC39Ce8653A87500832",
@@ -51,8 +51,8 @@ export default {
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      blast_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-    }
+      blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+    },
   },
   PythPriceId: {
     mainnet: {
@@ -82,7 +82,7 @@ export default {
     goerli: {
       BTC_USD: "0xf9c0172ba10dfa4d19088d94f5bf61d3b54d5bd7483a322a982e1373ee8ea31b",
       ETH_USD: "0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6",
-    }
+    },
   },
   CommissionFee: {
     mainnet: 200, // 2%

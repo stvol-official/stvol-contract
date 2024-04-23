@@ -7,8 +7,8 @@ import input from "@inquirer/input";
 */
 
 const DEPLOYED_PROXY = {
-  ETH_USD: "0x4D136418fa2160812694655726defF49722D201d",
-  BTC_USD: "0x41500389B5e711fF04C61339E68C929737dbAD39",
+  ETH_USD: "0xdEA4dEF85861cc5B43A510b8AEB4fA465D9C3841",
+  BTC_USD: "0x0533b42D1004d13bAECCEBc67353d6Ee8005a236",
 };
 
 const main = async (feed: string) => {
@@ -39,6 +39,8 @@ const main = async (feed: string) => {
 
     // Deploy contracts.
     const StVolFactory = await ethers.getContractFactory(STVOL_NAME);
+
+    // const stVolContract = await upgrades.forceImport(PROXY, StVolFactory, { kind: "uups" });
     const stVolContract = await upgrades.upgradeProxy(PROXY, StVolFactory, { kind: "uups" });
 
     await stVolContract.waitForDeployment();

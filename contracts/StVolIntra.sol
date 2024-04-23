@@ -48,6 +48,7 @@ contract StVolIntra is
     mapping(uint256 => Round) rounds; // (key: epoch)
     mapping(uint256 => AutoIncrementing.Counter) counters; // (key: epoch)
     mapping(address => uint256[]) userRounds;
+    mapping(uint256 => uint256) lastFilledOrderIdxMap;
 
     /* you can add new variables here */
   }
@@ -711,6 +712,15 @@ contract StVolIntra is
     return result;
   }
 
+  function getLastFilledOrder(
+    uint256 epoch,
+    uint256 strike
+  ) public view returns (FilledOrder memory) {
+    MainStorage storage $ = _getMainStorage();
+    uint256 idx = $.lastFilledOrderIdxMap[_combine(epoch, strike)];
+    return $.rounds[epoch].filledOrders[idx];
+  }
+
   function getOrderbook(
     uint256 epoch,
     uint256 strike,
@@ -865,6 +875,8 @@ contract StVolIntra is
       false,
       false
     );
+    MainStorage storage $ = _getMainStorage();
+    $.lastFilledOrderIdxMap[_combine(order.epoch, order.strike)] = txId;
     round.userFilledOrder[msg.sender].push(txId);
     if (msg.sender != counterOrder.user) {
       round.userFilledOrder[counterOrder.user].push(txId);
@@ -1147,4 +1159,8 @@ contract StVolIntra is
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+  function _combine(uint256 a, uint256 b) internal pure returns (uint256) {
+    return (a << 128) | b;
+  }
 }
