@@ -110,6 +110,15 @@ contract StVolHourly is
     mapping(uint256 => uint256) endPrice; // key: productId
   }
 
+  struct ProductRound {
+    uint256 epoch;
+    uint256 startTimestamp;
+    uint256 endTimestamp;
+    bool isSettled;
+    uint256 startPrice;
+    uint256 endPrice;
+  }
+
   struct FilledOrder {
     uint256 idx;
     uint256 epoch;
@@ -297,6 +306,33 @@ contract StVolHourly is
     MainStorage storage $ = _getMainStorage();
     return $.userBalances[user];
   }
+  function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
+    if (round.epoch == 0) {
+      (uint256 startTime, uint256 endTime) = _epochTimes(epoch);
+      return
+        // return virtual value
+        ProductRound({
+          epoch: epoch,
+          startTimestamp: startTime,
+          endTimestamp: endTime,
+          isSettled: false,
+          startPrice: 0,
+          endPrice: 0
+        });
+    }
+    return
+      // return storage value
+      ProductRound({
+        epoch: round.epoch,
+        startTimestamp: round.startTimestamp,
+        endTimestamp: round.endTimestamp,
+        isSettled: round.isSettled,
+        startPrice: round.startPrice[productId],
+        endPrice: round.endPrice[productId]
+      });
+  }
 
   /* internal functions */
   function _executeRound(
@@ -434,6 +470,13 @@ contract StVolHourly is
     uint256 elapsedSeconds = timestamp - START_TIMESTAMP;
     uint256 elapsedHours = elapsedSeconds / 3600;
     return elapsedHours;
+  }
+
+  function _epochTimes(uint256 epoch) public pure returns (uint256 startTime, uint256 endTime) {
+    require(epoch >= 0, "Invalid epoch");
+    startTime = START_TIMESTAMP + (epoch * 3600);
+    endTime = startTime + 3600;
+    return (startTime, endTime);
   }
 
   // blast functions

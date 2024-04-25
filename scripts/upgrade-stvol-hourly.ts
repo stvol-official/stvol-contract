@@ -5,7 +5,7 @@ import input from "@inquirer/input";
  npx hardhat run --network blast_sepolia scripts/upgrade-stvol-hourly.ts
 */
 
-const DEPLOYED_PROXY = "0xeC2eDF969B54538625B3a5e2C592Fcf6AcCd457C";
+const DEPLOYED_PROXY = "0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61";
 
 const upgrade = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
@@ -32,7 +32,10 @@ const upgrade = async () => {
     const StVolFactory = await ethers.getContractFactory(STVOL_NAME);
 
     // const stVolContract = await upgrades.forceImport(PROXY, StVolFactory, { kind: "uups" });
-    const stVolContract = await upgrades.upgradeProxy(PROXY, StVolFactory, { kind: "uups" });
+    const stVolContract = await upgrades.upgradeProxy(PROXY, StVolFactory, {
+      kind: "uups",
+      redeployImplementation: "always",
+    });
 
     await stVolContract.waitForDeployment();
     const stVolContractAddress = await stVolContract.getAddress();
