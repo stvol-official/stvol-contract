@@ -61,23 +61,6 @@ export default {
       },
       chainId: 11155111,
     },
-    blast_sepolia: {
-      url: "https://sepolia.blast.io",
-      gas: 1000000000,
-      accounts: {
-        mnemonic,
-      },
-      chainId: 168587773,
-    },
-    arbitrum_goerli: {
-      url: `https://arbitrum-goerli.infura.io/v3/${infuraKey}`,
-      gas: 22000000,
-      allowUnlimitedContractSize: true,
-      accounts: {
-        mnemonic,
-      },
-      chainId: 421613,
-    },
     arbitrum_sepolia: {
       url: `https://arbitrum-sepolia.infura.io/v3/${infuraKey}`,
       gas: 22000000,
@@ -87,14 +70,12 @@ export default {
       },
       chainId: 421614,
     },
-    goerli: {
-      url: `https://goerli.infura.io/v3/${infuraKey}`,
-      gas: 22000000,
-      allowUnlimitedContractSize: true,
+    blast_sepolia: {
+      url: "https://sepolia.blast.io",
       accounts: {
         mnemonic,
       },
-      chainId: 5,
+      chainId: 168587773,
     },
   },
   solidity: {
@@ -152,8 +133,8 @@ export default {
         network: "blastSepolia",
         chainId: 168587773,
         urls: {
-          apiURL: "https://api.routescan.io/v2/network/testnet/evm/168587773/etherscan",
-          browserURL: "https://testnet.blastscan.io",
+          apiURL: "https://api-sepolia.blastscan.io/api",
+          browserURL: "https://sepolia.blastscan.io/",
         },
       },
     ],

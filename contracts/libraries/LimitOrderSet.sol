@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
+pragma solidity ^0.8.4;
 import "hardhat/console.sol";
 
 library LimitOrderSet {
-
   // represents smallest possible value for an order under comparison of fn smallerThan()
   uint256 public constant QUEUE_START = 0;
 
@@ -61,14 +59,8 @@ library LimitOrderSet {
     //(uint32 payout, uint64 amount, address user) = decodeOrder(elementToInsert);
     // console.log("user: %s, payout: %s, amount: %s", user, payout, amount);
 
-    require(
-      elementToInsert.payout != 0,
-      "Inserting zero payout is not supported"
-    );
-    require(
-      elementToInsert.amount != 0,
-      "Inserting zero amount is not supported"
-    );
+    require(elementToInsert.payout != 0, "Inserting zero payout is not supported");
+    require(elementToInsert.amount != 0, "Inserting zero amount is not supported");
     require(
       elementToInsert.idx > QUEUE_START && elementToInsert.idx < QUEUE_END,
       "Inserting element has not valid index"
@@ -76,7 +68,11 @@ library LimitOrderSet {
     if (contains(self, elementToInsert.idx)) {
       return false;
     }
-    if (idxBeforeNewOne != QUEUE_START && self.prevMap[idxBeforeNewOne] == 0 && self.orderMap[idxBeforeNewOne].payout == 0) {
+    if (
+      idxBeforeNewOne != QUEUE_START &&
+      self.prevMap[idxBeforeNewOne] == 0 &&
+      self.orderMap[idxBeforeNewOne].payout == 0
+    ) {
       return false;
     }
     if (!smallerThan(self, idxBeforeNewOne, elementToInsert)) {
@@ -116,10 +112,7 @@ library LimitOrderSet {
   /// The element is removed from the linked list, but the node retains
   /// information on which predecessor it had, so that a node in the chain
   /// can be reached by following the predecessor chain of deleted elements.
-  function removeKeepHistory(
-    Data storage self,
-    uint256 idxToRemove
-  ) internal returns (bool) {
+  function removeKeepHistory(Data storage self, uint256 idxToRemove) internal returns (bool) {
     if (!contains(self, idxToRemove)) {
       return false;
     }
@@ -144,10 +137,7 @@ library LimitOrderSet {
     return result;
   }
 
-  function contains(
-    Data storage self,
-    uint256 idx
-  ) internal view returns (bool) {
+  function contains(Data storage self, uint256 idx) internal view returns (bool) {
     if (idx == QUEUE_START) {
       return false;
     }
@@ -175,10 +165,7 @@ library LimitOrderSet {
     return false;
   }
 
-  function getUndeclaredAmt(
-    Data storage self,
-    address user
-  ) internal view returns (uint256) {
+  function getUndeclaredAmt(Data storage self, address user) internal view returns (uint256) {
     uint256 idx = self.nextMap[QUEUE_START];
     uint256 amt = 0;
     while (idx != QUEUE_START && idx != QUEUE_END) {
@@ -196,10 +183,7 @@ library LimitOrderSet {
     // returns QUEUE_END when it is empty
   }
 
-  function next(
-    Data storage self,
-    uint256 idx
-  ) internal view returns (uint256) {
+  function next(Data storage self, uint256 idx) internal view returns (uint256) {
     uint256 nextIdx = self.nextMap[idx];
     return nextIdx;
     // returns QUEUE_START(0) when it is non-existent element

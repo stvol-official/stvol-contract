@@ -4,19 +4,11 @@ import config from "../config";
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const STVOL_NAME = "StVol";
+  const STVOL_NAME = "StVolDaily";
   const PYTH_PRICE_FEED = "BTC_USD";
 
   // Check if the network is supported.
-  if (
-    networkName === "goerli" ||
-    networkName === "mainnet" ||
-    networkName === "arbitrum" ||
-    networkName === "arbitrum_goerli" ||
-    networkName === "arbitrum_sepolia" ||
-    networkName === "sepolia" ||
-    networkName === "blast_sepolia"
-  ) {
+  if (networkName === "blast_sepolia") {
     console.log(`Deploying to ${networkName} network...`);
 
     // Check if the addresses in the config are set.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 pragma abicoder v2;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -46,7 +46,7 @@ import "./libraries/LimitOrderSet.sol";
  * E33: Pyth Oracle non increasing publishTimes
  * E35: Exceed limit order size
  */
-contract StVol is Ownable, Pausable, ReentrancyGuard {
+contract StVolDaily is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using AutoIncrementing for AutoIncrementing.Counter;
     using LimitOrderSet for LimitOrderSet.Data;

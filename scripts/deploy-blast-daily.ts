@@ -4,8 +4,8 @@ import config from "../config";
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const STVOL_NAME = "StVolBlast";
-  const PYTH_PRICE_FEED = "ETH_USD";
+  const STVOL_NAME = "StVolDailyBlast";
+  const PYTH_PRICE_FEED = "BTC_USD";
 
   // Check if the network is supported.
   if (networkName === "blast_sepolia") {
@@ -34,8 +34,8 @@ const main = async () => {
     console.log("===========================================");
 
     // Deploy contracts.
-    const StVol = await ethers.getContractFactory(STVOL_NAME);
-    const stVolContract = await StVol.deploy(
+    const StVolDaily = await ethers.getContractFactory(STVOL_NAME);
+    const stVolContract = await StVolDaily.deploy(
       config.Address.Oracle[networkName],
       config.Address.Admin[networkName],
       config.Address.Operator[networkName],
