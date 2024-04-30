@@ -105,6 +105,7 @@ contract StVolHourly is
     uint256 epoch;
     uint256 startTimestamp;
     uint256 endTimestamp;
+    bool isStarted;
     bool isSettled;
     mapping(uint256 => uint256) startPrice; // key: productId
     mapping(uint256 => uint256) endPrice; // key: productId
@@ -114,6 +115,7 @@ contract StVolHourly is
     uint256 epoch;
     uint256 startTimestamp;
     uint256 endTimestamp;
+    bool isStarted;
     bool isSettled;
     uint256 startPrice;
     uint256 endPrice;
@@ -202,10 +204,34 @@ contract StVolHourly is
     uint256 startEpoch = _epochAt(initDate);
 
     MainStorage storage $ = _getMainStorage();
+
+    // start current round
+    Round storage round = $.rounds[startEpoch];
+    round.epoch = startEpoch;
+    round.startTimestamp = initDate;
+    round.endTimestamp = initDate + INTERVAL_SECONDS;
+
     for (uint i = 0; i < feeds.length; i++) {
-      _executeRound($, i, startEpoch, feeds[i], initDate);
+      uint64 pythPrice = uint64(feeds[i].price.price);
+      round.startPrice[i] = pythPrice;
+      emit StartRound(startEpoch, i, pythPrice, initDate);
     }
-    _settleFilledOrders(startEpoch - 1);
+    round.isStarted = true;
+
+    // end prev round (if started)
+    uint256 prevEpoch = startEpoch - 1;
+    Round storage prevRound = $.rounds[prevEpoch];
+    if (prevRound.epoch == prevEpoch && prevRound.startTimestamp > 0 && prevRound.isStarted) {
+      prevRound.endTimestamp = initDate;
+
+      for (uint i = 0; i < feeds.length; i++) {
+        uint64 pythPrice = uint64(feeds[i].price.price);
+        prevRound.endPrice[i] = pythPrice;
+        emit EndRound(prevEpoch, i, pythPrice, initDate);
+      }
+    }
+
+    _settleFilledOrders(prevEpoch);
   }
 
   function deposit(uint256 amount) external nonReentrant {
@@ -317,6 +343,7 @@ contract StVolHourly is
           epoch: epoch,
           startTimestamp: startTime,
           endTimestamp: endTime,
+          isStarted: false,
           isSettled: false,
           startPrice: 0,
           endPrice: 0
@@ -328,6 +355,7 @@ contract StVolHourly is
         epoch: round.epoch,
         startTimestamp: round.startTimestamp,
         endTimestamp: round.endTimestamp,
+        isStarted: round.isStarted,
         isSettled: round.isSettled,
         startPrice: round.startPrice[productId],
         endPrice: round.endPrice[productId]
@@ -335,28 +363,6 @@ contract StVolHourly is
   }
 
   /* internal functions */
-  function _executeRound(
-    MainStorage storage $,
-    uint256 productId,
-    uint256 startEpoch,
-    PythStructs.PriceFeed memory feed,
-    uint64 initDate
-  ) internal {
-    uint64 pythPrice = uint64(feed.price.price);
-
-    _startRound(startEpoch, productId, pythPrice, initDate);
-
-    Round storage prevRound = $.rounds[startEpoch - 1];
-    if (
-      prevRound.epoch == startEpoch - 1 &&
-      prevRound.startTimestamp > 0 &&
-      prevRound.startPrice[productId] > 0
-    ) {
-      // end prev round
-      _endRound(prevRound.epoch, productId, pythPrice, initDate);
-    }
-  }
-
   function _getPythPrices(
     bytes[] memory updateData,
     uint64 timestamp
@@ -410,28 +416,6 @@ contract StVolHourly is
     }
     round.isSettled = true;
     emit RoundSettled(epoch, orders.length, collectedFee);
-  }
-
-  function _endRound(uint256 epoch, uint256 productId, uint256 price, uint256 initDate) internal {
-    MainStorage storage $ = _getMainStorage();
-    Round storage round = $.rounds[epoch];
-    require(round.startTimestamp != 0, "E26");
-
-    round.endTimestamp = initDate;
-    round.endPrice[productId] = price;
-
-    emit EndRound(epoch, productId, price, initDate);
-  }
-
-  function _startRound(uint256 epoch, uint256 productId, uint256 price, uint256 initDate) internal {
-    MainStorage storage $ = _getMainStorage();
-    Round storage round = $.rounds[epoch];
-    round.epoch = epoch;
-    round.startTimestamp = initDate;
-    round.endTimestamp = initDate + INTERVAL_SECONDS;
-    round.startPrice[productId] = price;
-
-    emit StartRound(epoch, productId, price, initDate);
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
