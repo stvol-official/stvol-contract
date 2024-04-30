@@ -52,7 +52,7 @@ contract StVolHourly is
 
   function _priceIds() internal pure returns (bytes32[] memory) {
     // to add products, upgrade the contract
-    bytes32[] memory priceIds;
+    bytes32[] memory priceIds = new bytes32[](2);
     // priceIds[productId] = pyth price id
     priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
     priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
@@ -105,20 +105,20 @@ contract StVolHourly is
     uint256 epoch;
     uint256 startTimestamp;
     uint256 endTimestamp;
-    bool isStarted;
     bool isSettled;
     mapping(uint256 => uint256) startPrice; // key: productId
     mapping(uint256 => uint256) endPrice; // key: productId
+    bool isStarted;
   }
 
   struct ProductRound {
     uint256 epoch;
     uint256 startTimestamp;
     uint256 endTimestamp;
-    bool isStarted;
     bool isSettled;
     uint256 startPrice;
     uint256 endPrice;
+    bool isStarted;
   }
 
   struct FilledOrder {
@@ -207,21 +207,28 @@ contract StVolHourly is
 
     // start current round
     Round storage round = $.rounds[startEpoch];
-    round.epoch = startEpoch;
-    round.startTimestamp = initDate;
-    round.endTimestamp = initDate + INTERVAL_SECONDS;
+    if (!round.isStarted) {
+      round.epoch = startEpoch;
+      round.startTimestamp = initDate;
+      round.endTimestamp = initDate + INTERVAL_SECONDS;
 
-    for (uint i = 0; i < feeds.length; i++) {
-      uint64 pythPrice = uint64(feeds[i].price.price);
-      round.startPrice[i] = pythPrice;
-      emit StartRound(startEpoch, i, pythPrice, initDate);
+      for (uint i = 0; i < feeds.length; i++) {
+        uint64 pythPrice = uint64(feeds[i].price.price);
+        round.startPrice[i] = pythPrice;
+        emit StartRound(startEpoch, i, pythPrice, initDate);
+      }
+      round.isStarted = true;
     }
-    round.isStarted = true;
 
     // end prev round (if started)
     uint256 prevEpoch = startEpoch - 1;
     Round storage prevRound = $.rounds[prevEpoch];
-    if (prevRound.epoch == prevEpoch && prevRound.startTimestamp > 0 && prevRound.isStarted) {
+    if (
+      prevRound.epoch == prevEpoch &&
+      prevRound.startTimestamp > 0 &&
+      prevRound.isStarted &&
+      !prevRound.isSettled
+    ) {
       prevRound.endTimestamp = initDate;
 
       for (uint i = 0; i < feeds.length; i++) {
@@ -231,7 +238,7 @@ contract StVolHourly is
       }
     }
 
-    _settleFilledOrders(prevEpoch);
+    _settleFilledOrders(prevRound);
   }
 
   function deposit(uint256 amount) external nonReentrant {
@@ -368,7 +375,6 @@ contract StVolHourly is
     uint64 timestamp
   ) internal returns (PythStructs.PriceFeed[] memory) {
     MainStorage storage $ = _getMainStorage();
-
     uint fee = $.oracle.getUpdateFee(updateData);
     PythStructs.PriceFeed[] memory pythPrice = $.oracle.parsePriceFeedUpdates{ value: fee }(
       updateData,
@@ -379,14 +385,14 @@ contract StVolHourly is
     return pythPrice;
   }
 
-  function _settleFilledOrders(uint256 epoch) internal {
+  function _settleFilledOrders(Round storage round) internal {
     MainStorage storage $ = _getMainStorage();
-    Round storage round = $.rounds[epoch];
+
     if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0 || round.isSettled)
       return;
 
     uint256 collectedFee = 0;
-    FilledOrder[] storage orders = $.filledOrders[epoch];
+    FilledOrder[] storage orders = $.filledOrders[round.epoch];
     for (uint i = 0; i < orders.length; i++) {
       FilledOrder storage order = orders[i];
       if (order.isSettled) continue;
@@ -415,7 +421,7 @@ contract StVolHourly is
       order.isSettled = true;
     }
     round.isSettled = true;
-    emit RoundSettled(epoch, orders.length, collectedFee);
+    emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
