@@ -83,6 +83,7 @@ contract StVolHourly is
     mapping(uint256 => Round) rounds;
     mapping(address => uint256) userBalances; // key: user address, value: balance
     mapping(uint256 => FilledOrder[]) filledOrders; // key: epoch
+    uint256 lastFilledOrderId;
 
     /* you can add new variables here */
   }
@@ -263,7 +264,18 @@ contract StVolHourly is
     emit Withdraw(user, amount, $.userBalances[user]);
   }
 
-  function submitFilledOrders(bytes[] calldata transactions) external nonReentrant onlyOperator {}
+  function submitFilledOrders(
+    FilledOrder[] calldata transactions
+  ) external nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    require($.lastFilledOrderId + 1 == transactions[0].idx, "invalid id");
+    for (uint i = 0; i < transactions.length; i++) {
+      FilledOrder calldata order = transactions[i];
+      FilledOrder[] storage orders = $.filledOrders[order.epoch];
+      orders.push(order);
+    }
+    $.lastFilledOrderId = transactions[transactions.length - 1].idx;
+  }
 
   function pause() external whenNotPaused onlyAdmin {
     _pause();
