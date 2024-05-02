@@ -8,6 +8,11 @@
     {
       "address": "0xdEA4dEF85861cc5B43A510b8AEB4fA465D9C3841",
       "kind": "uups"
+    },
+    {
+      "address": "0xb14939d917738149942d7B679f2B948D879708AC",
+      "txHash": "0xd0f765883e23d90c52edf068b142ac2827ed762e951f0e11b8fe5af8978180f4",
+      "kind": "uups"
     }
   ],
   "impls": {

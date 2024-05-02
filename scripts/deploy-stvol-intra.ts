@@ -7,8 +7,8 @@ import select from "@inquirer/select";
 */
 
 const main = async (feed: string) => {
-  if (feed !== "ETH_USD" && feed !== "BTC_USD") {
-    throw new Error('Invalid PYTH_PRICE_FEED input. Must be "ETH_USD" or "BTC_USD".');
+  if (feed !== "ETH_USD" && feed !== "BTC_USD" && feed !== "WIF_USD") {
+    throw new Error('Invalid PYTH_PRICE_FEED input. Must be "ETH_USD" or "BTC_USD", or "WIF_USD".');
   }
 
   // Get network data from Hardhat config (see hardhat.config.ts).
@@ -88,6 +88,10 @@ select({
     {
       name: "ETH_USD",
       value: "ETH_USD",
+    },
+    {
+      name: "WIF_USD",
+      value: "WIF_USD",
     },
   ],
 }).then((value) => {
