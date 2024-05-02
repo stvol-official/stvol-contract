@@ -1,11 +1,16 @@
 import { ethers, network, run } from "hardhat";
 import config from "../config";
+import select from "@inquirer/select";
 
-const main = async () => {
+const main = async (feed: string) => {
+  if (feed !== "ETH_USD" && feed !== "BTC_USD") {
+    throw new Error('Invalid PYTH_PRICE_FEED input. Must be "ETH_USD" or "BTC_USD".');
+  }
+
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
   const STVOL_NAME = "StVolDaily";
-  const PYTH_PRICE_FEED = "BTC_USD";
+  const PYTH_PRICE_FEED = feed;
 
   // Check if the network is supported.
   if (networkName === "blast_sepolia") {
@@ -74,9 +79,24 @@ const main = async () => {
   }
 };
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
+select({
+  message: "Select a COIN",
+  choices: [
+    {
+      name: "BTC_USD",
+      value: "BTC_USD",
+    },
+    {
+      name: "ETH_USD",
+      value: "ETH_USD",
+    },
+  ],
+}).then((value) => {
+  // We recommend this pattern to be able to use async/await everywhere
+  // and properly handle errors.
+
+  main(value).catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 });
