@@ -65,6 +65,7 @@ contract StVolHourly is
   IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
   IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
 
+  uint256 private constant PRICE_UNIT = 1e18;
   uint256 private constant BASE = 10000; // 100%
   uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
@@ -84,6 +85,7 @@ contract StVolHourly is
     mapping(address => uint256) userBalances; // key: user address, value: balance
     mapping(uint256 => FilledOrder[]) filledOrders; // key: epoch
     uint256 lastFilledOrderId;
+    uint256 lastSubmissionTime;
 
     /* you can add new variables here */
   }
@@ -264,6 +266,15 @@ contract StVolHourly is
     emit Withdraw(user, amount, $.userBalances[user]);
   }
 
+  function forceWithdrawAll() external nonReentrant {
+    MainStorage storage $ = _getMainStorage();
+    require(block.timestamp >= $.lastSubmissionTime + 1 hours, "invalid time");
+    uint256 balance = $.userBalances[msg.sender];
+    $.userBalances[msg.sender] = 0;
+    $.token.safeTransfer(msg.sender, balance);
+    emit Withdraw(msg.sender, balance, 0);
+  }
+
   function submitFilledOrders(
     FilledOrder[] calldata transactions
   ) external nonReentrant onlyOperator {
@@ -275,6 +286,7 @@ contract StVolHourly is
       orders.push(order);
     }
     $.lastFilledOrderId = transactions[transactions.length - 1].idx;
+    $.lastSubmissionTime = block.timestamp;
   }
 
   function pause() external whenNotPaused onlyAdmin {
@@ -415,14 +427,14 @@ contract StVolHourly is
       bool isUnderWin = strikePrice > round.endPrice[order.productId];
 
       if (isUnderWin) {
-        uint256 amount = order.overPrice * order.unit;
+        uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
         uint256 fee = (amount * $.commissionfee) / BASE;
         $.userBalances[order.overUser] -= amount;
         $.treasuryAmount += fee;
         $.userBalances[order.underUser] += (amount - fee);
         collectedFee += fee;
       } else if (isOverWin) {
-        uint256 amount = order.underPrice * order.unit;
+        uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
         uint256 fee = (amount * $.commissionfee) / BASE;
         $.userBalances[order.underUser] -= amount;
         $.treasuryAmount += fee;
