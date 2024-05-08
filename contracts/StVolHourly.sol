@@ -137,10 +137,16 @@ contract StVolHourly is
     bool isSettled; // default: false
   }
 
-  event Deposit(address from, address to, uint256 amount, uint256 result);
-  event Withdraw(address to, uint256 amount, uint256 result);
+  event Deposit(address indexed to, address from, uint256 amount, uint256 result);
+  event Withdraw(address indexed to, uint256 amount, uint256 result);
   event StartRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
   event EndRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
+  event OrderSettled(
+    address indexed user,
+    uint256 indexed idx,
+    uint256 prevBalance,
+    uint256 newBalance
+  );
   event RoundSettled(uint256 indexed epoch, uint256 orderCount, uint256 collectedFee);
 
   function _getMainStorage() internal pure returns (MainStorage storage $) {
@@ -255,7 +261,7 @@ contract StVolHourly is
     MainStorage storage $ = _getMainStorage();
     $.token.safeTransferFrom(msg.sender, address(this), amount);
     $.userBalances[user] += amount;
-    emit Deposit(msg.sender, user, amount, $.userBalances[user]);
+    emit Deposit(user, msg.sender, amount, $.userBalances[user]);
   }
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
@@ -392,6 +398,40 @@ contract StVolHourly is
         endPrice: round.endPrice[productId]
       });
   }
+  function filledOrders(uint256 epoch) public view returns (FilledOrder[] memory) {
+    MainStorage storage $ = _getMainStorage();
+    return $.filledOrders[epoch];
+  }
+  function userFilledOrders(
+    uint256 epoch,
+    address user
+  ) public view returns (FilledOrder[] memory) {
+    MainStorage storage $ = _getMainStorage();
+    FilledOrder[] storage orders = $.filledOrders[epoch];
+    uint cnt = 0;
+    for (uint i = 0; i < orders.length; i++) {
+      FilledOrder storage order = orders[i];
+      if (order.overUser == user || order.underUser == user) {
+        cnt++;
+      }
+    }
+    FilledOrder[] memory userOrders = new FilledOrder[](cnt);
+    uint idx = 0;
+    for (uint i = 0; i < orders.length; i++) {
+      FilledOrder storage order = orders[i];
+      if (order.overUser == user || order.underUser == user) {
+        userOrders[idx] = order;
+        idx++;
+      }
+    }
+
+    return userOrders;
+  }
+
+  function lastFilledOrderId() public view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    return $.lastFilledOrderId;
+  }
 
   /* internal functions */
   function _getPythPrices(
@@ -426,13 +466,28 @@ contract StVolHourly is
       bool isOverWin = strikePrice < round.endPrice[order.productId];
       bool isUnderWin = strikePrice > round.endPrice[order.productId];
 
-      if (isUnderWin) {
+      if (order.overUser == order.underUser) {
+        // nothing happens
+      } else if (isUnderWin) {
         uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
         uint256 fee = (amount * $.commissionfee) / BASE;
         $.userBalances[order.overUser] -= amount;
         $.treasuryAmount += fee;
         $.userBalances[order.underUser] += (amount - fee);
         collectedFee += fee;
+
+        emit OrderSettled(
+          order.overUser,
+          order.idx,
+          $.userBalances[order.overUser] + amount,
+          $.userBalances[order.overUser]
+        );
+        emit OrderSettled(
+          order.underUser,
+          order.idx,
+          $.userBalances[order.underUser] - (amount - fee),
+          $.userBalances[order.underUser]
+        );
       } else if (isOverWin) {
         uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
         uint256 fee = (amount * $.commissionfee) / BASE;
@@ -440,6 +495,19 @@ contract StVolHourly is
         $.treasuryAmount += fee;
         $.userBalances[order.overUser] += (amount - fee);
         collectedFee += fee;
+
+        emit OrderSettled(
+          order.underUser,
+          order.idx,
+          $.userBalances[order.underUser] + amount,
+          $.userBalances[order.underUser]
+        );
+        emit OrderSettled(
+          order.overUser,
+          order.idx,
+          $.userBalances[order.overUser] - (amount - fee),
+          $.userBalances[order.overUser]
+        );
       }
 
       order.isSettled = true;
