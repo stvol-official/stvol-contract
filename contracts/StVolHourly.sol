@@ -290,24 +290,27 @@ contract StVolHourly is
     emit Withdraw(user, amount, $.userBalances[user]);
   }
 
-  function requestWithdrawal(uint256 amount) external nonReentrant {
+  function requestWithdrawal(
+    uint256 amount
+  ) external nonReentrant returns (WithdrawalRequest memory) {
     address user = msg.sender;
     MainStorage storage $ = _getMainStorage();
     require(amount > 0, "Amount must be greater than zero");
     require($.userBalances[user] >= amount, "Insufficient user balance");
 
-    $.withdrawalRequests.push(
-      WithdrawalRequest({
-        idx: $.withdrawalRequests.length,
-        user: msg.sender,
-        amount: amount,
-        processed: false,
-        message: "",
-        created: block.timestamp
-      })
-    );
+    WithdrawalRequest memory request = WithdrawalRequest({
+      idx: $.withdrawalRequests.length,
+      user: msg.sender,
+      amount: amount,
+      processed: false,
+      message: "",
+      created: block.timestamp
+    });
+
+    $.withdrawalRequests.push(request);
 
     emit WithdrawalRequested(msg.sender, amount);
+    return request;
   }
 
   function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
