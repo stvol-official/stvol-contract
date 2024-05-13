@@ -1,8 +1,4 @@
 {
   "editor.formatOnSave": true,
-  "solidity.formatter": "prettier", // This is the default so it might be missing.
-  "[solidity]": {
-    "editor.defaultFormatter": "JuanBlanco.solidity"
-  },
   "solidity.compileUsingRemoteVersion": "v0.8.20+commit.a1b79de6"
 }

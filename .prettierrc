@@ -4,5 +4,18 @@
   "tabWidth": 2,
   "trailingComma": "all",
   "printWidth": 100,
-  "bracketSpacing": true
+  "bracketSpacing": true,
+  "overrides": [
+    {
+      "files": "*.sol",
+      "options": {
+        "printWidth": 100,
+        "tabWidth": 2,
+        "useTabs": false,
+        "singleQuote": false,
+        "bracketSpacing": true,
+        "explicitTypes": "preserve"
+      }
+    }
+  ]
 }

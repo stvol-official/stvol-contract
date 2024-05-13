@@ -20,7 +20,9 @@ enum YieldMode {
 
 interface IERC20Rebasing {
   function configure(YieldMode) external returns (uint256);
+
   function claim(address recipient, uint256 amount) external returns (uint256);
+
   function getClaimableAmount(address account) external view returns (uint256);
 }
 
@@ -31,8 +33,11 @@ enum GasMode {
 
 interface IBlast {
   function configureClaimableGas() external;
+
   function claimAllGas(address contractAddress, address recipient) external returns (uint256);
+
   function claimMaxGas(address contractAddress, address recipientOfGas) external returns (uint256);
+
   function readGasParams(
     address contractAddress
   )
@@ -86,6 +91,7 @@ contract StVolHourly is
     mapping(uint256 => FilledOrder[]) filledOrders; // key: epoch
     uint256 lastFilledOrderId;
     uint256 lastSubmissionTime;
+    WithdrawalRequest[] withdrawalRequests;
 
     /* you can add new variables here */
   }
@@ -137,6 +143,15 @@ contract StVolHourly is
     bool isSettled; // default: false
   }
 
+  struct WithdrawalRequest {
+    uint256 idx;
+    address user;
+    uint256 amount;
+    bool processed;
+    string message;
+    uint256 created;
+  }
+
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
   event StartRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
@@ -148,6 +163,9 @@ contract StVolHourly is
     uint256 newBalance
   );
   event RoundSettled(uint256 indexed epoch, uint256 orderCount, uint256 collectedFee);
+  event WithdrawalRequested(address indexed user, uint256 amount);
+  event WithdrawalApproved(address indexed user, uint256 amount);
+  event WithdrawalRejected(address indexed user, uint256 amount);
 
   function _getMainStorage() internal pure returns (MainStorage storage $) {
     assembly {
@@ -266,10 +284,76 @@ contract StVolHourly is
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
-    require($.userBalances[user] >= amount, "user balance");
+    require($.userBalances[user] >= amount, "Insufficient user balance");
     $.userBalances[user] -= amount;
     $.token.safeTransfer(user, amount);
     emit Withdraw(user, amount, $.userBalances[user]);
+  }
+
+  function requestWithdrawal(uint256 amount) external nonReentrant {
+    address user = msg.sender;
+    MainStorage storage $ = _getMainStorage();
+    require(amount > 0, "Amount must be greater than zero");
+    require($.userBalances[user] >= amount, "Insufficient user balance");
+
+    $.withdrawalRequests.push(
+      WithdrawalRequest({
+        idx: $.withdrawalRequests.length,
+        user: msg.sender,
+        amount: amount,
+        processed: false,
+        message: "",
+        created: block.timestamp
+      })
+    );
+
+    emit WithdrawalRequested(msg.sender, amount);
+  }
+
+  function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
+    // return 100 requests (from ~ from+100)
+    MainStorage storage $ = _getMainStorage();
+    uint256 totalRequests = $.withdrawalRequests.length;
+
+    if (totalRequests < 100) {
+      return $.withdrawalRequests;
+    } else {
+      uint256 startFrom = from < totalRequests - 100 ? from : totalRequests - 100;
+
+      WithdrawalRequest[] memory recentRequests = new WithdrawalRequest[](100);
+      for (uint256 i = 0; i < 100; i++) {
+        recentRequests[i] = $.withdrawalRequests[startFrom + i];
+      }
+
+      return recentRequests;
+    }
+  }
+
+  function approveWithdrawal(uint256 idx) public nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    require(idx < $.withdrawalRequests.length, "Invalid idx");
+    WithdrawalRequest storage request = $.withdrawalRequests[idx];
+    require(!request.processed, "Request already processed");
+    require($.userBalances[request.user] >= request.amount, "Insufficient user balance");
+
+    request.processed = true;
+
+    $.userBalances[request.user] -= request.amount;
+    $.token.safeTransfer(request.user, request.amount);
+
+    emit WithdrawalApproved(request.user, request.amount);
+  }
+
+  function rejectWithdrawal(uint256 idx, string calldata reason) public nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    require(idx < $.withdrawalRequests.length, "Invalid idx");
+    WithdrawalRequest storage request = $.withdrawalRequests[idx];
+    require(!request.processed, "Request already processed");
+
+    request.processed = true;
+    request.message = reason;
+
+    emit WithdrawalRejected(request.user, request.amount);
   }
 
   function forceWithdrawAll() external nonReentrant {
@@ -357,18 +441,22 @@ contract StVolHourly is
     MainStorage storage $ = _getMainStorage();
     return $.commissionfee;
   }
+
   function treasuryAmount() public view returns (uint256) {
     MainStorage storage $ = _getMainStorage();
     return $.treasuryAmount;
   }
+
   function addresses() public view returns (address, address, address) {
     MainStorage storage $ = _getMainStorage();
     return ($.adminAddress, $.operatorAddress, $.operatorVaultAddress);
   }
+
   function balanceOf(address user) public view returns (uint256) {
     MainStorage storage $ = _getMainStorage();
     return $.userBalances[user];
   }
+
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
     MainStorage storage $ = _getMainStorage();
     Round storage round = $.rounds[epoch];
@@ -398,10 +486,12 @@ contract StVolHourly is
         endPrice: round.endPrice[productId]
       });
   }
+
   function filledOrders(uint256 epoch) public view returns (FilledOrder[] memory) {
     MainStorage storage $ = _getMainStorage();
     return $.filledOrders[epoch];
   }
+
   function userFilledOrders(
     uint256 epoch,
     address user
