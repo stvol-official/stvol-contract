@@ -377,6 +377,11 @@ contract StVolHourly is
       FilledOrder calldata order = transactions[i];
       FilledOrder[] storage orders = $.filledOrders[order.epoch];
       orders.push(order);
+
+      Round storage round = $.rounds[order.epoch];
+      if (round.isSettled) {
+        _settleFilledOrder(round, order);
+      }
     }
     $.lastFilledOrderId = transactions[transactions.length - 1].idx;
     $.lastSubmissionTime = block.timestamp;
@@ -552,12 +557,23 @@ contract StVolHourly is
     FilledOrder[] storage orders = $.filledOrders[round.epoch];
     for (uint i = 0; i < orders.length; i++) {
       FilledOrder storage order = orders[i];
-      if (order.isSettled) continue;
+      collectedFee += _settleFilledOrder(round, order);
+    }
+    round.isSettled = true;
+    emit RoundSettled(round.epoch, orders.length, collectedFee);
+  }
+
+  function _settleFilledOrder(Round storage round, FilledOrder memory order) internal returns (uint256) {
+      if (order.isSettled) return 0;
+
+      MainStorage storage $ = _getMainStorage();
 
       uint256 strikePrice = (round.startPrice[order.productId] * order.strike) / 10000;
 
       bool isOverWin = strikePrice < round.endPrice[order.productId];
       bool isUnderWin = strikePrice > round.endPrice[order.productId];
+
+      uint256 collectedFee = 0;
 
       if (order.overUser == order.underUser) {
         // nothing happens
@@ -603,10 +619,8 @@ contract StVolHourly is
         );
       }
 
-      order.isSettled = true;
-    }
-    round.isSettled = true;
-    emit RoundSettled(round.epoch, orders.length, collectedFee);
+      order.isSettled = true;   
+      return collectedFee; 
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -614,6 +628,8 @@ contract StVolHourly is
   function _combine(uint256 a, uint256 b) internal pure returns (uint256) {
     return (a << 128) | b;
   }
+
+  
 
   function _verify(
     bytes32 hash,
