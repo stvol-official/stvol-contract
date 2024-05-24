@@ -92,6 +92,7 @@ contract StVolHourly is
     uint256 lastFilledOrderId;
     uint256 lastSubmissionTime;
     WithdrawalRequest[] withdrawalRequests;
+    uint256 lastSettledFilledOrderId;
 
     /* you can add new variables here */
   }
@@ -531,6 +532,11 @@ contract StVolHourly is
     return $.lastFilledOrderId;
   }
 
+  function lastSettledFilledOrderId() public view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    return $.lastSettledFilledOrderId;
+  }
+
   /* internal functions */
   function _getPythPrices(
     bytes[] memory updateData,
@@ -620,6 +626,9 @@ contract StVolHourly is
       }
 
       order.isSettled = true;   
+      if ($.lastSettledFilledOrderId < order.idx) {
+        $.lastSettledFilledOrderId = order.idx;
+      }
       return collectedFee; 
   }
 
