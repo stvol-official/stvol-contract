@@ -160,6 +160,7 @@ contract StVolHourly is
   event OrderSettled(
     address indexed user,
     uint256 indexed idx,
+    uint256 epoch,
     uint256 prevBalance,
     uint256 newBalance
   );
@@ -381,7 +382,7 @@ contract StVolHourly is
 
       Round storage round = $.rounds[order.epoch];
       if (round.isSettled) {
-        _settleFilledOrder(round, order);
+        _settleFilledOrder(round, orders[orders.length - 1]);
       }
     }
     $.lastFilledOrderId = transactions[transactions.length - 1].idx;
@@ -569,7 +570,7 @@ contract StVolHourly is
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
 
-  function _settleFilledOrder(Round storage round, FilledOrder memory order) internal returns (uint256) {
+  function _settleFilledOrder(Round storage round, FilledOrder storage order) internal returns (uint256) {
       if (order.isSettled) return 0;
 
       MainStorage storage $ = _getMainStorage();
@@ -582,7 +583,18 @@ contract StVolHourly is
       uint256 collectedFee = 0;
 
       if (order.overUser == order.underUser) {
-        // nothing happens
+        uint256 amount = 100 * order.unit * PRICE_UNIT;
+        uint256 fee = (amount * $.commissionfee) / BASE;
+        $.userBalances[order.overUser] -= fee;
+        $.treasuryAmount += fee;
+        collectedFee += fee;
+        emit OrderSettled(
+          order.overUser,
+          order.idx,
+          order.epoch,
+          $.userBalances[order.overUser] + fee,
+          $.userBalances[order.overUser]
+        );
       } else if (isUnderWin) {
         uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
         uint256 fee = (amount * $.commissionfee) / BASE;
@@ -594,12 +606,14 @@ contract StVolHourly is
         emit OrderSettled(
           order.overUser,
           order.idx,
+          order.epoch,
           $.userBalances[order.overUser] + amount,
           $.userBalances[order.overUser]
         );
         emit OrderSettled(
           order.underUser,
           order.idx,
+          order.epoch,
           $.userBalances[order.underUser] - (amount - fee),
           $.userBalances[order.underUser]
         );
@@ -614,12 +628,14 @@ contract StVolHourly is
         emit OrderSettled(
           order.underUser,
           order.idx,
+          order.epoch,
           $.userBalances[order.underUser] + amount,
           $.userBalances[order.underUser]
         );
         emit OrderSettled(
           order.overUser,
           order.idx,
+          order.epoch,
           $.userBalances[order.overUser] - (amount - fee),
           $.userBalances[order.overUser]
         );
