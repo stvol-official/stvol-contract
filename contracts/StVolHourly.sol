@@ -57,10 +57,11 @@ contract StVolHourly is
 
   function _priceIds() internal pure returns (bytes32[] memory) {
     // to add products, upgrade the contract
-    bytes32[] memory priceIds = new bytes32[](2);
+    bytes32[] memory priceIds = new bytes32[](3);
     // priceIds[productId] = pyth price id
     priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
     priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
+    priceIds[2] = 0x4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc; // wif
 
     return priceIds;
   }
@@ -92,7 +93,8 @@ contract StVolHourly is
     uint256 lastFilledOrderId;
     uint256 lastSubmissionTime;
     WithdrawalRequest[] withdrawalRequests;
-    uint256 lastSettledFilledOrderId;
+    uint256 lastSettledFilledOrderId; // globally
+    mapping(uint256 => uint256) lastSettledFilledOrderIndex; // by round(epoch)
 
     /* you can add new variables here */
   }
@@ -115,7 +117,7 @@ contract StVolHourly is
     uint256 epoch;
     uint256 startTimestamp;
     uint256 endTimestamp;
-    bool isSettled;
+    bool isSettled; // true when endPrice is set
     mapping(uint256 => uint256) startPrice; // key: productId
     mapping(uint256 => uint256) endPrice; // key: productId
     bool isStarted;
@@ -268,6 +270,26 @@ contract StVolHourly is
     }
 
     _settleFilledOrders(prevRound);
+  }
+
+  function settleFilledOrders(uint256 epoch, uint256 size) public onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    Round storage round = $.rounds[epoch];
+
+    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0)
+      return;
+
+    uint256 collectedFee = 0;
+    FilledOrder[] storage orders = $.filledOrders[epoch];
+
+    uint256 startIndex = $.lastSettledFilledOrderIndex[epoch];
+    uint256 endIndex = startIndex + size < orders.length ? startIndex + size : orders.length;
+
+    for (uint i = startIndex; i < endIndex; i++) {
+      FilledOrder storage order = orders[i];
+      collectedFee += _settleFilledOrder(round, order);
+    }
+    $.lastSettledFilledOrderIndex[epoch] = endIndex;
   }
 
   function deposit(uint256 amount) external nonReentrant {
@@ -553,6 +575,7 @@ contract StVolHourly is
     );
     return pythPrice;
   }
+  
 
   function _settleFilledOrders(Round storage round) internal {
     MainStorage storage $ = _getMainStorage();
@@ -566,6 +589,7 @@ contract StVolHourly is
       FilledOrder storage order = orders[i];
       collectedFee += _settleFilledOrder(round, order);
     }
+    $.lastSettledFilledOrderIndex[round.epoch] = orders.length;
     round.isSettled = true;
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
