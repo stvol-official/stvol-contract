@@ -275,11 +275,11 @@ contract StVolHourly is
     }
   }
 
-  function settleFilledOrders(uint256 epoch, uint256 size) public onlyOperator {
+  function settleFilledOrders(uint256 epoch, uint256 size) public onlyOperator returns (uint256) {
     MainStorage storage $ = _getMainStorage();
     Round storage round = $.rounds[epoch];
 
-    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) return;
+    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) return 0;
 
     uint256 collectedFee = 0;
     FilledOrder[] storage orders = $.filledOrders[epoch];
@@ -292,6 +292,8 @@ contract StVolHourly is
       collectedFee += _settleFilledOrder(round, order);
     }
     $.lastSettledFilledOrderIndex[epoch] = endIndex;
+
+    return orders.length - endIndex;
   }
 
   function deposit(uint256 amount) external nonReentrant {
