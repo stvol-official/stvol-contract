@@ -226,7 +226,8 @@ contract StVolHourly is
 
   function executeRound(
     bytes[] calldata priceUpdateData,
-    uint64 initDate
+    uint64 initDate,
+    bool skipSettlement
   ) external payable whenNotPaused onlyOperator {
     require(initDate % 3600 == 0, "invalid initDate"); // Ensure initDate is on the hour in seconds since Unix epoch.
 
@@ -269,15 +270,16 @@ contract StVolHourly is
       }
     }
 
-    _settleFilledOrders(prevRound);
+    if (!skipSettlement) {
+      _settleFilledOrders(prevRound);
+    }
   }
 
   function settleFilledOrders(uint256 epoch, uint256 size) public onlyOperator {
     MainStorage storage $ = _getMainStorage();
     Round storage round = $.rounds[epoch];
 
-    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0)
-      return;
+    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) return;
 
     uint256 collectedFee = 0;
     FilledOrder[] storage orders = $.filledOrders[epoch];
@@ -575,7 +577,6 @@ contract StVolHourly is
     );
     return pythPrice;
   }
-  
 
   function _settleFilledOrders(Round storage round) internal {
     MainStorage storage $ = _getMainStorage();
@@ -594,82 +595,85 @@ contract StVolHourly is
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
 
-  function _settleFilledOrder(Round storage round, FilledOrder storage order) internal returns (uint256) {
-      if (order.isSettled) return 0;
+  function _settleFilledOrder(
+    Round storage round,
+    FilledOrder storage order
+  ) internal returns (uint256) {
+    if (order.isSettled) return 0;
 
-      MainStorage storage $ = _getMainStorage();
+    MainStorage storage $ = _getMainStorage();
 
-      uint256 strikePrice = (round.startPrice[order.productId] * order.strike) / 10000;
+    uint256 strikePrice = (round.startPrice[order.productId] * order.strike) / 10000;
 
-      bool isOverWin = strikePrice < round.endPrice[order.productId];
-      bool isUnderWin = strikePrice > round.endPrice[order.productId];
+    bool isOverWin = strikePrice < round.endPrice[order.productId];
+    bool isUnderWin = strikePrice > round.endPrice[order.productId];
 
-      uint256 collectedFee = 0;
+    uint256 collectedFee = 0;
 
-      if (order.overUser == order.underUser) {
-        uint256 amount = 100 * order.unit * PRICE_UNIT;
-        uint256 fee = (amount * $.commissionfee) / BASE;
-        $.userBalances[order.overUser] -= fee;
-        $.treasuryAmount += fee;
-        collectedFee += fee;
-        emit OrderSettled(
-          order.overUser,
-          order.idx,
-          order.epoch,
-          $.userBalances[order.overUser] + fee,
-          $.userBalances[order.overUser]
-        );
-      } else if (isUnderWin) {
-        uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
-        uint256 fee = (amount * $.commissionfee) / BASE;
-        $.userBalances[order.overUser] -= amount;
-        $.treasuryAmount += fee;
-        $.userBalances[order.underUser] += (amount - fee);
-        collectedFee += fee;
+    if (order.overUser == order.underUser) {
+      uint256 amount = 100 * order.unit * PRICE_UNIT;
+      uint256 fee = (amount * $.commissionfee) / BASE;
+      $.userBalances[order.overUser] -= fee;
+      $.treasuryAmount += fee;
+      collectedFee += fee;
+      emit OrderSettled(
+        order.overUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.overUser] + fee,
+        $.userBalances[order.overUser]
+      );
+    } else if (isUnderWin) {
+      uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
+      uint256 fee = (amount * $.commissionfee) / BASE;
+      $.userBalances[order.overUser] -= amount;
+      $.treasuryAmount += fee;
+      $.userBalances[order.underUser] += (amount - fee);
+      collectedFee += fee;
 
-        emit OrderSettled(
-          order.overUser,
-          order.idx,
-          order.epoch,
-          $.userBalances[order.overUser] + amount,
-          $.userBalances[order.overUser]
-        );
-        emit OrderSettled(
-          order.underUser,
-          order.idx,
-          order.epoch,
-          $.userBalances[order.underUser] - (amount - fee),
-          $.userBalances[order.underUser]
-        );
-      } else if (isOverWin) {
-        uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
-        uint256 fee = (amount * $.commissionfee) / BASE;
-        $.userBalances[order.underUser] -= amount;
-        $.treasuryAmount += fee;
-        $.userBalances[order.overUser] += (amount - fee);
-        collectedFee += fee;
+      emit OrderSettled(
+        order.overUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.overUser] + amount,
+        $.userBalances[order.overUser]
+      );
+      emit OrderSettled(
+        order.underUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.underUser] - (amount - fee),
+        $.userBalances[order.underUser]
+      );
+    } else if (isOverWin) {
+      uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
+      uint256 fee = (amount * $.commissionfee) / BASE;
+      $.userBalances[order.underUser] -= amount;
+      $.treasuryAmount += fee;
+      $.userBalances[order.overUser] += (amount - fee);
+      collectedFee += fee;
 
-        emit OrderSettled(
-          order.underUser,
-          order.idx,
-          order.epoch,
-          $.userBalances[order.underUser] + amount,
-          $.userBalances[order.underUser]
-        );
-        emit OrderSettled(
-          order.overUser,
-          order.idx,
-          order.epoch,
-          $.userBalances[order.overUser] - (amount - fee),
-          $.userBalances[order.overUser]
-        );
-      }
+      emit OrderSettled(
+        order.underUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.underUser] + amount,
+        $.userBalances[order.underUser]
+      );
+      emit OrderSettled(
+        order.overUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.overUser] - (amount - fee),
+        $.userBalances[order.overUser]
+      );
+    }
 
-      order.isSettled = true;   
-      if ($.lastSettledFilledOrderId < order.idx) {
-        $.lastSettledFilledOrderId = order.idx;
-      }
-      return collectedFee; 
+    order.isSettled = true;
+    if ($.lastSettledFilledOrderId < order.idx) {
+      $.lastSettledFilledOrderId = order.idx;
+    }
+    return collectedFee;
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -677,8 +681,6 @@ contract StVolHourly is
   function _combine(uint256 a, uint256 b) internal pure returns (uint256) {
     return (a << 128) | b;
   }
-
-  
 
   function _verify(
     bytes32 hash,
