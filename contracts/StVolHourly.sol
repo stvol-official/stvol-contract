@@ -279,13 +279,14 @@ contract StVolHourly is
     MainStorage storage $ = _getMainStorage();
     Round storage round = $.rounds[epoch];
 
-    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) return 0;
+    require(round.epoch > 0 && round.startTimestamp > 0 && round.endTimestamp > 0, "invalid round");
+    require(round.startPrice[0] > 0 && round.endPrice[0] > 0, "invalid round price");
 
-    uint256 collectedFee = 0;
     FilledOrder[] storage orders = $.filledOrders[epoch];
-
     uint256 startIndex = $.lastSettledFilledOrderIndex[epoch];
     uint256 endIndex = startIndex + size < orders.length ? startIndex + size : orders.length;
+
+    uint256 collectedFee = 0;
 
     for (uint i = startIndex; i < endIndex; i++) {
       FilledOrder storage order = orders[i];

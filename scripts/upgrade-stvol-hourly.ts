@@ -48,7 +48,7 @@ const upgrade = async () => {
 
     const network = await ethers.getDefaultProvider().getNetwork();
 
-    await sleep(5000);
+    await sleep(6000);
 
     console.log("Verifying contracts...");
     await run("verify:verify", {
