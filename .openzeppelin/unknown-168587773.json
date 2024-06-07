@@ -11489,7 +11489,12 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0x2533Ed4B3067E2B01E3bbA4C3915a70a0A6140cE",
+        "0xB2f355CFbaD714579751C2dd9902650570aE19A3",
+        "0x0AB696dA66dfA164b40d44fdAB4338028C6d7520"
+      ]
     }
   }
 }
