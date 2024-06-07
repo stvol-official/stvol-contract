@@ -296,6 +296,13 @@ contract StVolHourly is
     return orders.length - endIndex;
   }
 
+  function countUnsettledFilledOrders(uint256 epoch) external view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    uint256 index = $.lastSettledFilledOrderIndex[epoch];
+    FilledOrder[] storage orders = $.filledOrders[epoch];
+    return orders.length - index;
+  }
+
   function deposit(uint256 amount) external nonReentrant {
     MainStorage storage $ = _getMainStorage();
     $.token.safeTransferFrom(msg.sender, address(this), amount);

@@ -5,7 +5,12 @@ import input from "@inquirer/input";
  npx hardhat run --network blast_sepolia scripts/upgrade-stvol-hourly.ts
 */
 
-const DEPLOYED_PROXY = "0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61";
+const DEPLOYED_PROXY = "0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61"; // for development
+// 0xeA56775374B5858eA454fB857477E0E728C9062d for production
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 const upgrade = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
@@ -42,6 +47,8 @@ const upgrade = async () => {
     console.log(`🍣 ${STVOL_NAME} Contract deployed at ${stVolContractAddress}`);
 
     const network = await ethers.getDefaultProvider().getNetwork();
+
+    await sleep(5000);
 
     console.log("Verifying contracts...");
     await run("verify:verify", {
