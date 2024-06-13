@@ -61,6 +61,15 @@ export default {
       },
       chainId: 11155111,
     },
+    blast: {
+      url: "https://rpc.blast.io",
+      gas: 1000000000,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 81457,
+    },
+
     blast_sepolia: {
       url: "https://sepolia.blast.io",
       gas: 1000000000,
@@ -137,6 +146,7 @@ export default {
       arbitrumGoerli: process.env.ARBITRUM_ETHERSCAN_KEY,
       sepolia: process.env.ETHERSCAN_KEY,
       arbitrumSepolia: process.env.ARBITRUM_ETHERSCAN_KEY,
+      blast: "TFDY5ED33UQZK3E7VARC3M75TBI9FBHNBE", // rossvolt https://blastscan.io/myapikey
       blastSepolia: "blast_sepolia", // apiKey is not required, just set a placeholder
     },
     customChains: [
@@ -146,6 +156,14 @@ export default {
         urls: {
           apiURL: "https://api-sepolia.arbiscan.io/api",
           browserURL: "https://sepolia.arbiscan.io/",
+        },
+      },
+      {
+        network: "blast",
+        chainId: 81457,
+        urls: {
+          apiURL: "https://api.blastscan.io/api",
+          browserURL: "https://blastscan.io/",
         },
       },
       {

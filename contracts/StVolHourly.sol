@@ -56,6 +56,7 @@ contract StVolHourly is
   using SafeERC20 for IERC20;
 
   function _priceIds() internal pure returns (bytes32[] memory) {
+    // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
     // to add products, upgrade the contract
     bytes32[] memory priceIds = new bytes32[](3);
     // priceIds[productId] = pyth price id
@@ -67,9 +68,12 @@ contract StVolHourly is
   }
 
   // for blast
-  IERC20 public constant USDB = IERC20(0x0B8a205c26ECFc423DE29a8EF18e1229a0Cc4F47);
-  IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
-  IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
+  IERC20Rebasing public constant USDB = IERC20Rebasing(0x4300000000000000000000000000000000000003); // mainnet
+  IERC20Rebasing public constant WETH = IERC20Rebasing(0x4300000000000000000000000000000000000004); // mainnet
+
+  // IERC20 public constant USDB = IERC20(0x0B8a205c26ECFc423DE29a8EF18e1229a0Cc4F47); // testnet
+  // IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023); // testnet
+  IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002); // Blast yield contract
 
   uint256 private constant PRICE_UNIT = 1e18;
   uint256 private constant BASE = 10000; // 100%
@@ -209,7 +213,8 @@ contract StVolHourly is
 
     MainStorage storage $ = _getMainStorage();
 
-    $.token = USDB;
+    $.token = IERC20(0x4300000000000000000000000000000000000003); // mainnet
+    // $.token = IERC20(USDB); // tesetnet
     $.oracle = IPyth(_oracleAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
@@ -217,6 +222,7 @@ contract StVolHourly is
     $.commissionfee = _commissionfee;
 
     WETH.configure(YieldMode.CLAIMABLE);
+    USDB.configure(YieldMode.CLAIMABLE); // mainnet
     BLAST.configureClaimableGas();
   }
 

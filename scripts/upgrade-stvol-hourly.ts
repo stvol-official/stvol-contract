@@ -5,6 +5,7 @@ import input from "@inquirer/input";
  npx hardhat run --network blast_sepolia scripts/upgrade-stvol-hourly.ts
 */
 
+const NETWORK = ["blast", "blast_sepolia"];
 const DEPLOYED_PROXY = "0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61"; // for development
 // 0xeA56775374B5858eA454fB857477E0E728C9062d for production
 
@@ -26,7 +27,7 @@ const upgrade = async () => {
   });
 
   // Check if the network is supported.
-  if (networkName === "blast_sepolia") {
+  if (NETWORK.includes(networkName)) {
     console.log(`Deploying to ${networkName} network...`);
 
     // Compile contracts.

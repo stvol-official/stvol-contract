@@ -2,6 +2,7 @@ import { ethers, network, run, upgrades } from "hardhat";
 import config from "../config";
 
 /*
+ npx hardhat run --network blast scripts/deploy-stvol-hourly.ts
  npx hardhat run --network blast_sepolia scripts/deploy-stvol-hourly.ts
 */
 
@@ -11,7 +12,7 @@ const main = async () => {
   const STVOL_NAME = "StVolHourly";
 
   // Check if the network is supported.
-  if (networkName === "blast_sepolia") {
+  if (networkName === "blast_sepolia" || networkName === "blast") {
     console.log(`Deploying to ${networkName} network...`);
 
     // Check if the addresses in the config are set.
