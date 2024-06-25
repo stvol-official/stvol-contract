@@ -20,7 +20,7 @@ export default {
       sepolia: "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
       blast: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
       blast_sepolia: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
-      base_sepolia: "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
+      base_sepolia: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
     },
     // Oracle: {
     //   mainnet: "",

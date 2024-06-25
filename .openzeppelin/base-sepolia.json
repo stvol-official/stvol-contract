@@ -5,6 +5,11 @@
       "address": "0x0e40E59B71725043d847A50A647BbaFD24d2e74E",
       "txHash": "0x97403069455dda3ca714d7bcb7a2e12bf43237f57be00502cb3d06aa98fded50",
       "kind": "uups"
+    },
+    {
+      "address": "0x4e1e1c633D7770679e6c9748e940AfE4fD59816E",
+      "txHash": "0x9db3afe2ba3669f7d56959df4fec822e480f2967f9dfc80f44355e17cf53f533",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -19,11 +24,11 @@
             "label": "address",
             "numberOfBytes": "20"
           },
-          "t_array(t_struct(FilledOrder)751_storage)dyn_storage": {
+          "t_array(t_struct(FilledOrder)1414_storage)dyn_storage": {
             "label": "struct StVolHourly.FilledOrder[]",
             "numberOfBytes": "32"
           },
-          "t_array(t_struct(WithdrawalRequest)764_storage)dyn_storage": {
+          "t_array(t_struct(WithdrawalRequest)1427_storage)dyn_storage": {
             "label": "struct StVolHourly.WithdrawalRequest[]",
             "numberOfBytes": "32"
           },
@@ -31,11 +36,11 @@
             "label": "bool",
             "numberOfBytes": "1"
           },
-          "t_contract(IERC20)388": {
+          "t_contract(IERC20)592": {
             "label": "contract IERC20",
             "numberOfBytes": "20"
           },
-          "t_contract(IPyth)567": {
+          "t_contract(IPyth)869": {
             "label": "contract IPyth",
             "numberOfBytes": "20"
           },
@@ -43,11 +48,11 @@
             "label": "mapping(address => uint256)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_array(t_struct(FilledOrder)751_storage)dyn_storage)": {
+          "t_mapping(t_uint256,t_array(t_struct(FilledOrder)1414_storage)dyn_storage)": {
             "label": "mapping(uint256 => struct StVolHourly.FilledOrder[])",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(Round)715_storage)": {
+          "t_mapping(t_uint256,t_struct(Round)1378_storage)": {
             "label": "mapping(uint256 => struct StVolHourly.Round)",
             "numberOfBytes": "32"
           },
@@ -59,7 +64,7 @@
             "label": "string",
             "numberOfBytes": "32"
           },
-          "t_struct(FilledOrder)751_storage": {
+          "t_struct(FilledOrder)1414_storage": {
             "label": "struct StVolHourly.FilledOrder",
             "members": [
               {
@@ -125,7 +130,7 @@
             ],
             "numberOfBytes": "320"
           },
-          "t_struct(InitializableStorage)64_storage": {
+          "t_struct(InitializableStorage)77_storage": {
             "label": "struct Initializable.InitializableStorage",
             "members": [
               {
@@ -143,18 +148,18 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(MainStorage)685_storage": {
+          "t_struct(MainStorage)1348_storage": {
             "label": "struct StVolHourly.MainStorage",
             "members": [
               {
                 "label": "token",
-                "type": "t_contract(IERC20)388",
+                "type": "t_contract(IERC20)592",
                 "offset": 0,
                 "slot": "0"
               },
               {
                 "label": "oracle",
-                "type": "t_contract(IPyth)567",
+                "type": "t_contract(IPyth)869",
                 "offset": 0,
                 "slot": "1"
               },
@@ -190,7 +195,7 @@
               },
               {
                 "label": "rounds",
-                "type": "t_mapping(t_uint256,t_struct(Round)715_storage)",
+                "type": "t_mapping(t_uint256,t_struct(Round)1378_storage)",
                 "offset": 0,
                 "slot": "7"
               },
@@ -202,7 +207,7 @@
               },
               {
                 "label": "filledOrders",
-                "type": "t_mapping(t_uint256,t_array(t_struct(FilledOrder)751_storage)dyn_storage)",
+                "type": "t_mapping(t_uint256,t_array(t_struct(FilledOrder)1414_storage)dyn_storage)",
                 "offset": 0,
                 "slot": "9"
               },
@@ -220,7 +225,7 @@
               },
               {
                 "label": "withdrawalRequests",
-                "type": "t_array(t_struct(WithdrawalRequest)764_storage)dyn_storage",
+                "type": "t_array(t_struct(WithdrawalRequest)1427_storage)dyn_storage",
                 "offset": 0,
                 "slot": "12"
               },
@@ -239,7 +244,7 @@
             ],
             "numberOfBytes": "480"
           },
-          "t_struct(OwnableStorage)14_storage": {
+          "t_struct(OwnableStorage)27_storage": {
             "label": "struct OwnableUpgradeable.OwnableStorage",
             "members": [
               {
@@ -251,7 +256,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(PausableStorage)190_storage": {
+          "t_struct(PausableStorage)203_storage": {
             "label": "struct PausableUpgradeable.PausableStorage",
             "members": [
               {
@@ -263,7 +268,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(ReentrancyGuardStorage)251_storage": {
+          "t_struct(ReentrancyGuardStorage)264_storage": {
             "label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
             "members": [
               {
@@ -275,7 +280,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(Round)715_storage": {
+          "t_struct(Round)1378_storage": {
             "label": "struct StVolHourly.Round",
             "members": [
               {
@@ -323,7 +328,7 @@
             ],
             "numberOfBytes": "224"
           },
-          "t_struct(WithdrawalRequest)764_storage": {
+          "t_struct(WithdrawalRequest)1427_storage": {
             "label": "struct StVolHourly.WithdrawalRequest",
             "members": [
               {
@@ -379,7 +384,7 @@
             {
               "contract": "StVolHourly",
               "label": "token",
-              "type": "t_contract(IERC20)388",
+              "type": "t_contract(IERC20)592",
               "src": "contracts/StVolHourly.sol:45",
               "offset": 0,
               "slot": "0"
@@ -387,7 +392,7 @@
             {
               "contract": "StVolHourly",
               "label": "oracle",
-              "type": "t_contract(IPyth)567",
+              "type": "t_contract(IPyth)869",
               "src": "contracts/StVolHourly.sol:46",
               "offset": 0,
               "slot": "1"
@@ -435,7 +440,7 @@
             {
               "contract": "StVolHourly",
               "label": "rounds",
-              "type": "t_mapping(t_uint256,t_struct(Round)715_storage)",
+              "type": "t_mapping(t_uint256,t_struct(Round)1378_storage)",
               "src": "contracts/StVolHourly.sol:52",
               "offset": 0,
               "slot": "7"
@@ -451,7 +456,7 @@
             {
               "contract": "StVolHourly",
               "label": "filledOrders",
-              "type": "t_mapping(t_uint256,t_array(t_struct(FilledOrder)751_storage)dyn_storage)",
+              "type": "t_mapping(t_uint256,t_array(t_struct(FilledOrder)1414_storage)dyn_storage)",
               "src": "contracts/StVolHourly.sol:54",
               "offset": 0,
               "slot": "9"
@@ -475,7 +480,7 @@
             {
               "contract": "StVolHourly",
               "label": "withdrawalRequests",
-              "type": "t_array(t_struct(WithdrawalRequest)764_storage)dyn_storage",
+              "type": "t_array(t_struct(WithdrawalRequest)1427_storage)dyn_storage",
               "src": "contracts/StVolHourly.sol:57",
               "offset": 0,
               "slot": "12"
@@ -549,6 +554,7 @@
       },
       "allAddresses": [
         "0xa9caaeffCFEd200454C3272BD2166429846ecD0D",
+        "0x7310760c1628c102D20fAff1caE3fA4F4BF00383",
         "0x56b7F20033cD3909938B9953480706354a171582",
         "0x0784cD148455e6568CbD528447F9344Dd7C07877"
       ]
