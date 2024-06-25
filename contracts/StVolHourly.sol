@@ -12,40 +12,6 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
-enum YieldMode {
-  AUTOMATIC,
-  VOID,
-  CLAIMABLE
-}
-
-interface IERC20Rebasing {
-  function configure(YieldMode) external returns (uint256);
-
-  function claim(address recipient, uint256 amount) external returns (uint256);
-
-  function getClaimableAmount(address account) external view returns (uint256);
-}
-
-enum GasMode {
-  VOID,
-  CLAIMABLE
-}
-
-interface IBlast {
-  function configureClaimableGas() external;
-
-  function claimAllGas(address contractAddress, address recipient) external returns (uint256);
-
-  function claimMaxGas(address contractAddress, address recipientOfGas) external returns (uint256);
-
-  function readGasParams(
-    address contractAddress
-  )
-    external
-    view
-    returns (uint256 etherSeconds, uint256 etherBalance, uint256 lastUpdated, GasMode);
-}
-
 contract StVolHourly is
   Initializable,
   UUPSUpgradeable,
@@ -67,20 +33,12 @@ contract StVolHourly is
     return priceIds;
   }
 
-  // for blast
-  IERC20Rebasing public constant USDB = IERC20Rebasing(0x4300000000000000000000000000000000000003); // mainnet
-  IERC20Rebasing public constant WETH = IERC20Rebasing(0x4300000000000000000000000000000000000004); // mainnet
-
-  // IERC20 public constant USDB = IERC20(0x0B8a205c26ECFc423DE29a8EF18e1229a0Cc4F47); // testnet
-  // IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023); // testnet
-  IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002); // Blast yield contract
-
   uint256 private constant PRICE_UNIT = 1e18;
   uint256 private constant BASE = 10000; // 100%
   uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
-  uint256 private constant START_TIMESTAMP = 1713571200; // for epoch
+  uint256 private constant START_TIMESTAMP = 1719187200; // for epoch
 
   /// @custom:storage-location erc7201:stvolhourly.main
   struct MainStorage {
@@ -213,17 +171,12 @@ contract StVolHourly is
 
     MainStorage storage $ = _getMainStorage();
 
-    $.token = IERC20(0x4300000000000000000000000000000000000003); // mainnet
-    // $.token = IERC20(USDB); // tesetnet
+    $.token = IERC20(0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC); // testnet
     $.oracle = IPyth(_oracleAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
     $.operatorVaultAddress = _operatorVaultAddress;
     $.commissionfee = _commissionfee;
-
-    WETH.configure(YieldMode.CLAIMABLE);
-    USDB.configure(YieldMode.CLAIMABLE); // mainnet
-    BLAST.configureClaimableGas();
   }
 
   function currentEpoch() external view returns (uint256) {
@@ -735,37 +688,5 @@ contract StVolHourly is
     startTime = START_TIMESTAMP + (epoch * 3600);
     endTime = startTime + 3600;
     return (startTime, endTime);
-  }
-
-  // blast functions
-
-  function getClaimableYield(address tokenAddress) external view onlyOwner returns (uint256) {
-    return IERC20Rebasing(tokenAddress).getClaimableAmount(address(this));
-  }
-
-  function claimYield(
-    address tokenAddress,
-    address recipient
-  ) external onlyOwner returns (uint256 claimAmount) {
-    IERC20Rebasing token = IERC20Rebasing(tokenAddress);
-    claimAmount = token.getClaimableAmount(address(this));
-    token.claim(recipient, claimAmount);
-  }
-
-  function getClaimableGas()
-    external
-    view
-    onlyOwner
-    returns (uint256 etherSeconds, uint256 etherBalance, uint256 lastUpdated, GasMode)
-  {
-    return BLAST.readGasParams(address(this));
-  }
-
-  function claimAllGas(address recipient) external onlyOwner returns (uint256) {
-    return BLAST.claimAllGas(address(this), recipient);
-  }
-
-  function claimMaxGas(address recipient) external onlyOwner returns (uint256) {
-    return BLAST.claimMaxGas(address(this), recipient);
   }
 }

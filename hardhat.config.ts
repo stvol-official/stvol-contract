@@ -105,6 +105,15 @@ export default {
       },
       chainId: 5,
     },
+    base_sepolia: {
+      url: `https://sepolia.base.org`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 84532,
+    },
   },
   solidity: {
     compilers: [
@@ -148,6 +157,7 @@ export default {
       arbitrumSepolia: process.env.ARBITRUM_ETHERSCAN_KEY,
       blast: "TFDY5ED33UQZK3E7VARC3M75TBI9FBHNBE", // rossvolt https://blastscan.io/myapikey
       blastSepolia: "blast_sepolia", // apiKey is not required, just set a placeholder
+      baseSepolia: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
     },
     customChains: [
       {
@@ -172,6 +182,14 @@ export default {
         urls: {
           apiURL: "https://api-sepolia.blastscan.io/api",
           browserURL: "https://sepolia.blastscan.io/",
+        },
+      },
+      {
+        network: "baseSepolia",
+        chainId: 84532,
+        urls: {
+          apiURL: "https://api-sepolia.basescan.org/api",
+          browserURL: "https://sepolia.basescan.org",
         },
       },
     ],
