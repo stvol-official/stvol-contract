@@ -16,6 +16,7 @@ const main = async () => {
   if (
     networkName === "blast_sepolia" ||
     networkName === "blast" ||
+    networkName === "base" ||
     networkName === "base_sepolia"
   ) {
     console.log(`Deploying to ${networkName} network...`);

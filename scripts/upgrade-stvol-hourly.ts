@@ -2,12 +2,14 @@ import { ethers, network, run, upgrades } from "hardhat";
 import input from "@inquirer/input";
 
 /*
+ npx hardhat run --network base scripts/upgrade-stvol-hourly.ts
  npx hardhat run --network base_sepolia scripts/upgrade-stvol-hourly.ts
  npx hardhat run --network blast_sepolia scripts/upgrade-stvol-hourly.ts
 */
 
-const NETWORK = ["blast", "blast_sepolia", "base_sepolia"];
-const DEPLOYED_PROXY = "0x4e1e1c633D7770679e6c9748e940AfE4fD59816E"; // for base.sepolia development
+const NETWORK = ["blast", "blast_sepolia", "base", "base_sepolia"];
+const DEPLOYED_PROXY = "0x34834F208F149e0269394324c3f19e06dF2ca9cB"; // for base
+// 0x4e1e1c633D7770679e6c9748e940AfE4fD59816E for base.sepolia development
 // 0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61 for development
 // 0xeA56775374B5858eA454fB857477E0E728C9062d for production
 

@@ -105,6 +105,15 @@ export default {
       },
       chainId: 5,
     },
+    base: {
+      url: `https://mainnet.base.org`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 8453,
+    },
     base_sepolia: {
       url: `https://sepolia.base.org`,
       gas: 22000000,
@@ -157,6 +166,7 @@ export default {
       arbitrumSepolia: process.env.ARBITRUM_ETHERSCAN_KEY,
       blast: "TFDY5ED33UQZK3E7VARC3M75TBI9FBHNBE", // rossvolt https://blastscan.io/myapikey
       blastSepolia: "blast_sepolia", // apiKey is not required, just set a placeholder
+      base: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
       baseSepolia: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
     },
     customChains: [
@@ -182,6 +192,14 @@ export default {
         urls: {
           apiURL: "https://api-sepolia.blastscan.io/api",
           browserURL: "https://sepolia.blastscan.io/",
+        },
+      },
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.basescan.org/api",
+          browserURL: "https://basescan.org/",
         },
       },
       {
