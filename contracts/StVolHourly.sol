@@ -24,11 +24,11 @@ contract StVolHourly is
   function _priceIds() internal pure returns (bytes32[] memory) {
     // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
     // to add products, upgrade the contract
-    bytes32[] memory priceIds = new bytes32[](3);
+    bytes32[] memory priceIds = new bytes32[](2);
     // priceIds[productId] = pyth price id
     priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
     priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
-    priceIds[2] = 0x4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc; // wif
+    // priceIds[2] = 0x4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc; // wif
 
     return priceIds;
   }
