@@ -33,7 +33,7 @@ contract StVolHourly is
     return priceIds;
   }
 
-  uint256 private constant PRICE_UNIT = 1e18;
+  uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant BASE = 10000; // 100%
   uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
