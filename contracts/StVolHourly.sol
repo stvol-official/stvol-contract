@@ -193,12 +193,13 @@ contract StVolHourly is
     PythStructs.PriceFeed[] memory feeds = _getPythPrices(priceUpdateData, initDate);
 
     uint256 startEpoch = _epochAt(initDate);
+    uint256 currentEpochNumber = _epochAt(block.timestamp);
 
     MainStorage storage $ = _getMainStorage();
 
     // start current round
     Round storage round = $.rounds[startEpoch];
-    if (!round.isStarted) {
+    if (startEpoch == currentEpochNumber && !round.isStarted) {
       round.epoch = startEpoch;
       round.startTimestamp = initDate;
       round.endTimestamp = initDate + INTERVAL_SECONDS;
