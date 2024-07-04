@@ -581,8 +581,12 @@ contract StVolHourly is
     uint256 collectedFee = 0;
 
     if (order.overUser == order.underUser) {
-      uint256 amount = 100 * order.unit * PRICE_UNIT;
-      uint256 fee = (amount * $.commissionfee) / BASE;
+      uint256 loosePositionAmount = (
+        isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0
+      ) *
+        order.unit *
+        PRICE_UNIT;
+      uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
       $.userBalances[order.overUser] -= fee;
       $.treasuryAmount += fee;
       collectedFee += fee;

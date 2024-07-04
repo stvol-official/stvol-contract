@@ -10,6 +10,11 @@
       "address": "0x4e1e1c633D7770679e6c9748e940AfE4fD59816E",
       "txHash": "0x9db3afe2ba3669f7d56959df4fec822e480f2967f9dfc80f44355e17cf53f533",
       "kind": "uups"
+    },
+    {
+      "address": "0x9A24180389180a0fc2e849C8995fB38B5088fB5B",
+      "txHash": "0x552ac8add164203e3c3a7eaabb9abf75f718b8e8c7a03b8d0fc9282b8801839f",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -558,6 +563,546 @@
         "0x56b7F20033cD3909938B9953480706354a171582",
         "0x0784cD148455e6568CbD528447F9344Dd7C07877"
       ]
+    },
+    "b5546a37f35b7bf405c185decc788444549ff6a99cd122c7412432c94f8f43c0": {
+      "address": "0x6C84373E789f4099243BFeef1aE619fc477d9716",
+      "txHash": "0xfc3dd10235d1aff70562fe9ebc76f8781da8acb2e23051b79c7325d2c1c995c5",
+      "layout": {
+        "solcVersion": "0.8.20",
+        "storage": [],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_struct(FilledOrder)751_storage)dyn_storage": {
+            "label": "struct StVolHourly.FilledOrder[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(WithdrawalRequest)764_storage)dyn_storage": {
+            "label": "struct StVolHourly.WithdrawalRequest[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(IERC20)388": {
+            "label": "contract IERC20",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IPyth)567": {
+            "label": "contract IPyth",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_struct(FilledOrder)751_storage)dyn_storage)": {
+            "label": "mapping(uint256 => struct StVolHourly.FilledOrder[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Round)715_storage)": {
+            "label": "mapping(uint256 => struct StVolHourly.Round)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(FilledOrder)751_storage": {
+            "label": "struct StVolHourly.FilledOrder",
+            "members": [
+              {
+                "label": "idx",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "epoch",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "productId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "strike",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "overUser",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "underUser",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "overPrice",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "underPrice",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "unit",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "isSettled",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "9"
+              }
+            ],
+            "numberOfBytes": "320"
+          },
+          "t_struct(InitializableStorage)64_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(MainStorage)685_storage": {
+            "label": "struct StVolHourly.MainStorage",
+            "members": [
+              {
+                "label": "token",
+                "type": "t_contract(IERC20)388",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "oracle",
+                "type": "t_contract(IPyth)567",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "adminAddress",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "operatorAddress",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "operatorVaultAddress",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "commissionfee",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "treasuryAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "rounds",
+                "type": "t_mapping(t_uint256,t_struct(Round)715_storage)",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "userBalances",
+                "type": "t_mapping(t_address,t_uint256)",
+                "offset": 0,
+                "slot": "8"
+              },
+              {
+                "label": "filledOrders",
+                "type": "t_mapping(t_uint256,t_array(t_struct(FilledOrder)751_storage)dyn_storage)",
+                "offset": 0,
+                "slot": "9"
+              },
+              {
+                "label": "lastFilledOrderId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "10"
+              },
+              {
+                "label": "lastSubmissionTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "11"
+              },
+              {
+                "label": "withdrawalRequests",
+                "type": "t_array(t_struct(WithdrawalRequest)764_storage)dyn_storage",
+                "offset": 0,
+                "slot": "12"
+              },
+              {
+                "label": "lastSettledFilledOrderId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "13"
+              },
+              {
+                "label": "lastSettledFilledOrderIndex",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "14"
+              }
+            ],
+            "numberOfBytes": "480"
+          },
+          "t_struct(OwnableStorage)14_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(PausableStorage)190_storage": {
+            "label": "struct PausableUpgradeable.PausableStorage",
+            "members": [
+              {
+                "label": "_paused",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(ReentrancyGuardStorage)251_storage": {
+            "label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
+            "members": [
+              {
+                "label": "_status",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(Round)715_storage": {
+            "label": "struct StVolHourly.Round",
+            "members": [
+              {
+                "label": "epoch",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "startTimestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "endTimestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "isSettled",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "startPrice",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "endPrice",
+                "type": "t_mapping(t_uint256,t_uint256)",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "isStarted",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(WithdrawalRequest)764_storage": {
+            "label": "struct StVolHourly.WithdrawalRequest",
+            "members": [
+              {
+                "label": "idx",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "user",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "amount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "processed",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "message",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "created",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              }
+            ],
+            "numberOfBytes": "192"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          }
+        },
+        "namespaces": {
+          "erc7201:stvolhourly.main": [
+            {
+              "contract": "StVolHourly",
+              "label": "token",
+              "type": "t_contract(IERC20)388",
+              "src": "contracts/StVolHourly.sol:45",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "oracle",
+              "type": "t_contract(IPyth)567",
+              "src": "contracts/StVolHourly.sol:46",
+              "offset": 0,
+              "slot": "1"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "adminAddress",
+              "type": "t_address",
+              "src": "contracts/StVolHourly.sol:47",
+              "offset": 0,
+              "slot": "2"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "operatorAddress",
+              "type": "t_address",
+              "src": "contracts/StVolHourly.sol:48",
+              "offset": 0,
+              "slot": "3"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "operatorVaultAddress",
+              "type": "t_address",
+              "src": "contracts/StVolHourly.sol:49",
+              "offset": 0,
+              "slot": "4"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "commissionfee",
+              "type": "t_uint256",
+              "src": "contracts/StVolHourly.sol:50",
+              "offset": 0,
+              "slot": "5"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "treasuryAmount",
+              "type": "t_uint256",
+              "src": "contracts/StVolHourly.sol:51",
+              "offset": 0,
+              "slot": "6"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "rounds",
+              "type": "t_mapping(t_uint256,t_struct(Round)715_storage)",
+              "src": "contracts/StVolHourly.sol:52",
+              "offset": 0,
+              "slot": "7"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "userBalances",
+              "type": "t_mapping(t_address,t_uint256)",
+              "src": "contracts/StVolHourly.sol:53",
+              "offset": 0,
+              "slot": "8"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "filledOrders",
+              "type": "t_mapping(t_uint256,t_array(t_struct(FilledOrder)751_storage)dyn_storage)",
+              "src": "contracts/StVolHourly.sol:54",
+              "offset": 0,
+              "slot": "9"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "lastFilledOrderId",
+              "type": "t_uint256",
+              "src": "contracts/StVolHourly.sol:55",
+              "offset": 0,
+              "slot": "10"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "lastSubmissionTime",
+              "type": "t_uint256",
+              "src": "contracts/StVolHourly.sol:56",
+              "offset": 0,
+              "slot": "11"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "withdrawalRequests",
+              "type": "t_array(t_struct(WithdrawalRequest)764_storage)dyn_storage",
+              "src": "contracts/StVolHourly.sol:57",
+              "offset": 0,
+              "slot": "12"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "lastSettledFilledOrderId",
+              "type": "t_uint256",
+              "src": "contracts/StVolHourly.sol:58",
+              "offset": 0,
+              "slot": "13"
+            },
+            {
+              "contract": "StVolHourly",
+              "label": "lastSettledFilledOrderIndex",
+              "type": "t_mapping(t_uint256,t_uint256)",
+              "src": "contracts/StVolHourly.sol:59",
+              "offset": 0,
+              "slot": "14"
+            }
+          ],
+          "erc7201:openzeppelin.storage.ReentrancyGuard": [
+            {
+              "contract": "ReentrancyGuardUpgradeable",
+              "label": "_status",
+              "type": "t_uint256",
+              "src": "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol:40",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Pausable": [
+            {
+              "contract": "PausableUpgradeable",
+              "label": "_paused",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol:21",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
     }
   }
 }
