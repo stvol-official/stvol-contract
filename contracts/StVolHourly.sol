@@ -228,6 +228,7 @@ contract StVolHourly is
         prevRound.endPrice[i] = pythPrice;
         emit EndRound(prevEpoch, i, pythPrice, initDate);
       }
+      prevRound.isSettled = true;
     }
 
     if (!skipSettlement) {
@@ -551,8 +552,7 @@ contract StVolHourly is
   function _settleFilledOrders(Round storage round) internal {
     MainStorage storage $ = _getMainStorage();
 
-    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0 || round.isSettled)
-      return;
+    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) return;
 
     uint256 collectedFee = 0;
     FilledOrder[] storage orders = $.filledOrders[round.epoch];
@@ -561,7 +561,7 @@ contract StVolHourly is
       collectedFee += _settleFilledOrder(round, order);
     }
     $.lastSettledFilledOrderIndex[round.epoch] = orders.length;
-    round.isSettled = true;
+
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
 
@@ -580,7 +580,22 @@ contract StVolHourly is
 
     uint256 collectedFee = 0;
 
-    if (order.overUser == order.underUser) {
+    if (order.overPrice + order.underPrice != 100) {
+      emit OrderSettled(
+        order.underUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.underUser],
+        $.userBalances[order.underUser]
+      );
+      emit OrderSettled(
+        order.overUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.overUser],
+        $.userBalances[order.overUser]
+      );
+    } else if (order.overUser == order.underUser) {
       uint256 loosePositionAmount = (
         isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0
       ) *
@@ -641,6 +656,22 @@ contract StVolHourly is
         $.userBalances[order.overUser] - (amount - fee),
         $.userBalances[order.overUser]
       );
+    } else {
+      // no one wins
+      emit OrderSettled(
+        order.underUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.underUser],
+        $.userBalances[order.underUser]
+      );
+      emit OrderSettled(
+        order.overUser,
+        order.idx,
+        order.epoch,
+        $.userBalances[order.overUser],
+        $.userBalances[order.overUser]
+      );
     }
 
     order.isSettled = true;
@@ -652,37 +683,8 @@ contract StVolHourly is
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-  function _combine(uint256 a, uint256 b) internal pure returns (uint256) {
-    return (a << 128) | b;
-  }
-
-  function _verify(
-    bytes32 hash,
-    bytes memory signature,
-    string calldata message,
-    address signer
-  ) public pure returns (bool) {
-    bytes32 ethSignedHash = keccak256(abi.encodePacked(message, hash));
-
-    (bytes32 r, bytes32 s, uint8 v) = _splitSignature(signature);
-    address recovered = ecrecover(ethSignedHash, v, r, s);
-
-    return (recovered == signer);
-  }
-
-  function _splitSignature(bytes memory sig) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
-    require(sig.length == 65, "invalid signature length");
-
-    assembly {
-      r := mload(add(sig, 32))
-      s := mload(add(sig, 64))
-      v := byte(0, mload(add(sig, 96)))
-    }
-  }
-
   function _epochAt(uint256 timestamp) internal pure returns (uint256) {
     require(timestamp >= START_TIMESTAMP, "Epoch has not started yet");
-
     uint256 elapsedSeconds = timestamp - START_TIMESTAMP;
     uint256 elapsedHours = elapsedSeconds / 3600;
     return elapsedHours;
