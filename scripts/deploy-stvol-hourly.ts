@@ -34,8 +34,12 @@ const main = async () => {
 
     // Compile contracts.
     await run("compile");
+
+    const [deployer] = await ethers.getSigners();
+
     console.log("Compiled contracts...");
     console.log("===========================================");
+    console.log("Owner: %s", deployer.address);
     console.log("Oracle: %s", config.Address.Oracle[networkName]);
     console.log("Admin: %s", config.Address.Admin[networkName]);
     console.log("Operator: %s", config.Address.Operator[networkName]);

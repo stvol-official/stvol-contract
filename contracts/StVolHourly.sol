@@ -38,7 +38,7 @@ contract StVolHourly is
   uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
-  uint256 private constant START_TIMESTAMP = 1719532800; // for epoch
+  uint256 private constant START_TIMESTAMP = 1720332000; // for epoch
 
   /// @custom:storage-location erc7201:stvolhourly.main
   struct MainStorage {

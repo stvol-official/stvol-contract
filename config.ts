@@ -33,7 +33,7 @@ export default {
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
       blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
-      base_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      base_sepolia: "0x26B85826014fF3483CBC550B3DDAF5954cc15d70",
       base: "0x26B85826014fF3483CBC550B3DDAF5954cc15d70",
     },
     Operator: {
@@ -45,7 +45,7 @@ export default {
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
       blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
-      base_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      base_sepolia: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
       base: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
     },
     OperatorVault: {
@@ -57,7 +57,7 @@ export default {
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
       blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
-      base_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      base_sepolia: "0xfc48F475E7296c9e645311B85F8F2bcb64BD8fbd",
       base: "0xfc48F475E7296c9e645311B85F8F2bcb64BD8fbd",
     },
   },
