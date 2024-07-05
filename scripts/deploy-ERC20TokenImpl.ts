@@ -10,7 +10,7 @@ const main = async () => {
   const networkName = network.name;
   const name = "STVOL TEST USDC";
   const symbol = "vUSDC";
-  const decimal = 18;
+  const decimal = 6;
 
   // Check if the network is supported.
   if (
@@ -24,6 +24,11 @@ const main = async () => {
     // Compile contracts.
     await run("compile");
     console.log("Compiled contracts. Deploying...");
+    console.log("===========================================");
+    console.log("networkName: %s", networkName);
+    console.log("name: %s", name);
+    console.log("symbol: %s", symbol);
+    console.log("decimal: %d", decimal);
 
     const ERC20TokenImpl = await ethers.getContractFactory("ERC20TokenImpl");
     const contract = await ERC20TokenImpl.deploy(name, symbol, decimal);

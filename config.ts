@@ -45,8 +45,8 @@ export default {
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
       blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
-      base_sepolia: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
-      base: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
+      base_sepolia: "0x02F5BC2D279D2Ff10CACa13e04D80587824951C8",
+      base: "0x02F5BC2D279D2Ff10CACa13e04D80587824951C8",
     },
     OperatorVault: {
       mainnet: "0xFb6B24942a19F138EF468EC39Ce8653A87500832",

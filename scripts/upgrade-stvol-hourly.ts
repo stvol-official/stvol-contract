@@ -13,8 +13,8 @@ const DEPLOYED_PROXY = "0x86C02dc3C4060dF1E59260a67caa3881b5951eC1"; // for base
 // 0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61 for development
 // 0xeA56775374B5858eA454fB857477E0E728C9062d for production
 
-// 0x508726EC7884225CE231814aB2C42793b6B93A46 for base mainnet (after 777)
-// 0x618148f2Bb58C5c89737BB160070613d4E1b790a for base sepolia (after 777)
+// 0x2F6cddD6d22B0FA917CC81166D26B4b9C9834f9A for base mainnet (after 777)
+// 0x2F6cddD6d22B0FA917CC81166D26B4b9C9834f9A for base sepolia (after 777)
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
