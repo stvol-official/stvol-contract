@@ -281,6 +281,7 @@ contract StVolHourly is
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
+    require(amount > PRICE_UNIT, "Amount must be greater than 1");
     require($.userBalances[user] >= amount, "Insufficient user balance");
     $.userBalances[user] -= amount;
     $.token.safeTransfer(user, amount);
@@ -292,7 +293,7 @@ contract StVolHourly is
   ) external nonReentrant returns (WithdrawalRequest memory) {
     address user = msg.sender;
     MainStorage storage $ = _getMainStorage();
-    require(amount > 0, "Amount must be greater than zero");
+    require(amount > PRICE_UNIT, "Amount must be greater than 1");
     require($.userBalances[user] >= amount, "Insufficient user balance");
 
     WithdrawalRequest memory request = WithdrawalRequest({
