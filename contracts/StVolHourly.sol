@@ -39,6 +39,7 @@ contract StVolHourly is
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
   uint256 private constant START_TIMESTAMP = 1720332000; // for epoch
+  uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
 
   /// @custom:storage-location erc7201:stvolhourly.main
   struct MainStorage {
@@ -281,9 +282,10 @@ contract StVolHourly is
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
-    require(amount > PRICE_UNIT, "Amount must be greater than 1");
-    require($.userBalances[user] >= amount, "Insufficient user balance");
-    $.userBalances[user] -= amount;
+    require(amount > 0, "Amount must be greater than 0");
+    require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
+    $.userBalances[user] -= amount + WITHDRAWAL_FEE;
+    $.treasuryAmount += WITHDRAWAL_FEE;
     $.token.safeTransfer(user, amount);
     emit Withdraw(user, amount, $.userBalances[user]);
   }
@@ -293,8 +295,8 @@ contract StVolHourly is
   ) external nonReentrant returns (WithdrawalRequest memory) {
     address user = msg.sender;
     MainStorage storage $ = _getMainStorage();
-    require(amount > PRICE_UNIT, "Amount must be greater than 1");
-    require($.userBalances[user] >= amount, "Insufficient user balance");
+    require(amount > 0, "Amount must be greater than 0");
+    require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
 
     WithdrawalRequest memory request = WithdrawalRequest({
       idx: $.withdrawalRequests.length,
@@ -335,13 +337,14 @@ contract StVolHourly is
     require(idx < $.withdrawalRequests.length, "Invalid idx");
     WithdrawalRequest storage request = $.withdrawalRequests[idx];
     require(!request.processed, "Request already processed");
-    require($.userBalances[request.user] >= request.amount, "Insufficient user balance");
-
+    require(
+      $.userBalances[request.user] >= request.amount + WITHDRAWAL_FEE,
+      "Insufficient user balance"
+    );
     request.processed = true;
-
-    $.userBalances[request.user] -= request.amount;
+    $.userBalances[request.user] -= request.amount + WITHDRAWAL_FEE;
+    $.treasuryAmount += WITHDRAWAL_FEE;
     $.token.safeTransfer(request.user, request.amount);
-
     emit WithdrawalApproved(request.user, request.amount);
   }
 
@@ -360,9 +363,12 @@ contract StVolHourly is
   function forceWithdrawAll() external nonReentrant {
     MainStorage storage $ = _getMainStorage();
     require(block.timestamp >= $.lastSubmissionTime + 1 hours, "invalid time");
+
     uint256 balance = $.userBalances[msg.sender];
+    require(balance >= WITHDRAWAL_FEE, "insufficient user balance");
     $.userBalances[msg.sender] = 0;
-    $.token.safeTransfer(msg.sender, balance);
+    $.treasuryAmount += WITHDRAWAL_FEE;
+    $.token.safeTransfer(msg.sender, balance - WITHDRAWAL_FEE);
     emit Withdraw(msg.sender, balance, 0);
   }
 
