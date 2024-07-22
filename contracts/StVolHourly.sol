@@ -58,6 +58,9 @@ contract StVolHourly is
     WithdrawalRequest[] withdrawalRequests;
     uint256 lastSettledFilledOrderId; // globally
     mapping(uint256 => uint256) lastSettledFilledOrderIndex; // by round(epoch)
+    mapping(address => Coupon[]) couponBalances; // user to coupon list
+    uint256 couponAmount; // coupon vault
+    uint256 usedCouponAmount; // coupon vault
 
     /* you can add new variables here */
   }
@@ -118,8 +121,25 @@ contract StVolHourly is
     uint256 created;
   }
 
+  struct Coupon {
+    address user;
+    uint256 amount;
+    uint256 usedAmount;
+    uint256 expirationEpoch;
+    uint256 created;
+  }
+
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
+
+  event DepositCoupon(
+    address indexed to,
+    address from,
+    uint256 amount,
+    uint256 expirationEpoch,
+    uint256 result
+  );
+
   event StartRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
   event EndRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
   event OrderSettled(
@@ -278,6 +298,38 @@ contract StVolHourly is
     $.token.safeTransferFrom(msg.sender, address(this), amount);
     $.userBalances[user] += amount;
     emit Deposit(user, msg.sender, amount, $.userBalances[user]);
+  }
+
+  function depositCouponTo(
+    address user,
+    uint256 amount,
+    uint256 expirationEpoch
+  ) external nonReentrant {
+    MainStorage storage $ = _getMainStorage();
+
+    $.token.safeTransferFrom(msg.sender, address(this), amount);
+    $.couponAmount += amount;
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    Coupon memory newCoupon = Coupon({
+      user: user,
+      amount: amount,
+      usedAmount: 0,
+      expirationEpoch: expirationEpoch,
+      created: block.timestamp
+    });
+
+    uint i = coupons.length;
+    coupons.push(newCoupon);
+
+    while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
+      coupons[i] = coupons[i - 1];
+      i--;
+    }
+    coupons[i] = newCoupon;
+
+    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
@@ -464,9 +516,34 @@ contract StVolHourly is
     return ($.adminAddress, $.operatorAddress, $.operatorVaultAddress);
   }
 
+  function balances(address user) public view returns (uint256, uint256, uint256) {
+    MainStorage storage $ = _getMainStorage();
+    uint256 depositBalance = $.userBalances[user];
+    uint256 couponBalance = couponBalanceOf(user);
+    uint256 totalBalance = depositBalance + couponBalance;
+    return (depositBalance, couponBalance, totalBalance);
+  }
+
   function balanceOf(address user) public view returns (uint256) {
     MainStorage storage $ = _getMainStorage();
     return $.userBalances[user];
+  }
+
+  function couponBalanceOf(address user) public view returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    uint256 total = 0;
+    uint256 epoch = _epochAt(block.timestamp);
+    for (uint i = 0; i < $.couponBalances[user].length; i++) {
+      if ($.couponBalances[user][i].expirationEpoch >= epoch) {
+        total += $.couponBalances[user][i].amount - $.couponBalances[user][i].usedAmount;
+      }
+    }
+    return total;
+  }
+
+  function userCoupons(address user) public view returns (Coupon[] memory) {
+    MainStorage storage $ = _getMainStorage();
+    return $.couponBalances[user];
   }
 
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
@@ -609,7 +686,8 @@ contract StVolHourly is
         order.unit *
         PRICE_UNIT;
       uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
-      $.userBalances[order.overUser] -= fee;
+      uint256 remainingFee = _useCoupon(order.overUser, fee, order.epoch);
+      $.userBalances[order.overUser] -= remainingFee;
       $.treasuryAmount += fee;
       collectedFee += fee;
       emit OrderSettled(
@@ -621,8 +699,10 @@ contract StVolHourly is
       );
     } else if (isUnderWin) {
       uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
+      uint256 remainingAmount = _useCoupon(order.overUser, amount, order.epoch);
+      $.userBalances[order.overUser] -= remainingAmount;
+
       uint256 fee = (amount * $.commissionfee) / BASE;
-      $.userBalances[order.overUser] -= amount;
       $.treasuryAmount += fee;
       $.userBalances[order.underUser] += (amount - fee);
       collectedFee += fee;
@@ -643,8 +723,10 @@ contract StVolHourly is
       );
     } else if (isOverWin) {
       uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
+      uint256 remainingAmount = _useCoupon(order.underUser, amount, order.epoch);
+      $.userBalances[order.underUser] -= remainingAmount;
+
       uint256 fee = (amount * $.commissionfee) / BASE;
-      $.userBalances[order.underUser] -= amount;
       $.treasuryAmount += fee;
       $.userBalances[order.overUser] += (amount - fee);
       collectedFee += fee;
@@ -697,10 +779,31 @@ contract StVolHourly is
     return elapsedHours;
   }
 
-  function _epochTimes(uint256 epoch) public pure returns (uint256 startTime, uint256 endTime) {
+  function _epochTimes(uint256 epoch) internal pure returns (uint256 startTime, uint256 endTime) {
     require(epoch >= 0, "Invalid epoch");
     startTime = START_TIMESTAMP + (epoch * 3600);
     endTime = startTime + 3600;
     return (startTime, endTime);
+  }
+
+  function _useCoupon(address user, uint256 amount, uint256 epoch) internal returns (uint256) {
+    MainStorage storage $ = _getMainStorage();
+    uint256 remainingAmount = amount;
+    for (uint i = 0; i < $.couponBalances[user].length && remainingAmount > 0; i++) {
+      if ($.couponBalances[user][i].expirationEpoch >= epoch) {
+        uint256 availableAmount = $.couponBalances[user][i].amount -
+          $.couponBalances[user][i].usedAmount;
+        if (availableAmount >= remainingAmount) {
+          $.couponBalances[user][i].usedAmount += remainingAmount;
+          remainingAmount = 0;
+        } else {
+          $.couponBalances[user][i].usedAmount += availableAmount;
+          remainingAmount -= availableAmount;
+        }
+      }
+    }
+    $.usedCouponAmount += amount - remainingAmount;
+
+    return remainingAmount;
   }
 }
