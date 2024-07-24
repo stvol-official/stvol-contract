@@ -61,6 +61,7 @@ contract StVolHourly is
     mapping(address => Coupon[]) couponBalances; // user to coupon list
     uint256 couponAmount; // coupon vault
     uint256 usedCouponAmount; // coupon vault
+    address[] couponHolders;
 
     /* you can add new variables here */
   }
@@ -127,6 +128,7 @@ contract StVolHourly is
     uint256 usedAmount;
     uint256 expirationEpoch;
     uint256 created;
+    address issuer;
   }
 
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
@@ -317,11 +319,17 @@ contract StVolHourly is
       amount: amount,
       usedAmount: 0,
       expirationEpoch: expirationEpoch,
-      created: block.timestamp
+      created: block.timestamp,
+      issuer: msg.sender
     });
 
     uint i = coupons.length;
     coupons.push(newCoupon);
+
+    if (i == 0) {
+      // add user to couponHolders array
+      $.couponHolders.push(user);
+    }
 
     while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
       coupons[i] = coupons[i - 1];
@@ -330,6 +338,47 @@ contract StVolHourly is
     coupons[i] = newCoupon;
 
     emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
+  }
+
+  function reclaimExpiredCoupons(address user) external nonReentrant {
+    MainStorage storage $ = _getMainStorage();
+    uint256 epoch = _epochAt(block.timestamp);
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    uint256 validCount = 0;
+    for (uint i = 0; i < coupons.length; i++) {
+      Coupon storage coupon = coupons[i];
+      if (coupon.expirationEpoch < epoch) {
+        uint256 availableAmount = coupon.amount - coupon.usedAmount;
+        if (availableAmount > 0) {
+          $.token.safeTransfer(coupon.issuer, availableAmount);
+          $.couponAmount -= availableAmount;
+          coupon.usedAmount = coupon.amount;
+        }
+      } else {
+        // move valid coupons to the front of the array
+        coupons[validCount] = coupon;
+        validCount++;
+      }
+    }
+
+    // remove expired coupons from the array
+    while (coupons.length > validCount) {
+      coupons.pop();
+    }
+
+    if (validCount == 0) {
+      // remove user from couponHolders array
+      uint length = $.couponHolders.length;
+      for (uint i = 0; i < length; i++) {
+        if ($.couponHolders[i] == user) {
+          $.couponHolders[i] = $.couponHolders[length - 1];
+          $.couponHolders.pop();
+          break;
+        }
+      }
+    }
   }
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
