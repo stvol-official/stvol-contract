@@ -340,45 +340,21 @@ contract StVolHourly is
     emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
 
-  function reclaimExpiredCoupons(address user) external nonReentrant {
+  function reclaimAllExpiredCoupons() external nonReentrant {
     MainStorage storage $ = _getMainStorage();
-    uint256 epoch = _epochAt(block.timestamp);
 
-    Coupon[] storage coupons = $.couponBalances[user];
-
-    uint256 validCount = 0;
-    for (uint i = 0; i < coupons.length; i++) {
-      Coupon storage coupon = coupons[i];
-      if (coupon.expirationEpoch < epoch) {
-        uint256 availableAmount = coupon.amount - coupon.usedAmount;
-        if (availableAmount > 0) {
-          $.token.safeTransfer(coupon.issuer, availableAmount);
-          $.couponAmount -= availableAmount;
-          coupon.usedAmount = coupon.amount;
-        }
-      } else {
-        // move valid coupons to the front of the array
-        coupons[validCount] = coupon;
-        validCount++;
-      }
+    address[] memory memoryArray = new address[]($.couponHolders.length);
+    for (uint i = 0; i < $.couponHolders.length; i++) {
+      memoryArray[i] = $.couponHolders[i];
     }
 
-    // remove expired coupons from the array
-    while (coupons.length > validCount) {
-      coupons.pop();
+    for (uint i = 0; i < memoryArray.length; i++) {
+      _reclaimExpiredCoupons(memoryArray[i]);
     }
+  }
 
-    if (validCount == 0) {
-      // remove user from couponHolders array
-      uint length = $.couponHolders.length;
-      for (uint i = 0; i < length; i++) {
-        if ($.couponHolders[i] == user) {
-          $.couponHolders[i] = $.couponHolders[length - 1];
-          $.couponHolders.pop();
-          break;
-        }
-      }
-    }
+  function reclaimExpiredCoupons(address user) external nonReentrant {
+    _reclaimExpiredCoupons(user);
   }
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
@@ -588,6 +564,11 @@ contract StVolHourly is
       }
     }
     return total;
+  }
+
+  function couponHolders() public view returns (address[] memory) {
+    MainStorage storage $ = _getMainStorage();
+    return $.couponHolders;
   }
 
   function userCoupons(address user) public view returns (Coupon[] memory) {
@@ -854,5 +835,46 @@ contract StVolHourly is
     $.usedCouponAmount += amount - remainingAmount;
 
     return remainingAmount;
+  }
+
+  function _reclaimExpiredCoupons(address user) internal {
+    MainStorage storage $ = _getMainStorage();
+    uint256 epoch = _epochAt(block.timestamp);
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    uint256 validCount = 0;
+    for (uint i = 0; i < coupons.length; i++) {
+      Coupon storage coupon = coupons[i];
+      if (coupon.expirationEpoch < epoch) {
+        uint256 availableAmount = coupon.amount - coupon.usedAmount;
+        if (availableAmount > 0) {
+          $.token.safeTransfer(coupon.issuer, availableAmount);
+          $.couponAmount -= availableAmount;
+          coupon.usedAmount = coupon.amount;
+        }
+      } else {
+        // move valid coupons to the front of the array
+        coupons[validCount] = coupon;
+        validCount++;
+      }
+    }
+
+    // remove expired coupons from the array
+    while (coupons.length > validCount) {
+      coupons.pop();
+    }
+
+    if (validCount == 0) {
+      // remove user from couponHolders array
+      uint length = $.couponHolders.length;
+      for (uint i = 0; i < length; i++) {
+        if ($.couponHolders[i] == user) {
+          $.couponHolders[i] = $.couponHolders[length - 1];
+          $.couponHolders.pop();
+          break;
+        }
+      }
+    }
   }
 }
