@@ -35,7 +35,7 @@ contract StVolHourly is
 
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant BASE = 10000; // 100%
-  uint256 private constant MAX_COMMISSION_FEE = 200; // 2%
+  uint256 private constant MAX_COMMISSION_FEE = 500; // 5%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
   uint256 private constant START_TIMESTAMP = 1720332000; // for epoch
