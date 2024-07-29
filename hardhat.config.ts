@@ -61,6 +61,32 @@ export default {
       },
       chainId: 11155111,
     },
+    blast: {
+      url: "https://rpc.blast.io",
+      gas: 1000000000,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 81457,
+    },
+
+    blast_sepolia: {
+      url: "https://sepolia.blast.io",
+      gas: 1000000000,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 168587773,
+    },
+    arbitrum_goerli: {
+      url: `https://arbitrum-goerli.infura.io/v3/${infuraKey}`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 421613,
+    },
     arbitrum_sepolia: {
       url: `https://arbitrum-sepolia.infura.io/v3/${infuraKey}`,
       gas: 22000000,
@@ -70,12 +96,23 @@ export default {
       },
       chainId: 421614,
     },
-    blast_sepolia: {
-      url: "https://sepolia.blast.io",
+    base: {
+      url: `https://mainnet.base.org`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
       accounts: {
         mnemonic,
       },
-      chainId: 168587773,
+      chainId: 8453,
+    },
+    base_sepolia: {
+      url: `https://sepolia.base.org`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 84532,
     },
   },
   solidity: {
@@ -118,7 +155,10 @@ export default {
       arbitrumGoerli: process.env.ARBITRUM_ETHERSCAN_KEY,
       sepolia: process.env.ETHERSCAN_KEY,
       arbitrumSepolia: process.env.ARBITRUM_ETHERSCAN_KEY,
+      blast: "TFDY5ED33UQZK3E7VARC3M75TBI9FBHNBE", // rossvolt https://blastscan.io/myapikey
       blastSepolia: "blast_sepolia", // apiKey is not required, just set a placeholder
+      base: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
+      baseSepolia: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
     },
     customChains: [
       {
@@ -130,11 +170,35 @@ export default {
         },
       },
       {
+        network: "blast",
+        chainId: 81457,
+        urls: {
+          apiURL: "https://api.blastscan.io/api",
+          browserURL: "https://blastscan.io/",
+        },
+      },
+      {
         network: "blastSepolia",
         chainId: 168587773,
         urls: {
           apiURL: "https://api-sepolia.blastscan.io/api",
           browserURL: "https://sepolia.blastscan.io/",
+        },
+      },
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.basescan.org/api",
+          browserURL: "https://basescan.org/",
+        },
+      },
+      {
+        network: "baseSepolia",
+        chainId: 84532,
+        urls: {
+          apiURL: "https://api-sepolia.basescan.org/api",
+          browserURL: "https://sepolia.basescan.org",
         },
       },
     ],

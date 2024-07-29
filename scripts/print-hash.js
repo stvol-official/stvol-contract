@@ -1,8 +1,8 @@
 const { ethers } = require("ethers");
 
 function printHash(input) {
-  const hashStvolintraMain = ethers.keccak256(ethers.toUtf8Bytes(input));
-  const subtractedValue = BigInt(hashStvolintraMain) - 1n;
+  const hashInput = ethers.keccak256(ethers.toUtf8Bytes(input));
+  const subtractedValue = BigInt(hashInput) - 1n;
   const finalHash = ethers.keccak256("0x" + subtractedValue.toString(16).padStart(64, "0"));
   const finalHashBigInt = BigInt(`0x${finalHash.slice(2)}`);
   const maskBigInt = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00");
@@ -11,5 +11,5 @@ function printHash(input) {
   console.log(maskedHash);
 }
 
-// keccak256(abi.encode(uint256(keccak256("stvolintra.main")) - 1)) & ~bytes32(uint256(0xff));
-printHash("stvolintra.main");
+// keccak256(abi.encode(uint256(keccak256("stvolhourly.main")) - 1)) & ~bytes32(uint256(0xff));
+printHash("stvolhourly.main");

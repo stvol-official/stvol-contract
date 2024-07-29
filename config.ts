@@ -8,6 +8,8 @@ export default {
       goerli: "0xc87095a378DEb619BA55Fff67f40fC1e7C0b219C",
       // blast_sepolia: "0x4200000000000000000000000000000000000022", // blast USDB
       blast_sepolia: "0x9C75DA71284E9F912C9237253F21f90223D7034a", // stvol vUSDB
+      base_sepolia: "0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC", // stvol vUSDC
+      base: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // USDC
     },
     Oracle: {
       mainnet: "0x4305FB66699C3B2702D4d05CF36551390A4c69C6",
@@ -15,7 +17,10 @@ export default {
       arbitrum: "0xff1a0f4744e8582DF1aE09D5611b887B6a12925C",
       arbitrum_sepolia: "0x4374e5a8b9c22271e9eb878a2aa31de97df15daf",
       sepolia: "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
+      blast: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
       blast_sepolia: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+      base_sepolia: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+      base: "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
     },
     Admin: {
       mainnet: "0x93072915E6fD257Ca98eD80343D6fbc8e2426C9F",
@@ -23,7 +28,10 @@ export default {
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      blast_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+      blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+      base_sepolia: "0x26B85826014fF3483CBC550B3DDAF5954cc15d70",
+      base: "0x26B85826014fF3483CBC550B3DDAF5954cc15d70",
     },
     Operator: {
       mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
@@ -31,7 +39,10 @@ export default {
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      blast_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+      blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+      base_sepolia: "0x02F5BC2D279D2Ff10CACa13e04D80587824951C8",
+      base: "0x02F5BC2D279D2Ff10CACa13e04D80587824951C8",
     },
     OperatorVault: {
       mainnet: "0xFb6B24942a19F138EF468EC39Ce8653A87500832",
@@ -39,7 +50,10 @@ export default {
       arbitrum_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
       goerli: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      blast_sepolia: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
+      blast: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+      blast_sepolia: "0x194A9f93072C38C91c9784edd8C7AC8Bc76bca53",
+      base_sepolia: "0xfc48F475E7296c9e645311B85F8F2bcb64BD8fbd",
+      base: "0xfc48F475E7296c9e645311B85F8F2bcb64BD8fbd",
     },
   },
   PythPriceId: {
@@ -75,6 +89,10 @@ export default {
     arbitrum: 200, // 2%
     sepolia: 200, // 2%
     arbitrum_sepolia: 200, // 2%
+    arbitrum_goerli: 200, // 2%
+    blast: 200, // 2%
     blast_sepolia: 200, // 2%
+    base_sepolia: 200, // 2%
+    base: 200, // 2%
   },
 };
