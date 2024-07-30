@@ -62,6 +62,7 @@ contract StVolHourly is
     uint256 couponAmount; // coupon vault
     uint256 usedCouponAmount; // coupon vault
     address[] couponHolders;
+    mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
 
     /* you can add new variables here */
   }
@@ -74,6 +75,14 @@ contract StVolHourly is
     Over,
     Under
   }
+
+  enum WinPosition {
+    Over,
+    Under,
+    Tie,
+    Invalid
+  }
+
 
   enum OrderType {
     Market,
@@ -111,6 +120,14 @@ contract StVolHourly is
     uint256 underPrice; // over_price + under_price = 100 * decimal
     uint256 unit;
     bool isSettled; // default: false
+  }
+
+  struct SettlementResult {
+    uint256 idx; // filled order idx
+    WinPosition winPosition;
+    uint256 winAmount;
+    uint256 feeRate;
+    uint256 fee;
   }
 
   struct WithdrawalRequest {
@@ -611,6 +628,16 @@ contract StVolHourly is
     return $.filledOrders[epoch];
   }
 
+  function filledOrdersWithResult(uint256 epoch) public view returns (FilledOrder[] memory, SettlementResult[] memory) {
+    MainStorage storage $ = _getMainStorage();
+    FilledOrder[] memory orders = $.filledOrders[epoch];
+    SettlementResult[] memory results = new SettlementResult[](orders.length);
+    for (uint i = 0; i < orders.length ; i++) {
+      results[i] = $.settlementResults[orders[i].idx];
+    }
+    return (orders, results);
+  }
+
   function userFilledOrders(
     uint256 epoch,
     address user
@@ -679,6 +706,94 @@ contract StVolHourly is
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
 
+  function fillSettlementResult(
+    uint256[] calldata epochList
+  ) external {
+    // temporary function to fill settlement results
+    MainStorage storage $ = _getMainStorage();
+    for (uint a = 0; a < epochList.length; a ++) {
+      uint256 epoch = epochList[a];
+      FilledOrder[] storage orders = $.filledOrders[epoch];
+      Round storage round = $.rounds[epoch];
+      for (uint i = 0; i < orders.length ; i++) {
+        FilledOrder storage order =  orders[i];
+        _fillSettlementResult(round, order);
+      }
+    }
+  }
+
+  function _fillSettlementResult(Round storage round,
+    FilledOrder storage order) internal {
+      
+    MainStorage storage $ = _getMainStorage();
+
+    if (round.startPrice[order.productId] == 0 || round.endPrice[order.productId] == 0) return;
+
+    uint256 strikePrice = (round.startPrice[order.productId] * order.strike) / 10000;
+
+    bool isOverWin = strikePrice < round.endPrice[order.productId];
+    bool isUnderWin = strikePrice > round.endPrice[order.productId];
+
+    if (order.overPrice + order.underPrice != 100) {
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Invalid, 
+        winAmount: 0, 
+        feeRate: $.commissionfee,
+        fee: 0
+      });
+    } else if (order.overUser == order.underUser) {
+      uint256 loosePositionAmount = (
+        isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0
+      ) *
+        order.unit *
+        PRICE_UNIT;
+      uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
+      
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie, 
+        winAmount: loosePositionAmount, 
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+
+    } else if (isUnderWin) {
+      uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
+      uint256 fee = (amount * $.commissionfee) / BASE;
+      
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Under, 
+        winAmount: amount, 
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+
+    } else if (isOverWin) {
+      uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
+      uint256 fee = (amount * $.commissionfee) / BASE;
+
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Over, 
+        winAmount: amount, 
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+
+    } else {
+      // no one wins
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Tie, 
+        winAmount: 0, 
+        feeRate: $.commissionfee,
+        fee: 0
+      });
+    }
+  }
+
   function _settleFilledOrder(
     Round storage round,
     FilledOrder storage order
@@ -709,6 +824,15 @@ contract StVolHourly is
         $.userBalances[order.overUser],
         $.userBalances[order.overUser]
       );
+      
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Invalid, 
+        winAmount: 0, 
+        feeRate: $.commissionfee,
+        fee: 0
+      });
+
     } else if (order.overUser == order.underUser) {
       uint256 loosePositionAmount = (
         isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0
@@ -727,6 +851,14 @@ contract StVolHourly is
         $.userBalances[order.overUser] + fee,
         $.userBalances[order.overUser]
       );
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie, 
+        winAmount: loosePositionAmount, 
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+
     } else if (isUnderWin) {
       uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
       uint256 remainingAmount = _useCoupon(order.overUser, amount, order.epoch);
@@ -751,6 +883,15 @@ contract StVolHourly is
         $.userBalances[order.underUser] - (amount - fee),
         $.userBalances[order.underUser]
       );
+
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Under, 
+        winAmount: amount, 
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+
     } else if (isOverWin) {
       uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
       uint256 remainingAmount = _useCoupon(order.underUser, amount, order.epoch);
@@ -775,6 +916,15 @@ contract StVolHourly is
         $.userBalances[order.overUser] - (amount - fee),
         $.userBalances[order.overUser]
       );
+
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Over, 
+        winAmount: amount, 
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+
     } else {
       // no one wins
       emit OrderSettled(
@@ -791,6 +941,15 @@ contract StVolHourly is
         $.userBalances[order.overUser],
         $.userBalances[order.overUser]
       );
+
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx, 
+        winPosition: WinPosition.Tie, 
+        winAmount: 0, 
+        feeRate: $.commissionfee,
+        fee: 0
+      });
+
     }
 
     order.isSettled = true;
