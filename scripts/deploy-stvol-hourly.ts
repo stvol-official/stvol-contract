@@ -2,6 +2,7 @@ import { ethers, network, run, upgrades } from "hardhat";
 import config from "../config";
 
 /*
+ npx hardhat run --network minato scripts/deploy-stvol-hourly.ts
  npx hardhat run --network base scripts/deploy-stvol-hourly.ts
  npx hardhat run --network base_sepolia scripts/deploy-stvol-hourly.ts
  npx hardhat run --network blast scripts/deploy-stvol-hourly.ts
@@ -18,7 +19,8 @@ const main = async () => {
     networkName === "blast_sepolia" ||
     networkName === "blast" ||
     networkName === "base" ||
-    networkName === "base_sepolia"
+    networkName === "base_sepolia" ||
+    networkName === "minato"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 

@@ -38,7 +38,7 @@ contract StVolHourly is
   uint256 private constant MAX_COMMISSION_FEE = 500; // 5%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
-  uint256 private constant START_TIMESTAMP = 1720332000; // for epoch
+  uint256 private constant START_TIMESTAMP = 1725343200; // for epoch
   uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
 
   /// @custom:storage-location erc7201:stvolhourly.main
@@ -211,7 +211,7 @@ contract StVolHourly is
 
     MainStorage storage $ = _getMainStorage();
 
-    $.token = IERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913); // base usdc
+    $.token = IERC20(0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC); // minato usdc
     $.oracle = IPyth(_oracleAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;

@@ -1,14 +1,14 @@
 import { ethers, network, run } from "hardhat";
 
 /*
- npx hardhat run --network base_sepolia scripts/deploy-ERC20TokenImpl.ts
- npx hardhat verify --constructor-args dev.erc20.arguments.js --network base_sepolia 0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC
+ npx hardhat run --network minato scripts/deploy-ERC20TokenImpl.ts
+ npx hardhat verify --constructor-args dev.erc20.arguments.js --network minato 0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC
 */
 
 const main = async () => {
   // Get network data from Hardhat config.
   const networkName = network.name;
-  const name = "STVOL TEST USDC";
+  const name = "SUPERVOL TEST USDC";
   const symbol = "vUSDC";
   const decimal = 6;
 
@@ -17,7 +17,8 @@ const main = async () => {
     networkName === "goerli" ||
     networkName === "arbitrum_sepolia" ||
     networkName === "blast_sepolia" ||
-    networkName === "base_sepolia"
+    networkName === "base_sepolia" ||
+    networkName === "soneium_sepolia"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 

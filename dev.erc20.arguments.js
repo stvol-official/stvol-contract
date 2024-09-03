@@ -1,5 +1,5 @@
-// for goerli
-const name = "STVOL TEST USDC";
+// for soneium
+const name = "SUPERVOL TEST USDC";
 const symbol = "vUSDC";
 const decimal = 6;
 

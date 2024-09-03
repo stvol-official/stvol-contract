@@ -114,6 +114,15 @@ export default {
       },
       chainId: 84532,
     },
+    minato: {
+      url: `https://rpc.minato.soneium.org/`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 1946,
+    },
   },
   solidity: {
     compilers: [
@@ -159,6 +168,7 @@ export default {
       blastSepolia: "blast_sepolia", // apiKey is not required, just set a placeholder
       base: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
       baseSepolia: "QVZC44GURRCQ6YQTX79QSBDW6KBGG5C6CJ",
+      minato: "empty", // apiKey is not required, just set a placeholder
     },
     customChains: [
       {
@@ -199,6 +209,14 @@ export default {
         urls: {
           apiURL: "https://api-sepolia.basescan.org/api",
           browserURL: "https://sepolia.basescan.org",
+        },
+      },
+      {
+        network: "minato",
+        chainId: 1946,
+        urls: {
+          apiURL: "https://explorer-testnet.soneium.org/api",
+          browserURL: "https://explorer-testnet.soneium.org",
         },
       },
     ],
