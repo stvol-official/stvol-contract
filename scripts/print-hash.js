@@ -11,5 +11,5 @@ function printHash(input) {
   console.log(maskedHash);
 }
 
-// keccak256(abi.encode(uint256(keccak256("stvolhourly.main")) - 1)) & ~bytes32(uint256(0xff));
-printHash("stvolhourly.main");
+// keccak256(abi.encode(uint256(keccak256("supervolhourly.main")) - 1)) & ~bytes32(uint256(0xff));
+printHash("supervolhourly.main");

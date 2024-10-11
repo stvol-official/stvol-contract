@@ -24,12 +24,11 @@ contract StVolHourly is
   function _priceIds() internal pure returns (bytes32[] memory) {
     // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
     // to add products, upgrade the contract
-    bytes32[] memory priceIds = new bytes32[](2);
+    bytes32[] memory priceIds = new bytes32[](3);
     // priceIds[productId] = pyth price id
     priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
     priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
-    // priceIds[2] = 0x4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc; // wif
-
+    priceIds[2] = 0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853; // astr
     return priceIds;
   }
 
@@ -38,7 +37,7 @@ contract StVolHourly is
   uint256 private constant MAX_COMMISSION_FEE = 500; // 5%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
-  uint256 private constant START_TIMESTAMP = 1725343200; // for epoch
+  uint256 private constant START_TIMESTAMP = 1726009200; // for epoch
   uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
 
   /// @custom:storage-location erc7201:stvolhourly.main
@@ -67,9 +66,9 @@ contract StVolHourly is
     /* you can add new variables here */
   }
 
-  // keccak256(abi.encode(uint256(keccak256("stvolhourly.main")) - 1)) & ~bytes32(uint256(0xff));
+  // keccak256(abi.encode(uint256(keccak256("supervolhourly.main")) - 1)) & ~bytes32(uint256(0xff));
   bytes32 private constant MAIN_STORAGE_LOCATION =
-    0x7540e4d744f0b58dc1a1a9299f0ac1b1135db4f19c435295e4707fb841fa8700;
+    0x7bc1e9d19685053de57f492fbaf997aa4d3b21e5386e7247f8550dca24ee0b00;
 
   enum Position {
     Over,
