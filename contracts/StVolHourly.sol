@@ -469,7 +469,8 @@ contract StVolHourly is
     FilledOrder[] calldata transactions
   ) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
-    require($.lastFilledOrderId + 1 == transactions[0].idx, "invalid id");
+    require($.lastFilledOrderId + 1 <= transactions[0].idx, "invalid id");
+
     for (uint i = 0; i < transactions.length; i++) {
       FilledOrder calldata order = transactions[i];
       FilledOrder[] storage orders = $.filledOrders[order.epoch];
@@ -539,6 +540,12 @@ contract StVolHourly is
     require(_adminAddress != address(0), "E31");
     MainStorage storage $ = _getMainStorage();
     $.adminAddress = _adminAddress;
+  }
+
+  function setToken(address _token) external onlyOwner {
+    require(_token != address(0), "E31");
+    MainStorage storage $ = _getMainStorage();
+    $.token = IERC20(_token); 
   }
 
   /* public views */

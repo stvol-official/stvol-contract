@@ -9,7 +9,7 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["blast", "blast_sepolia", "base", "base_sepolia", "minato"];
-const DEPLOYED_PROXY = "0xcFd16c9860aE81cEe7ca977eAd5171995a098dF2"; // for minato
+const DEPLOYED_PROXY = "0x1078F685C287C3E1CD186DDeCB0D7FE09b0d71d4"; // for minato
 
 // 0x4e1e1c633D7770679e6c9748e940AfE4fD59816E for base.sepolia development
 // 0x2B709CeB281d3764231269f2f4b59b2EDA9e7D61 for development
