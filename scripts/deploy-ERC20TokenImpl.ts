@@ -8,6 +8,7 @@ import { ethers, network, run } from "hardhat";
 const main = async () => {
   // Get network data from Hardhat config.
   const networkName = network.name;
+  const admin = "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0";
   const name = "SUPERVOL TEST USDC";
   const symbol = "vUSDC";
   const decimal = 6;
@@ -18,7 +19,7 @@ const main = async () => {
     networkName === "arbitrum_sepolia" ||
     networkName === "blast_sepolia" ||
     networkName === "base_sepolia" ||
-    networkName === "soneium_sepolia"
+    networkName === "minato"
   ) {
     console.log(`Deploying to ${networkName} network...`);
 
@@ -32,7 +33,7 @@ const main = async () => {
     console.log("decimal: %d", decimal);
 
     const ERC20TokenImpl = await ethers.getContractFactory("ERC20TokenImpl");
-    const contract = await ERC20TokenImpl.deploy(name, symbol, decimal);
+    const contract = await ERC20TokenImpl.deploy(name, symbol, decimal, admin);
 
     // Wait for the contract to be deployed before exiting the script.
     await contract.waitForDeployment();
