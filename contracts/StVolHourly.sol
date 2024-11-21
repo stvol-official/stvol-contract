@@ -39,6 +39,7 @@ contract StVolHourly is
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
   uint256 private constant START_TIMESTAMP = 1726009200; // for epoch
   uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
+  uint256 private constant VAULT_PROFIT_SHARE = 1000; // 10%
 
   /// @custom:storage-location erc7201:stvolhourly.main
   struct MainStorage {
@@ -62,6 +63,7 @@ contract StVolHourly is
     uint256 usedCouponAmount; // coupon vault
     address[] couponHolders;
     mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
+    mapping(address => Vault) vaults; // key: vault address 
 
     /* you can add new variables here */
   }
@@ -82,11 +84,6 @@ contract StVolHourly is
     Invalid
   }
 
-
-  enum OrderType {
-    Market,
-    Limit
-  }
 
   struct Round {
     uint256 epoch;
@@ -147,6 +144,22 @@ contract StVolHourly is
     address issuer;
   }
 
+  struct Vault {
+    address vault;
+    address leader;
+    uint256 balance;
+    bool closed;
+    uint256 created;
+    mapping(address => VaultMember) members; // key: user address
+  } 
+
+  struct VaultMember {
+    address vault;
+    address user;
+    uint256 balance;
+    uint256 created;
+  } 
+
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
 
@@ -171,6 +184,9 @@ contract StVolHourly is
   event WithdrawalRequested(address indexed user, uint256 amount);
   event WithdrawalApproved(address indexed user, uint256 amount);
   event WithdrawalRejected(address indexed user, uint256 amount);
+  event VaultCreated(address indexed vault, address indexed leader);
+  event DepositToVault(address indexed vault, address indexed user, uint256 amount);
+  event WithdrawFromVault(address indexed vault, address indexed user, uint256 amount, uint256 profitShare);
 
   function _getMainStorage() internal pure returns (MainStorage storage $) {
     assembly {
@@ -404,6 +420,111 @@ contract StVolHourly is
 
     emit WithdrawalRequested(msg.sender, amount);
     return request;
+  }
+
+  function createVault(address vault) external nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    require(vault != address(0), "invalid vault address");  
+
+    Vault storage vaultInfo = $.vaults[vault];
+    require(vaultInfo.vault == address(0), "vault already exists");
+
+    vaultInfo.vault = vault;
+    vaultInfo.leader = msg.sender;
+    vaultInfo.balance = 0;
+    vaultInfo.closed = false;
+    vaultInfo.created = block.timestamp;
+    vaultInfo.members[msg.sender] = VaultMember({
+      vault: vault,
+      user: msg.sender,
+      balance: 0,
+      created: block.timestamp
+    }); 
+    emit VaultCreated(vault, msg.sender);
+  } 
+
+  function closeVault(address vault) external nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    Vault storage vaultInfo = $.vaults[vault];
+    require(vaultInfo.vault != address(0), "vault not found");
+    require(vaultInfo.leader == msg.sender, "only leader can close vault");   
+    require(!vaultInfo.closed, "vault already closed"); 
+    require(vaultInfo.balance == 0, "vault balance is not zero");
+
+    vaultInfo.closed = true;
+  } 
+
+  function depositToVault(address vault, uint256 amount) external nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    
+    require(amount > 0, "Amount must be greater than 0");
+    require($.userBalances[msg.sender] >= amount, "Insufficient user balance");
+    
+    Vault storage vaultInfo = $.vaults[vault];
+    require(vaultInfo.vault != address(0), "Vault not found");
+    require(!vaultInfo.closed, "Vault is closed");
+
+    // Update balances
+    vaultInfo.balance += amount;
+    vaultInfo.members[msg.sender].balance += amount;
+    
+    // Transfer tokens
+    $.userBalances[vault] += amount;
+    $.userBalances[msg.sender] -= amount;
+    
+    emit DepositToVault(vault, msg.sender, amount);
+  }
+
+  function withdrawFromVault(address vault, uint256 amount) external nonReentrant onlyOperator {
+    MainStorage storage $ = _getMainStorage();
+    require(amount > 0, "Amount must be greater than 0");
+    
+    Vault storage vaultInfo = $.vaults[vault];
+    require(vaultInfo.vault != address(0), "Vault not found");
+    require(!vaultInfo.closed, "Vault is closed");
+    require(vaultInfo.balance >= amount, "Insufficient vault balance");
+    require(vaultInfo.members[msg.sender].balance >= amount, "Insufficient member balance");
+
+    // Handle withdrawal based on user role
+    if (msg.sender == vaultInfo.leader) {
+        _handleLeaderWithdrawal(vaultInfo, $, amount);
+    } else {
+        _handleMemberWithdrawal(vaultInfo, $, amount);
+    }
+    
+    emit WithdrawFromVault(vault, msg.sender, amount, VAULT_PROFIT_SHARE);
+  }
+
+  // Internal helper functions for withdrawFromVault
+  function _handleLeaderWithdrawal(
+    Vault storage vaultInfo,
+    MainStorage storage $,
+    uint256 amount
+  ) private {
+    // Leader gets full amount
+    vaultInfo.balance -= amount;
+    vaultInfo.members[msg.sender].balance -= amount;
+    $.userBalances[vaultInfo.vault] -= amount;
+    $.userBalances[msg.sender] += amount;
+  }
+
+  function _handleMemberWithdrawal(
+    Vault storage vaultInfo,
+    MainStorage storage $,
+    uint256 amount
+  ) private {
+    // Calculate shares
+    uint256 leaderShare = amount * VAULT_PROFIT_SHARE / BASE;
+    uint256 memberShare = amount - leaderShare;
+    
+    // Update vault balances
+    vaultInfo.balance -= memberShare;
+    vaultInfo.members[vaultInfo.leader].balance += leaderShare;
+    vaultInfo.members[msg.sender].balance -= memberShare;
+    
+    // Update token balances
+    $.userBalances[vaultInfo.vault] -= memberShare;
+    $.userBalances[msg.sender] += memberShare;
   }
 
   function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
