@@ -64,6 +64,8 @@ contract StVolHourly is
     address[] couponHolders;
     mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
     mapping(address => Vault) vaults; // key: vault address 
+    mapping(address => VaultMember[]) vaultMembers; // key: vault address, value: vault members 
+    mapping(uint256 => VaultSnapshot) orderVaultSnapshots; // Mapping from order index to vault snapshot
 
     /* you can add new variables here */
   }
@@ -148,9 +150,9 @@ contract StVolHourly is
     address vault;
     address leader;
     uint256 balance;
+    uint256 profitShare;
     bool closed;
     uint256 created;
-    mapping(address => VaultMember) members; // key: user address
   } 
 
   struct VaultMember {
@@ -159,6 +161,11 @@ contract StVolHourly is
     uint256 balance;
     uint256 created;
   } 
+
+  struct VaultSnapshot {
+    address[] members;
+    mapping(address => uint256) balances;
+  }
 
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
@@ -187,6 +194,7 @@ contract StVolHourly is
   event VaultCreated(address indexed vault, address indexed leader);
   event DepositToVault(address indexed vault, address indexed user, uint256 amount);
   event WithdrawFromVault(address indexed vault, address indexed user, uint256 amount, uint256 profitShare);
+  event VaultTransactionProcessed( uint256 indexed orderIdx, address indexed vault, address indexed member, uint256 memberShare, bool isWin);
 
   function _getMainStorage() internal pure returns (MainStorage storage $) {
     assembly {
@@ -205,7 +213,7 @@ contract StVolHourly is
     _;
   }
 
-  /// @custom:oz-upgrades-unsafe-allow constructor
+ /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
     _disableInitializers();
   }
@@ -392,6 +400,7 @@ contract StVolHourly is
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
     require(amount > 0, "Amount must be greater than 0");
+    require(user != $.vaults[user].vault, "notVault");
     require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
     $.userBalances[user] -= amount + WITHDRAWAL_FEE;
     $.treasuryAmount += WITHDRAWAL_FEE;
@@ -422,7 +431,7 @@ contract StVolHourly is
     return request;
   }
 
-  function createVault(address vault) external nonReentrant onlyOperator {
+  function createVault(address vault, uint256 sharePercentage) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
     require(vault != address(0), "invalid vault address");  
 
@@ -432,14 +441,16 @@ contract StVolHourly is
     vaultInfo.vault = vault;
     vaultInfo.leader = msg.sender;
     vaultInfo.balance = 0;
+    vaultInfo.profitShare = sharePercentage;
     vaultInfo.closed = false;
     vaultInfo.created = block.timestamp;
-    vaultInfo.members[msg.sender] = VaultMember({
+    $.vaultMembers[vault].push(VaultMember({
       vault: vault,
       user: msg.sender,
       balance: 0,
       created: block.timestamp
-    }); 
+    })); 
+
     emit VaultCreated(vault, msg.sender);
   } 
 
@@ -454,11 +465,11 @@ contract StVolHourly is
     vaultInfo.closed = true;
   } 
 
-  function depositToVault(address vault, uint256 amount) external nonReentrant onlyOperator {
+  function depositToVault(address vault, address user, uint256 amount) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
     
     require(amount > 0, "Amount must be greater than 0");
-    require($.userBalances[msg.sender] >= amount, "Insufficient user balance");
+    require($.userBalances[user] >= amount, "Insufficient user balance");
     
     Vault storage vaultInfo = $.vaults[vault];
     require(vaultInfo.vault != address(0), "Vault not found");
@@ -466,16 +477,16 @@ contract StVolHourly is
 
     // Update balances
     vaultInfo.balance += amount;
-    vaultInfo.members[msg.sender].balance += amount;
+    _updateVaultMemberBalance(vault, user, amount, true);
     
     // Transfer tokens
     $.userBalances[vault] += amount;
-    $.userBalances[msg.sender] -= amount;
+    $.userBalances[user] -= amount;
     
-    emit DepositToVault(vault, msg.sender, amount);
+    emit DepositToVault(vault, user, amount);
   }
 
-  function withdrawFromVault(address vault, uint256 amount) external nonReentrant onlyOperator {
+  function withdrawFromVault(address vault, address user, uint256 amount) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
     require(amount > 0, "Amount must be greater than 0");
     
@@ -483,48 +494,74 @@ contract StVolHourly is
     require(vaultInfo.vault != address(0), "Vault not found");
     require(!vaultInfo.closed, "Vault is closed");
     require(vaultInfo.balance >= amount, "Insufficient vault balance");
-    require(vaultInfo.members[msg.sender].balance >= amount, "Insufficient member balance");
+    require(_isVaultMember(vault, user), "Member not found");
 
     // Handle withdrawal based on user role
-    if (msg.sender == vaultInfo.leader) {
-        _handleLeaderWithdrawal(vaultInfo, $, amount);
+    if (user == vaultInfo.leader) {
+      vaultInfo.balance -= amount;
+      $.userBalances[vaultInfo.vault] -= amount;
+      $.userBalances[msg.sender] += amount;
+      _updateVaultMemberBalance(vault, user, amount, false);  
     } else {
-        _handleMemberWithdrawal(vaultInfo, $, amount);
+      // Calculate shares
+        uint256 leaderShare = amount * VAULT_PROFIT_SHARE / BASE;
+        uint256 memberShare = amount - leaderShare;
+        
+        // Update vault balances
+      vaultInfo.balance -= memberShare;
+      _updateVaultMemberBalance(vault, user, memberShare, false); // Update member balance with positive amount
+      _updateVaultMemberBalance(vault, vaultInfo.leader, leaderShare, true); // Update leader balance with positive amount
+        
+        // Update token balances
+        $.userBalances[vaultInfo.vault] -= memberShare;
+        $.userBalances[msg.sender] += memberShare;
     }
     
-    emit WithdrawFromVault(vault, msg.sender, amount, VAULT_PROFIT_SHARE);
+    emit WithdrawFromVault(vault, user, amount, VAULT_PROFIT_SHARE);
   }
 
-  // Internal helper functions for withdrawFromVault
-  function _handleLeaderWithdrawal(
-    Vault storage vaultInfo,
-    MainStorage storage $,
-    uint256 amount
-  ) private {
-    // Leader gets full amount
-    vaultInfo.balance -= amount;
-    vaultInfo.members[msg.sender].balance -= amount;
-    $.userBalances[vaultInfo.vault] -= amount;
-    $.userBalances[msg.sender] += amount;
-  }
+  // Helper function to update vault member balance
+function _updateVaultMemberBalance(address vault, address user, uint256 amount, bool isDeposit) internal {
+    MainStorage storage $ = _getMainStorage();
+    VaultMember[] storage members = $.vaultMembers[vault];
+    bool found = false;
+    for (uint i = 0; i < members.length; i++) {
+        if (members[i].user == user) {
+            if (isDeposit) {
+                members[i].balance += amount;
+            } else {
+                require(members[i].balance >= amount, "Insufficient balance for withdrawal");
+                members[i].balance -= amount;
+            }
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        require(isDeposit, "Cannot withdraw from non-existent member");
+        $.vaultMembers[vault].push(VaultMember({
+            vault: vault,
+            user: user,
+            balance: amount,
+            created: block.timestamp
+        }));
+    }
+}
 
-  function _handleMemberWithdrawal(
-    Vault storage vaultInfo,
-    MainStorage storage $,
-    uint256 amount
-  ) private {
-    // Calculate shares
-    uint256 leaderShare = amount * VAULT_PROFIT_SHARE / BASE;
-    uint256 memberShare = amount - leaderShare;
-    
-    // Update vault balances
-    vaultInfo.balance -= memberShare;
-    vaultInfo.members[vaultInfo.leader].balance += leaderShare;
-    vaultInfo.members[msg.sender].balance -= memberShare;
-    
-    // Update token balances
-    $.userBalances[vaultInfo.vault] -= memberShare;
-    $.userBalances[msg.sender] += memberShare;
+  function _isVault(address vault) internal view returns (bool) {
+    MainStorage storage $ = _getMainStorage();
+    return $.vaults[vault].vault != address(0);
+  } 
+
+  function _isVaultMember(address vault, address user) internal view returns (bool) {
+    MainStorage storage $ = _getMainStorage();
+    VaultMember[] storage members = $.vaultMembers[vault];
+    for (uint i = 0; i < members.length; i++) {
+        if (members[i].user == user) {
+            return true;
+        }
+    }
+    return false;
   }
 
   function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
@@ -967,8 +1004,12 @@ contract StVolHourly is
         order.unit *
         PRICE_UNIT;
       uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
-      uint256 remainingFee = _useCoupon(order.overUser, fee, order.epoch);
-      $.userBalances[order.overUser] -= remainingFee;
+      uint256 remainingAmount = _useCoupon(order.overUser, fee, order.epoch);
+
+      $.userBalances[order.overUser] -= remainingAmount;
+      if (_isVault(order.overUser)) {
+        _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
+      } 
       $.treasuryAmount += fee;
       collectedFee += fee;
       emit OrderSettled(
@@ -989,12 +1030,20 @@ contract StVolHourly is
     } else if (isUnderWin) {
       uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
       uint256 remainingAmount = _useCoupon(order.overUser, amount, order.epoch);
+      
       $.userBalances[order.overUser] -= remainingAmount;
+      if (_isVault(order.overUser)) {
+        _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
+      } 
 
       uint256 fee = (amount * $.commissionfee) / BASE;
       $.treasuryAmount += fee;
       $.userBalances[order.underUser] += (amount - fee);
       collectedFee += fee;
+      if (_isVault(order.underUser)) {
+        _processVaultTransaction(order.idx, order.underUser, (amount - fee), true);
+      } 
+
 
       emit OrderSettled(
         order.overUser,
@@ -1023,11 +1072,17 @@ contract StVolHourly is
       uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
       uint256 remainingAmount = _useCoupon(order.underUser, amount, order.epoch);
       $.userBalances[order.underUser] -= remainingAmount;
+      if (_isVault(order.underUser)) {
+        _processVaultTransaction(order.idx, order.underUser, remainingAmount, false);
+      } 
 
       uint256 fee = (amount * $.commissionfee) / BASE;
       $.treasuryAmount += fee;
       $.userBalances[order.overUser] += (amount - fee);
       collectedFee += fee;
+      if (_isVault(order.overUser)) {
+        _processVaultTransaction(order.idx, order.overUser, (amount - fee), true);
+      } 
 
       emit OrderSettled(
         order.underUser,
@@ -1162,5 +1217,24 @@ contract StVolHourly is
         }
       }
     }
+  }
+
+  function _processVaultTransaction(uint256 orderIdx, address vault, uint256 amount, bool isWin) internal {
+    MainStorage storage $ = _getMainStorage();
+    Vault storage vaultInfo = $.vaults[vault];
+    VaultSnapshot storage snapshot = $.orderVaultSnapshots[orderIdx];
+    VaultMember[] storage members = $.vaultMembers[vault];
+
+    // Calculate each member's share from the total vault balance and distribute the amount
+    for (uint i = 0; i < members.length; i++) {
+        VaultMember storage member = members[i];
+        uint256 memberShare = (member.balance * amount) / vaultInfo.balance;
+        member.balance = isWin ? member.balance + memberShare : member.balance - memberShare;
+        snapshot.members.push(member.user);
+        snapshot.balances[member.user] = member.balance;
+
+        emit VaultTransactionProcessed(orderIdx, vault, member.user, memberShare, isWin);
+    }
+    vaultInfo.balance = isWin ? vaultInfo.balance + amount : vaultInfo.balance - amount;
   }
 }
