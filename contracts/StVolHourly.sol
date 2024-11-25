@@ -191,7 +191,7 @@ contract StVolHourly is
   event WithdrawalRequested(address indexed user, uint256 amount);
   event WithdrawalApproved(address indexed user, uint256 amount);
   event WithdrawalRejected(address indexed user, uint256 amount);
-  event VaultCreated(address indexed vault, address indexed leader);
+  event VaultCreated(address indexed vault, address indexed leader, uint256 sharePercentage);
   event DepositToVault(address indexed vault, address indexed user, uint256 amount);
   event WithdrawFromVault(address indexed vault, address indexed user, uint256 amount, uint256 profitShare);
   event VaultTransactionProcessed( uint256 indexed orderIdx, address indexed vault, address indexed member, uint256 memberShare, bool isWin);
@@ -431,7 +431,7 @@ contract StVolHourly is
     return request;
   }
 
-  function createVault(address vault, uint256 sharePercentage) external nonReentrant onlyOperator {
+  function createVault(address vault, address leader, uint256 sharePercentage) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
     require(vault != address(0), "invalid vault address");  
 
@@ -439,26 +439,26 @@ contract StVolHourly is
     require(vaultInfo.vault == address(0), "vault already exists");
 
     vaultInfo.vault = vault;
-    vaultInfo.leader = msg.sender;
+    vaultInfo.leader = leader;
     vaultInfo.balance = 0;
     vaultInfo.profitShare = sharePercentage;
     vaultInfo.closed = false;
     vaultInfo.created = block.timestamp;
     $.vaultMembers[vault].push(VaultMember({
       vault: vault,
-      user: msg.sender,
+      user: leader,
       balance: 0,
       created: block.timestamp
     })); 
 
-    emit VaultCreated(vault, msg.sender);
+    emit VaultCreated(vault, leader, sharePercentage);
   } 
 
-  function closeVault(address vault) external nonReentrant onlyOperator {
+  function closeVault(address vault, address leader) external nonReentrant onlyOperator {
     MainStorage storage $ = _getMainStorage();
     Vault storage vaultInfo = $.vaults[vault];
     require(vaultInfo.vault != address(0), "vault not found");
-    require(vaultInfo.leader == msg.sender, "only leader can close vault");   
+    require(vaultInfo.leader == leader, "only leader can close vault");   
     require(!vaultInfo.closed, "vault already closed"); 
     require(vaultInfo.balance == 0, "vault balance is not zero");
 
