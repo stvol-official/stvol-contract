@@ -500,24 +500,24 @@ contract StVolHourly is
     if (user == vaultInfo.leader) {
       vaultInfo.balance -= amount;
       $.userBalances[vaultInfo.vault] -= amount;
-      $.userBalances[msg.sender] += amount;
+      $.userBalances[user] += amount;
       _updateVaultMemberBalance(vault, user, amount, false);  
     } else {
       // Calculate shares
-        uint256 leaderShare = amount * VAULT_PROFIT_SHARE / BASE;
-        uint256 memberShare = amount - leaderShare;
+      uint256 leaderShare = amount * vaultInfo.profitShare / BASE;
+      uint256 memberShare = amount - leaderShare;
         
         // Update vault balances
       vaultInfo.balance -= memberShare;
       _updateVaultMemberBalance(vault, user, memberShare, false); // Update member balance with positive amount
       _updateVaultMemberBalance(vault, vaultInfo.leader, leaderShare, true); // Update leader balance with positive amount
         
-        // Update token balances
-        $.userBalances[vaultInfo.vault] -= memberShare;
-        $.userBalances[msg.sender] += memberShare;
+      // Update token balances
+      $.userBalances[vaultInfo.vault] -= memberShare;
+      $.userBalances[user] += memberShare;
     }
     
-    emit WithdrawFromVault(vault, user, amount, VAULT_PROFIT_SHARE);
+    emit WithdrawFromVault(vault, user, amount, vaultInfo.profitShare);
   }
 
   // Helper function to update vault member balance
@@ -837,6 +837,11 @@ function _updateVaultMemberBalance(address vault, address user, uint256 amount, 
     MainStorage storage $ = _getMainStorage();
     return $.lastSettledFilledOrderId;
   }
+
+  function getVaultInfo(address vault) public view returns (Vault memory) {
+    MainStorage storage $ = _getMainStorage();
+    return $.vaults[vault];
+  } 
 
   /* internal functions */
   function _getPythPrices(
