@@ -24,7 +24,6 @@ contract StVolHourly is
   ReentrancyGuardUpgradeable
 {
   using SafeERC20 for IERC20;
-  IVault public vault;
 
   function _priceIds() internal pure returns (bytes32[] memory) {
     // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
@@ -592,6 +591,11 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
   function lastSettledFilledOrderId() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.lastSettledFilledOrderId;
+  }
+
+  function vault() public view returns (address) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    return address($.vault);
   }
 
   /* internal functions */

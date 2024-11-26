@@ -10,7 +10,7 @@ export default {
       blast_sepolia: "0x9C75DA71284E9F912C9237253F21f90223D7034a", // stvol vUSDB
       base_sepolia: "0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC", // stvol vUSDC
       base: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", // USDC
-      minato: "0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC", // supervol USDC
+      minato: "0x770D5DE8dd09660F1141CF887D6B50976FBb12A0", // supervol USDC
     },
     Oracle: {
       mainnet: "0x4305FB66699C3B2702D4d05CF36551390A4c69C6",
