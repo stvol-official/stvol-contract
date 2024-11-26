@@ -60,6 +60,18 @@ export default {
       base: "0xfc48F475E7296c9e645311B85F8F2bcb64BD8fbd",
       minato: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
     },
+    Vault: {
+      mainnet: "",
+      arbitrum: "",
+      arbitrum_sepolia: "",
+      sepolia: "",
+      goerli: "",
+      blast: "",
+      blast_sepolia: "",
+      base_sepolia: "",
+      base: "",
+      minato: "0x9Ac4ea5E80D6EC5F432521a970A51348037a7253",
+    },
   },
   PythPriceId: {
     mainnet: {

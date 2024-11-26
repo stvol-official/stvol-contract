@@ -215,8 +215,8 @@ export default {
         network: "minato",
         chainId: 1946,
         urls: {
-          apiURL: "https://explorer-testnet.soneium.org/api",
-          browserURL: "https://explorer-testnet.soneium.org",
+          apiURL: "https://soneium-minato.blockscout.com/api",
+          browserURL: "https://soneium-minato.blockscout.com",
         },
       },
     ],
