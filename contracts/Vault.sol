@@ -7,7 +7,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import { VaultStorage } from "./storage/VaultStorage.sol";
 
 import {
@@ -21,8 +20,7 @@ contract Vault is
     UUPSUpgradeable,
     OwnableUpgradeable,
     PausableUpgradeable,
-    ReentrancyGuardUpgradeable,
-    AccessControlUpgradeable
+    ReentrancyGuardUpgradeable
 {
     uint256 private constant BASE = 10000; // 100%
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -47,12 +45,14 @@ contract Vault is
     event VaultClosed(address indexed vault, address indexed leader);
 
     modifier onlyAdmin() {
-        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "onlyAdmin");
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        require(msg.sender == $.adminAddress, "onlyAdmin");
         _;
     }
 
     modifier onlyOperator() {
-        require(hasRole(OPERATOR_ROLE, msg.sender), "onlyOperator");
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        require(msg.sender == $.operatorAddress, "onlyOperator");
         _;
     }
 
@@ -68,14 +68,10 @@ contract Vault is
         require(_adminAddress != address(0), "Invalid admin address");
         require(_operatorAddress != address(0), "Invalid operator address");
         
-        __AccessControl_init();
         __UUPSUpgradeable_init();
         __Ownable_init(msg.sender);
         __Pausable_init();
         __ReentrancyGuard_init();
-
-        _grantRole(DEFAULT_ADMIN_ROLE, _adminAddress);
-        _grantRole(OPERATOR_ROLE, _operatorAddress);
 
         VaultStorage.Layout storage $ = VaultStorage.layout();
         $.adminAddress = _adminAddress;
@@ -215,16 +211,12 @@ contract Vault is
     function setAdmin(address _adminAddress) external onlyOwner {
         require(_adminAddress != address(0), "Invalid address");
         VaultStorage.Layout storage $ = VaultStorage.layout();
-        revokeRole(DEFAULT_ADMIN_ROLE, $.adminAddress);
-        grantRole(DEFAULT_ADMIN_ROLE, _adminAddress);
         $.adminAddress = _adminAddress;
     }
 
     function setOperator(address _operatorAddress) external onlyAdmin {
         require(_operatorAddress != address(0), "Invalid address");
         VaultStorage.Layout storage $ = VaultStorage.layout();
-        revokeRole(OPERATOR_ROLE, $.operatorAddress);
-        grantRole(OPERATOR_ROLE, _operatorAddress);
         $.operatorAddress = _operatorAddress;
     }
 

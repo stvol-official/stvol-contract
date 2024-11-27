@@ -102,7 +102,7 @@ contract StVolHourly is
 
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
-    $.token = IERC20(0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC); // minato usdc
+    $.token = IERC20(0x770D5DE8dd09660F1141CF887D6B50976FBb12A0); // minato usdc
     $.oracle = IPyth(_oracleAddress);
     $.vault = IVault(_vaultAddress);
     $.adminAddress = _adminAddress;
@@ -455,11 +455,17 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     $.adminAddress = _adminAddress;
   }
 
-  function setToken(address _token) external onlyOwner {
+  function setToken(address _token) external onlyAdmin {
     require(_token != address(0), "E31");
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.token = IERC20(_token); 
   }
+
+  function setVault(address _vault) external onlyAdmin {
+    require(_vault != address(0), "E31");
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    $.vault = IVault(_vault);
+  } 
 
   /* public views */
   function commissionfee() public view returns (uint256) {

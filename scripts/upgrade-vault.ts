@@ -2,7 +2,7 @@ import { ethers, network, run, upgrades } from "hardhat";
 import input from "@inquirer/input";
 
 /*
- npx hardhat run --network minato scripts/upgrade-stvol-hourly.ts
+ npx hardhat run --network minato scripts/upgrade-vault.ts
 */
 
 const NETWORK = ["base", "base_sepolia", "minato"];
