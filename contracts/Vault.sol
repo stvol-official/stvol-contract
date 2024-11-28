@@ -27,10 +27,17 @@ contract Vault is
 
     error InvalidAmount();
     error InsufficientBalance();
+    error InvalidAddress();
     error VaultNotFound();
     error VaultAlreadyClosed();
     error NonZeroBalance();
     error Unauthorized();
+    error VaultAlreadyExists();
+    error InvalidLeaderAddress();
+    error InvalidVaultAddress();
+    error LeaderCannotBeVault();    
+    error CannotWithdrawFromNonExistentMember();
+    error VaultBalanceIsZero();
 
     event VaultTransaction(
         address indexed vault,
@@ -79,13 +86,16 @@ contract Vault is
     }
 
     function createVault(address vault, address leader, uint256 sharePercentage) external nonReentrant onlyOperator {
-        require(sharePercentage <= BASE, "Share percentage exceeds maximum");
-        require(leader != address(0), "Invalid leader address");
-        require(vault != address(0), "Invalid vault address");  
+        if (sharePercentage > BASE) revert InvalidAmount();
+        if (isVault(leader)) revert InvalidLeaderAddress();
+        if (isVault(vault)) revert VaultAlreadyExists();
+        if (leader == address(0)) revert InvalidLeaderAddress();
+        if (vault == address(0)) revert InvalidVaultAddress();
+        if (leader == vault) revert LeaderCannotBeVault();
 
         VaultStorage.Layout storage $ = VaultStorage.layout();
         VaultInfo storage vaultInfo = $.vaults[vault];
-        require(vaultInfo.vault == address(0), "Vault already exists");
+        if (vaultInfo.vault != address(0)) revert VaultAlreadyExists();
 
         vaultInfo.vault = vault;
         vaultInfo.leader = leader;
@@ -117,6 +127,8 @@ contract Vault is
 
     function depositToVault(address vault, address user, uint256 amount) external nonReentrant onlyOperator returns (uint256) {
         VaultInfo storage vaultInfo = _validateVaultOperation(vault, amount, false);
+        if (isVault(user)) revert Unauthorized();
+
         vaultInfo.balance += amount;
         _updateVaultMemberBalance(vault, user, amount, true);
         
@@ -126,7 +138,7 @@ contract Vault is
 
     function withdrawFromVault(address vault, address user, uint256 amount) external nonReentrant onlyOperator returns (uint256) {
         VaultInfo storage vaultInfo = _validateVaultOperation(vault, amount, true);
-        if (!isVaultMember(vault, user)) revert Unauthorized();
+        if (isVault(user) || !isVaultMember(vault, user)) revert Unauthorized();
 
         uint256 memberShare;
         uint256 leaderShare;
@@ -151,7 +163,7 @@ contract Vault is
     function processVaultTransaction(uint256 orderIdx, address vault, uint256 amount, bool isWin) external nonReentrant onlyOperator {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         VaultInfo storage vaultInfo = $.vaults[vault];
-        require(vaultInfo.balance > 0, "Vault balance is zero");
+        if (vaultInfo.balance == 0) revert VaultBalanceIsZero();
         
         VaultSnapshot storage snapshot = $.orderVaultSnapshots[orderIdx];
         VaultMember[] storage members = $.vaultMembers[vault];
@@ -182,7 +194,7 @@ contract Vault is
                 if (isDeposit) {
                     members[i].balance += amount;
                 } else {
-                    require(members[i].balance >= amount, "Insufficient balance for withdrawal");
+                    if (members[i].balance < amount) revert InsufficientBalance();
                     members[i].balance -= amount;
                 }
                 found = true;
@@ -190,7 +202,7 @@ contract Vault is
             }
         }
         if (!found) {
-            require(isDeposit, "Cannot withdraw from non-existent member");
+            if (!isDeposit) revert CannotWithdrawFromNonExistentMember();
             $.vaultMembers[vault].push(VaultMember({
                 vault: vault,
                 user: user,
@@ -209,13 +221,13 @@ contract Vault is
     }
 
     function setAdmin(address _adminAddress) external onlyOwner {
-        require(_adminAddress != address(0), "Invalid address");
+        if (_adminAddress == address(0)) revert InvalidAddress();
         VaultStorage.Layout storage $ = VaultStorage.layout();
         $.adminAddress = _adminAddress;
     }
 
     function setOperator(address _operatorAddress) external onlyAdmin {
-        require(_operatorAddress != address(0), "Invalid address");
+        if (_operatorAddress == address(0)) revert InvalidAddress();
         VaultStorage.Layout storage $ = VaultStorage.layout();
         $.operatorAddress = _operatorAddress;
     }

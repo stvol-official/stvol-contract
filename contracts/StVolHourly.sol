@@ -199,17 +199,21 @@ contract StVolHourly is
 
   function deposit(uint256 amount) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    require(!$.vault.isVault(msg.sender), "vault cannot deposit");
+
     $.token.safeTransferFrom(msg.sender, address(this), amount);
     $.userBalances[msg.sender] += amount;
     emit Deposit(msg.sender, msg.sender, amount, $.userBalances[msg.sender]);
   }
 
-  function depositTo(address user, uint256 amount) external nonReentrant {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.token.safeTransferFrom(msg.sender, address(this), amount);
-    $.userBalances[user] += amount;
-    emit Deposit(user, msg.sender, amount, $.userBalances[user]);
-  }
+  // function depositTo(address user, uint256 amount) external nonReentrant {
+  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+  //   require(!$.vault.isVault(user), "vault cannot deposit");
+
+  //   $.token.safeTransferFrom(msg.sender, address(this), amount);
+  //   $.userBalances[user] += amount;
+  //   emit Deposit(user, msg.sender, amount, $.userBalances[user]);
+  // }
 
   function depositCouponTo(
     address user,
@@ -268,6 +272,7 @@ contract StVolHourly is
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    require(!$.vault.isVault(user), "Vault cannot withdraw");
     require(amount > 0, "Amount must be greater than 0");
     require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
     $.userBalances[user] -= amount + WITHDRAWAL_FEE;
@@ -281,6 +286,7 @@ contract StVolHourly is
   ) external nonReentrant returns (WithdrawalRequest memory) {
     address user = msg.sender;
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    require(!$.vault.isVault(user), "Vault cannot withdraw");
     require(amount > 0, "Amount must be greater than 0");
     require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
 
@@ -807,7 +813,6 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
       if ($.vault.isVault(order.underUser)) {
         _processVaultTransaction(order.idx, order.underUser, (amount - fee), true);
       } 
-
 
       emit OrderSettled(
         order.overUser,
