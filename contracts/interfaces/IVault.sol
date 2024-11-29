@@ -15,15 +15,23 @@ interface IVault {
     event VaultCreated(address indexed vault, address indexed leader, uint256 sharePercentage);
     event DepositToVault(address indexed vault, address indexed user, uint256 amount);
     event WithdrawFromVault(address indexed vault, address indexed user, uint256 amount, uint256 profitShare);
-    event VaultTransactionProcessed(uint256 indexed orderIdx, address indexed vault, address indexed member, uint256 memberShare, bool isWin);
+    event VaultTransactionProcessedBatch(uint256 indexed orderIdx, address indexed vault, uint256 vaultBalance, address[] users, uint256[] balances, uint256[] shares, bool isWin);
+
 
     // Errors
     error InvalidAmount();
     error InsufficientBalance();
+    error InvalidAddress();
     error VaultNotFound();
-    error VaultClosed();
+    error VaultAlreadyClosed();
     error NonZeroBalance();
     error Unauthorized();
+    error VaultAlreadyExists();
+    error InvalidLeaderAddress();
+    error InvalidVaultAddress();
+    error LeaderCannotBeVault();    
+    error CannotWithdrawFromNonExistentMember();
+    error VaultBalanceIsZero();
 
     // External Functions
     function initialize(address _adminAddress, address _operatorAddress) external;

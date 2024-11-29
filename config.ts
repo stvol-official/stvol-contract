@@ -70,7 +70,7 @@ export default {
       blast_sepolia: "",
       base_sepolia: "",
       base: "",
-      minato: "0x9Ac4ea5E80D6EC5F432521a970A51348037a7253",
+      minato: "0x49Ff93096bD296E70652969a2205461998b75550",
     },
   },
   PythPriceId: {

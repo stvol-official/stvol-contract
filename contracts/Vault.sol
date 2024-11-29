@@ -48,8 +48,17 @@ contract Vault is
     event VaultCreated(address indexed vault, address indexed leader, uint256 sharePercentage);
     event DepositToVault(address indexed vault, address indexed user, uint256 amount);
     event WithdrawFromVault(address indexed vault, address indexed user, uint256 amount, uint256 profitShare);
-    event VaultTransactionProcessed(uint256 indexed orderIdx, address indexed vault, address indexed member, uint256 memberShare, bool isWin);
+    event VaultTransactionProcessed(uint256 indexed orderIdx, address indexed vault, address indexed member, uint256 memberBalance, uint256 memberShare, bool isWin);
     event VaultClosed(address indexed vault, address indexed leader);
+    event VaultTransactionProcessedBatch(
+        uint256 indexed orderIdx,
+        address indexed vault,
+        uint256 vaultBalance,
+        address[] users,
+        uint256[] balances,
+        uint256[] shares,
+        bool isWin
+    );
 
     modifier onlyAdmin() {
         VaultStorage.Layout storage $ = VaultStorage.layout();
@@ -168,6 +177,11 @@ contract Vault is
         VaultSnapshot storage snapshot = $.orderVaultSnapshots[orderIdx];
         VaultMember[] storage members = $.vaultMembers[vault];
 
+        // Prepare arrays to store batch data
+        address[] memory users = new address[](members.length);
+        uint256[] memory balances = new uint256[](members.length);
+        uint256[] memory shares = new uint256[](members.length);
+
         // Calculate each member's share from the total vault balance and distribute the amount
         for (uint i = 0; i < members.length; i++) {
             VaultMember storage member = members[i];
@@ -178,11 +192,17 @@ contract Vault is
                 user: member.user,
                 balance: member.balance,
                 created: member.created
-            })  
-            );
-            emit VaultTransactionProcessed(orderIdx, vault, member.user, memberShare, isWin);
+            }));
+
+            // Store data for batch event
+            users[i] = member.user;
+            balances[i] = member.balance;
+            shares[i] = memberShare;
         }
         vaultInfo.balance = isWin ? vaultInfo.balance + amount : vaultInfo.balance - amount;
+
+        // Emit a single event with batch data
+        emit VaultTransactionProcessedBatch(orderIdx, vault, vaultInfo.balance, users, balances, shares, isWin);
     }
 
     function _updateVaultMemberBalance(address vault, address user, uint256 amount, bool isDeposit) internal {
