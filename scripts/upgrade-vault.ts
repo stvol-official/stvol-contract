@@ -6,7 +6,7 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["base", "base_sepolia", "minato"];
-const DEPLOYED_PROXY = "0x646ADD1437514D3A3A9Abfb1650Eca22C44C34D0"; // for minato
+const DEPLOYED_PROXY = "0x49Ff93096bD296E70652969a2205461998b75550"; // for minato
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));

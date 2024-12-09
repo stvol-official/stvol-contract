@@ -23,7 +23,6 @@ contract Vault is
     ReentrancyGuardUpgradeable
 {
     uint256 private constant BASE = 10000; // 100%
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     error InvalidAmount();
     error InsufficientBalance();
@@ -43,7 +42,8 @@ contract Vault is
         address indexed vault,
         address indexed user,
         uint256 amount,
-        bool isDeposit
+        bool isDeposit,
+        uint256 memberBalance
     );
     event VaultCreated(address indexed vault, address indexed leader, uint256 sharePercentage);
     event DepositToVault(address indexed vault, address indexed user, uint256 amount);
@@ -139,9 +139,9 @@ contract Vault is
         if (isVault(user)) revert Unauthorized();
 
         vaultInfo.balance += amount;
-        _updateVaultMemberBalance(vault, user, amount, true);
+        uint256 memberBalance = _updateVaultMemberBalance(vault, user, amount, true);
         
-        emit VaultTransaction(vault, user, amount, true);
+        emit VaultTransaction(vault, user, amount, true, memberBalance);
         return amount;
     }
 
@@ -160,12 +160,14 @@ contract Vault is
         }
 
         vaultInfo.balance -= memberShare;
-        if (user != vaultInfo.leader) {
-            _updateVaultMemberBalance(vault, vaultInfo.leader, leaderShare, true);
-        }
-        _updateVaultMemberBalance(vault, user, memberShare, false);
         
-        emit VaultTransaction(vault, user, amount, false);
+        uint256 memberBalance;
+        if (user != vaultInfo.leader) {
+            memberBalance = _updateVaultMemberBalance(vault, vaultInfo.leader, leaderShare, true);
+        }
+        memberBalance = _updateVaultMemberBalance(vault, user, memberShare, false);
+        
+        emit VaultTransaction(vault, user, amount, false, memberBalance);
         return memberShare;
     }
 
@@ -205,10 +207,11 @@ contract Vault is
         emit VaultTransactionProcessedBatch(orderIdx, vault, vaultInfo.balance, users, balances, shares, isWin);
     }
 
-    function _updateVaultMemberBalance(address vault, address user, uint256 amount, bool isDeposit) internal {
+    function _updateVaultMemberBalance(address vault, address user, uint256 amount, bool isDeposit) internal returns (uint256) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         VaultMember[] storage members = $.vaultMembers[vault];
         bool found = false;
+        uint256 memberBalance;
         for (uint i = 0; i < members.length; i++) {
             if (members[i].user == user) {
                 if (isDeposit) {
@@ -217,6 +220,7 @@ contract Vault is
                     if (members[i].balance < amount) revert InsufficientBalance();
                     members[i].balance -= amount;
                 }
+                memberBalance = members[i].balance;
                 found = true;
                 break;
             }
@@ -229,7 +233,9 @@ contract Vault is
                 balance: amount,
                 created: block.timestamp
             }));
+            memberBalance = amount;
         }
+        return memberBalance;
     }
 
     function pause() external whenNotPaused onlyAdmin {
@@ -253,6 +259,17 @@ contract Vault is
     }
 
     /* public views */
+    function getVaultMember(address vault, address user) public view returns (VaultMember memory) {
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        VaultMember[] storage members = $.vaultMembers[vault];
+        for (uint i = 0; i < members.length; i++) {
+            if (members[i].user == user) {
+                return members[i];
+            }
+        }
+        revert CannotWithdrawFromNonExistentMember();
+    }
+
     function isVault(address vault) public view returns (bool) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         return $.vaults[vault].vault != address(0);
