@@ -259,17 +259,6 @@ contract Vault is
     }
 
     /* public views */
-    function getVaultMember(address vault, address user) public view returns (VaultMember memory) {
-        VaultStorage.Layout storage $ = VaultStorage.layout();
-        VaultMember[] storage members = $.vaultMembers[vault];
-        for (uint i = 0; i < members.length; i++) {
-            if (members[i].user == user) {
-                return members[i];
-            }
-        }
-        revert CannotWithdrawFromNonExistentMember();
-    }
-
     function isVault(address vault) public view returns (bool) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         return $.vaults[vault].vault != address(0);
@@ -299,6 +288,19 @@ contract Vault is
     function getVaultMembers(address vault) external view returns (VaultMember[] memory) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         return $.vaultMembers[vault];
+    }
+
+    function getVaultBalanceOf(address vault, address user) public view returns (uint256) {
+        if (!isVault(vault)) revert VaultNotFound();
+
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        VaultMember[] storage members = $.vaultMembers[vault];
+        for (uint i = 0; i < members.length; i++) {
+            if (members[i].user == user) {
+                return members[i].balance;
+            }
+        }
+        return 0;
     }
 
     function getVaultSnapshot(uint256 orderIdx) internal view returns (VaultSnapshot memory) {
