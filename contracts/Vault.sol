@@ -275,6 +275,17 @@ contract Vault is
         return false;
     }
 
+    function getVaultMember(address vault, address user) public view returns (VaultMember memory) {
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        VaultMember[] storage members = $.vaultMembers[vault];
+        for (uint i = 0; i < members.length; i++) {
+            if (members[i].user == user) {
+                return members[i];
+            }
+        }
+        return VaultMember(vault, user, 0, 0);
+    }
+
     function addresses() public view returns (address, address) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         return ($.adminAddress, $.operatorAddress);
