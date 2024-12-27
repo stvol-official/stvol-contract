@@ -115,13 +115,14 @@ export default {
       chainId: 84532,
     },
     minato: {
-      url: `https://rpc.minato.soneium.org/`,
+      url: `https://soneium-minato.rpc.scs.startale.com?apikey=GmiicS3QQg2znrM6ml2vxupFlf6X7Rns`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
       accounts: {
         mnemonic,
       },
       chainId: 1946,
+      timeout: 60000,
     },
   },
   solidity: {

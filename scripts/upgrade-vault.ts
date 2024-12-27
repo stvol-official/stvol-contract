@@ -36,7 +36,7 @@ const upgrade = async () => {
     // Deploy contracts.
     const VaultFactory = await ethers.getContractFactory(CONTRACT_NAME);
 
-    // const stVolContract = await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
+    const stVolContract = await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
     const contract = await upgrades.upgradeProxy(PROXY, VaultFactory, {
       kind: "uups",
       redeployImplementation: "always",

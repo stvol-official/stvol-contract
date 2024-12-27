@@ -37,6 +37,41 @@
       "kind": "uups"
     },
     {
+      "address": "0xD8607628F30db7850E36377B9c91ec5aec57Ae5a",
+      "txHash": "0x83d1b85b57d2dabaf5e73be222586808d1d4d85658e4277a87340c1a569228e9",
+      "kind": "uups"
+    },
+    {
+      "address": "0xC0bD1506452bD80f0dAd48B0C5754f79B1736f0E",
+      "txHash": "0xb36e92c3219a695d364016dee1ce57dc07157039a2336b3c427d29a7ad426b40",
+      "kind": "uups"
+    },
+    {
+      "address": "0x3d036fFF35794cC9e666AdA0bDD04826C63d8ab4",
+      "txHash": "0xf693971ff34ef0e9f7509db8a38fb89a3262d0b981c0278716d9abe10e3d0250",
+      "kind": "uups"
+    },
+    {
+      "address": "0xbBb65F424991DEdF09340D91A26A178D5341EC62",
+      "txHash": "0x4d3b209265e9d00397642c5bd68df5d62634aa83698a4ff7bf4b55ec20b35860",
+      "kind": "uups"
+    },
+    {
+      "address": "0x8c32f7629c919a18458932459fD00269f6520E81",
+      "txHash": "0xf8e2968c2b3a2ef51016cf1e58effc39b60ecd9a4e31a29517a3af83a4dc9901",
+      "kind": "uups"
+    },
+    {
+      "address": "0x0c84Cd410b3e3c9c1EE61dB848C7184D895294c1",
+      "txHash": "0x21c4489ab6b5fb596e5a64d3608710be9af91e7648061dec75df4aef7a8e0e73",
+      "kind": "uups"
+    },
+    {
+      "address": "0x2DFfe7b64ab0D3a0089e2317538d6eACb9eF3264",
+      "txHash": "0x2c8e26599abcbc291a5d98a330ba0edff1e5adc57932117e41e77c04d118857f",
+      "kind": "uups"
+    },
+    {
       "address": "0x49Ff93096bD296E70652969a2205461998b75550",
       "kind": "uups"
     }
@@ -3045,7 +3080,7 @@
             "label": "bool",
             "numberOfBytes": "1"
           },
-          "t_struct(InitializableStorage)64_storage": {
+          "t_struct(InitializableStorage)77_storage": {
             "label": "struct Initializable.InitializableStorage",
             "members": [
               {
@@ -3063,7 +3098,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(OwnableStorage)14_storage": {
+          "t_struct(OwnableStorage)27_storage": {
             "label": "struct OwnableUpgradeable.OwnableStorage",
             "members": [
               {
@@ -3075,7 +3110,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(PausableStorage)190_storage": {
+          "t_struct(PausableStorage)203_storage": {
             "label": "struct PausableUpgradeable.PausableStorage",
             "members": [
               {
@@ -3087,7 +3122,7 @@
             ],
             "numberOfBytes": "32"
           },
-          "t_struct(ReentrancyGuardStorage)251_storage": {
+          "t_struct(ReentrancyGuardStorage)264_storage": {
             "label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
             "members": [
               {
@@ -3161,6 +3196,15 @@
       },
       "allAddresses": [
         "0x2Cd26f1b9f85AC8667328deDe395Ce959a68cEc5",
+        "0xB4d395d5605f4131934DA062489FbcC0FCE70e58",
+        "0x65a6Fa35C8d979bE9C1A968B3d7C7F5c735b6f62",
+        "0x407Dd2D06428bCd1E9011ab5dA23737FE3ab0A78",
+        "0xEF7c5Bacdb5F34A97f7E3Ced36B8FA71Fc27cf4a",
+        "0x1Ab1343b1aeB7211980cC809EeC8A29aB6320a0b",
+        "0xA397eFd558dbe94B3e49E5EDa152B1eBF82E5CEf",
+        "0x83e935ECcCE5C61E7F9Dd146084a3CC570875250",
+        "0x5Fd8AbC9808bF06Dccc4250BEb4239b15d0fc47b",
+        "0x9955e53653a51C508912e9C67eA78A124Bc26b72",
         "0x47BB2Cc0af1D9f1A7eF3A64CC93a3e9365fa7ADA",
         "0x2616Ed2F368561f8c16CfE577910BAc0C1EE108a"
       ]

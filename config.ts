@@ -111,6 +111,6 @@ export default {
     blast_sepolia: 200, // 2%
     base_sepolia: 200, // 2%
     base: 200, // 2%
-    minato: 390, // 3.9%
+    minato: 490, // 4.9%
   },
 };
