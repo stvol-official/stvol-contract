@@ -559,14 +559,27 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     return $.filledOrders[epoch];
   }
 
-  function filledOrdersWithResult(uint256 epoch) public view returns (FilledOrder[] memory, SettlementResult[] memory) {
+  function filledOrdersWithResult(
+    uint256 epoch,
+    uint256 chunkSize,
+    uint256 offset
+  ) public view returns (FilledOrder[] memory, SettlementResult[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     FilledOrder[] memory orders = $.filledOrders[epoch];
-    SettlementResult[] memory results = new SettlementResult[](orders.length);
-    for (uint i = 0; i < orders.length ; i++) {
-      results[i] = $.settlementResults[orders[i].idx];
+    if (offset >= orders.length) {
+      return (new FilledOrder[](0), new SettlementResult[](0));
     }
-    return (orders, results);
+    uint256 end = offset + chunkSize;
+    if (end > orders.length) {
+      end = orders.length;
+    }
+    FilledOrder[] memory chunkedOrders = new FilledOrder[](end - offset);
+    SettlementResult[] memory chunkedResults = new SettlementResult[](end - offset);
+    for (uint i = offset; i < end; i++) {
+      chunkedOrders[i - offset] = orders[i];
+      chunkedResults[i - offset] = $.settlementResults[orders[i].idx];
+    }
+    return (chunkedOrders, chunkedResults);
   }
 
   function userFilledOrders(
