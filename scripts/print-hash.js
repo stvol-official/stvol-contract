@@ -12,6 +12,6 @@ function printHash(input) {
 }
 
 // keccak256(abi.encode(uint256(keccak256("supervolhourly.main")) - 1)) & ~bytes32(uint256(0xff));
-// printHash("supervolhourly.main");
+// printHash("io.supervol.storage.main");
 // printHash("io.supervol.storage.vault");
-printHash("io.supervol.storage.main");
+printHash("io.supervol.storage.clearinghouse");

@@ -7,36 +7,19 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import { VaultStorage } from "./storage/VaultStorage.sol";
-
-import {
-    VaultInfo,
-    VaultMember,
-    VaultSnapshot
-} from "./Types.sol";
+import { VaultStorage } from "../storage/VaultStorage.sol";
+import { ICommonErrors } from "../errors/CommonErrors.sol";
+import "../types/Types.sol";
 
 contract Vault is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
     PausableUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    ICommonErrors
 {
     uint256 private constant BASE = 10000; // 100%
-
-    error InvalidAmount();
-    error InsufficientBalance();
-    error InvalidAddress();
-    error VaultNotFound();
-    error VaultAlreadyClosed();
-    error NonZeroBalance();
-    error Unauthorized();
-    error VaultAlreadyExists();
-    error InvalidLeaderAddress();
-    error InvalidVaultAddress();
-    error LeaderCannotBeVault();    
-    error CannotWithdrawFromNonExistentMember();
-    error VaultBalanceIsZero();
 
     event VaultTransaction(
         address indexed vault,
@@ -62,13 +45,13 @@ contract Vault is
 
     modifier onlyAdmin() {
         VaultStorage.Layout storage $ = VaultStorage.layout();
-        require(msg.sender == $.adminAddress, "onlyAdmin");
+        if (msg.sender != $.adminAddress) revert OnlyAdmin();
         _;
     }
 
     modifier onlyOperator() {
         VaultStorage.Layout storage $ = VaultStorage.layout();
-        require(msg.sender == $.operatorAddress, "onlyOperator");
+        if (!$.operators[msg.sender]) revert OnlyOperator();
         _;
     }
 
@@ -78,20 +61,17 @@ contract Vault is
     }
 
     function initialize(
-        address _adminAddress,
-        address _operatorAddress
+        address _adminAddress
     ) public initializer {
-        require(_adminAddress != address(0), "Invalid admin address");
-        require(_operatorAddress != address(0), "Invalid operator address");
-        
         __UUPSUpgradeable_init();
         __Ownable_init(msg.sender);
         __Pausable_init();
         __ReentrancyGuard_init();
 
+        if (_adminAddress == address(0)) revert InvalidAddress();
+
         VaultStorage.Layout storage $ = VaultStorage.layout();
         $.adminAddress = _adminAddress;
-        $.operatorAddress = _operatorAddress;
     }
 
     function createVault(address vault, address leader, uint256 sharePercentage) external nonReentrant onlyOperator {
@@ -252,12 +232,6 @@ contract Vault is
         $.adminAddress = _adminAddress;
     }
 
-    function setOperator(address _operatorAddress) external onlyAdmin {
-        if (_operatorAddress == address(0)) revert InvalidAddress();
-        VaultStorage.Layout storage $ = VaultStorage.layout();
-        $.operatorAddress = _operatorAddress;
-    }
-
     /* public views */
     function isVault(address vault) public view returns (bool) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
@@ -286,9 +260,9 @@ contract Vault is
         return VaultMember(vault, user, 0, 0);
     }
 
-    function addresses() public view returns (address, address) {
+    function addresses() public view returns (address) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
-        return ($.adminAddress, $.operatorAddress);
+        return ($.adminAddress);
     }
 
     function getVaultInfo(address vault) public view returns (VaultInfo memory) {
@@ -318,6 +292,17 @@ contract Vault is
         VaultStorage.Layout storage $ = VaultStorage.layout();
         return $.orderVaultSnapshots[orderIdx];
     }
+
+    function addOperator(address operator) external onlyAdmin {
+        if (operator == address(0)) revert InvalidAddress();
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        $.operators[operator] = true;
+    }
+
+    function removeOperator(address operator) external onlyAdmin {
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        $.operators[operator] = false;
+    }  
 
     /* internal functions */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

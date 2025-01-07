@@ -13,7 +13,7 @@ import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "./interfaces/IVault.sol";
 import { SuperVolStorage } from "./storage/SuperVolStorage.sol";
-import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon, ProductRound, WinPosition } from "./Types.sol";
+import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon, ProductRound, WinPosition } from "./types/Types.sol";
 
 
 contract StVolHourly is

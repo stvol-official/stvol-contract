@@ -7,14 +7,15 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import "./interfaces/IVault.sol";
-import { SuperVolStorage } from "./storage/SuperVolStorage.sol";
-import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon, ProductRound, WinPosition } from "./Types.sol";
-import "./interfaces/IClearingHouse.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ICommonErrors } from "../errors/CommonErrors.sol";
+import { IVault } from "../interfaces/IVault.sol";
+import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
+import { SuperVolStorage} from "../storage/SuperVolStorage.sol";
+import "../types/Types.sol";
 
 
 contract SuperVolHourly is
@@ -22,10 +23,10 @@ contract SuperVolHourly is
   UUPSUpgradeable,
   OwnableUpgradeable,
   PausableUpgradeable,
-  ReentrancyGuardUpgradeable
+  ReentrancyGuardUpgradeable,
+  ICommonErrors
 {
   using SafeERC20 for IERC20;
-  IClearingHouse public clearingHouse;
 
   function _priceIds() internal pure returns (bytes32[] memory) {
     // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
@@ -44,18 +45,6 @@ contract SuperVolHourly is
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
   uint256 private constant START_TIMESTAMP = 1732838400; // for epoch
-  uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
-
-  event Deposit(address indexed to, address from, uint256 amount, uint256 result);
-  event Withdraw(address indexed to, uint256 amount, uint256 result);
-
-  event DepositCoupon(
-    address indexed to,
-    address from,
-    uint256 amount,
-    uint256 expirationEpoch,
-    uint256 result
-  );
 
   event StartRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
   event EndRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
@@ -67,18 +56,22 @@ contract SuperVolHourly is
     uint256 newBalance
   );
   event RoundSettled(uint256 indexed epoch, uint256 orderCount, uint256 collectedFee);
-  event WithdrawalRequested(address indexed user, uint256 amount);
-  event WithdrawalApproved(address indexed user, uint256 amount);
-  event WithdrawalRejected(address indexed user, uint256 amount);
+  event DepositCoupon(
+    address indexed to,
+    address from,
+    uint256 amount,
+    uint256 expirationEpoch,
+    uint256 result
+  );
 
   modifier onlyAdmin() {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(msg.sender == $.adminAddress, "onlyAdmin");
+    if (msg.sender != $.adminAddress) revert InvalidAddress();
     _;
   }
   modifier onlyOperator() {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(msg.sender == $.operatorAddress, "onlyOperator");
+    if (msg.sender != $.operatorAddress) revert InvalidAddress();
     _;
   }
 
@@ -88,10 +81,10 @@ contract SuperVolHourly is
   }
 
   function initialize(
+    address _usdcAddress,
     address _oracleAddress,
     address _adminAddress,
     address _operatorAddress,
-    address _operatorVaultAddress,
     uint256 _commissionfee,
     address _clearingHouseAddress,
     address _vaultAddress
@@ -101,17 +94,16 @@ contract SuperVolHourly is
     __Pausable_init();
     __ReentrancyGuard_init();
 
-    require(_commissionfee <= MAX_COMMISSION_FEE, "E04");
+    if (_commissionfee > MAX_COMMISSION_FEE) revert InvalidCommissionFee();
 
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
-    $.token = IERC20(0x770D5DE8dd09660F1141CF887D6B50976FBb12A0); // minato usdc
+    $.token = IERC20(_usdcAddress);
     $.oracle = IPyth(_oracleAddress);
     $.vault = IVault(_vaultAddress);
     $.clearingHouse = IClearingHouse(_clearingHouseAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
-    $.operatorVaultAddress = _operatorVaultAddress;
     $.commissionfee = _commissionfee;
   }
 
@@ -124,7 +116,7 @@ contract SuperVolHourly is
     uint64 initDate,
     bool skipSettlement
   ) external payable whenNotPaused onlyOperator {
-    require(initDate % 3600 == 0, "invalid initDate"); // Ensure initDate is on the hour in seconds since Unix epoch.
+    if (initDate % 3600 != 0) revert InvalidInitDate(); // Ensure initDate is on the hour in seconds since Unix epoch.
 
     PythStructs.PriceFeed[] memory feeds = _getPythPrices(priceUpdateData, initDate);
 
@@ -176,8 +168,8 @@ contract SuperVolHourly is
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     Round storage round = $.rounds[epoch];
 
-    require(round.epoch > 0 && round.startTimestamp > 0 && round.endTimestamp > 0, "invalid round");
-    require(round.startPrice[0] > 0 && round.endPrice[0] > 0, "invalid round price");
+    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) revert InvalidRound();
+    if (round.startPrice[0] == 0 || round.endPrice[0] == 0) revert InvalidRoundPrice();
 
     FilledOrder[] storage orders = $.filledOrders[epoch];
     uint256 startIndex = $.lastSettledFilledOrderIndex[epoch];
@@ -203,7 +195,14 @@ contract SuperVolHourly is
 
  function deposit(uint256 amount) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    if ($.vault.isVault(msg.sender)) revert VaultCannotDeposit();
     $.clearingHouse.deposit(msg.sender, amount);
+  }
+
+  function depositTo(address from, address to, uint256 amount) external nonReentrant onlyOperator {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    if ($.vault.isVault(to)) revert VaultCannotDeposit();
+    $.clearingHouse.depositTo(from, to, amount);
   }
 
   function depositCouponTo(
@@ -212,24 +211,90 @@ contract SuperVolHourly is
     uint256 expirationEpoch
   ) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.clearingHouse.depositCouponTo(user, amount, expirationEpoch);
-  }
+    $.token.safeTransferFrom(msg.sender, address(this), amount);
+    $.couponAmount += amount;
 
-  function reclaimAllExpiredCoupons() external nonReentrant {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    Coupon[] storage coupons = $.couponBalances[user];
 
-    address[] memory memoryArray = new address[]($.couponHolders.length);
-    for (uint i = 0; i < $.couponHolders.length; i++) {
-      memoryArray[i] = $.couponHolders[i];
+    Coupon memory newCoupon = Coupon({
+      user: user,
+      amount: amount,
+      usedAmount: 0,
+      expirationEpoch: expirationEpoch,
+      created: block.timestamp,
+      issuer: msg.sender
+    });
+
+    uint i = coupons.length;
+    coupons.push(newCoupon);
+
+    if (i == 0) {
+      // add user to couponHolders array
+      $.couponHolders.push(user);
     }
 
+    while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
+      coupons[i] = coupons[i - 1];
+      i--;
+    }
+    coupons[i] = newCoupon;
+    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user));
+  }
+  
+  function reclaimAllExpiredCoupons() external nonReentrant {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    address[] memory memoryArray = new address[]($.couponHolders.length);
+    for (uint i = 0; i < $.couponHolders.length; i++) {
+        memoryArray[i] = $.couponHolders[i];
+    }
     for (uint i = 0; i < memoryArray.length; i++) {
-      _reclaimExpiredCoupons(memoryArray[i]);
+        _reclaimExpiredCoupons(memoryArray[i]);
     }
   }
 
   function reclaimExpiredCoupons(address user) external nonReentrant {
     _reclaimExpiredCoupons(user);
+  }
+
+  function _reclaimExpiredCoupons(address user) internal {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 epoch = _epochAt(block.timestamp);
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    uint256 validCount = 0;
+    for (uint i = 0; i < coupons.length; i++) {
+        Coupon storage coupon = coupons[i];
+        if (coupon.expirationEpoch < epoch) {
+            uint256 availableAmount = coupon.amount - coupon.usedAmount;
+            if (availableAmount > 0) {
+                $.token.safeTransfer(coupon.issuer, availableAmount);
+                $.couponAmount -= availableAmount;
+                coupon.usedAmount = coupon.amount;
+            }
+        } else {
+            // move valid coupons to the front of the array
+            coupons[validCount] = coupon;
+            validCount++;
+        }
+    }
+
+    // remove expired coupons from the array
+    while (coupons.length > validCount) {
+        coupons.pop();
+    }
+
+    if (validCount == 0) {
+        // remove user from couponHolders array
+        uint length = $.couponHolders.length;
+        for (uint i = 0; i < length; i++) {
+            if ($.couponHolders[i] == user) {
+                $.couponHolders[i] = $.couponHolders[length - 1];
+                $.couponHolders.pop();
+                break;
+            }
+        }
+    }
   }
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
@@ -249,34 +314,31 @@ contract SuperVolHourly is
 
   function depositToVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require($.userBalances[user] >= amount, "Insufficient balance");
-    uint256 memberShare = $.vault.depositToVault(vaultAddress, user, amount);
-    $.userBalances[vaultAddress] += memberShare;
-    $.userBalances[user] -= memberShare;
-}
+    if ($.clearingHouse.userBalances(user) < amount) revert InsufficientBalance();
+    uint256 balance = $.vault.depositToVault(vaultAddress, user, amount);
+    
+    // user -> vaultAddress
+    $.clearingHouse.transferBalance(user, vaultAddress, balance);
+  }
 
-function withdrawFromVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
+  function withdrawFromVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 memberShare = $.vault.withdrawFromVault(vaultAddress, user, amount);
-    $.userBalances[vaultAddress] -= memberShare;
-    $.userBalances[user] += memberShare;
-}
+    uint256 balance = $.vault.withdrawFromVault(vaultAddress, user, amount);
+    
+    // vaultAddress -> user
+    $.clearingHouse.transferBalance(vaultAddress, user, balance);
+  }
 
   function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.clearingHouse.getWithdrawalRequests(from);
   }
 
-  function forceWithdrawAll() external nonReentrant {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.clearingHouse.forceWithdrawAll(msg.sender);
-  }
-
   function submitFilledOrders(
     FilledOrder[] calldata transactions
   ) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require($.lastFilledOrderId + 1 <= transactions[0].idx, "invalid id");
+    if ($.lastFilledOrderId + 1 <= transactions[0].idx) revert InvalidId();
 
     for (uint i = 0; i < transactions.length; i++) {
       FilledOrder calldata order = transactions[i];
@@ -296,11 +358,6 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     _pause();
   }
 
-  function claimTreasury() external nonReentrant onlyAdmin {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.clearingHouse.claimTreasury($.operatorVaultAddress);
-  }
-
   function retrieveMisplacedETH() external onlyAdmin {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     payable($.adminAddress).transfer(address(this).balance);
@@ -308,7 +365,7 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
 
   function retrieveMisplacedTokens(address _token) external onlyAdmin {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(address($.token) != _token, "invalid token address");
+    if (address($.token) == _token) revert InvalidTokenAddress();
     IERC20 token = IERC20(_token);
     token.safeTransfer($.adminAddress, token.balanceOf(address(this)));
   }
@@ -318,43 +375,37 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
   }
 
   function setOperator(address _operatorAddress) external onlyAdmin {
-    require(_operatorAddress != address(0), "E31");
+    if (_operatorAddress == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.operatorAddress = _operatorAddress;
   }
 
-  function setOperatorVault(address _operatorVaultAddress) external onlyAdmin {
-    require(_operatorVaultAddress != address(0), "E31");
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.operatorVaultAddress = _operatorVaultAddress;
-  }
-
   function setOracle(address _oracle) external whenPaused onlyAdmin {
-    require(_oracle != address(0), "E31");
+    if (_oracle == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.oracle = IPyth(_oracle);
   }
 
   function setCommissionfee(uint256 _commissionfee) external whenPaused onlyAdmin {
-    require(_commissionfee <= MAX_COMMISSION_FEE, "E04");
+    if (_commissionfee > MAX_COMMISSION_FEE) revert InvalidCommissionFee();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.commissionfee = _commissionfee;
   }
 
   function setAdmin(address _adminAddress) external onlyOwner {
-    require(_adminAddress != address(0), "E31");
+    if (_adminAddress == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.adminAddress = _adminAddress;
   }
 
   function setToken(address _token) external onlyAdmin {
-    require(_token != address(0), "E31");
+    if (_token == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.token = IERC20(_token); 
   }
 
   function setVault(address _vault) external onlyAdmin {
-    require(_vault != address(0), "E31");
+    if (_vault == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.vault = IVault(_vault);
   } 
@@ -370,14 +421,14 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     return $.clearingHouse.treasuryAmount();
   }
 
-  function addresses() public view returns (address, address, address) {
+  function addresses() public view returns (address, address, address, address) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return ($.adminAddress, $.operatorAddress, $.operatorVaultAddress);
+    return ($.adminAddress, $.operatorAddress, address($.vault), address($.clearingHouse));
   }
 
   function balances(address user) public view returns (uint256, uint256, uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 depositBalance = $.userBalances[user];
+    uint256 depositBalance = $.clearingHouse.userBalances(user);
     uint256 couponBalance = couponBalanceOf(user);
     uint256 totalBalance = depositBalance + couponBalance;
     return (depositBalance, couponBalance, totalBalance);
@@ -385,23 +436,32 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
 
   function balanceOf(address user) public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.userBalances[user];
+    return $.clearingHouse.userBalances(user);
   }
 
   function couponBalanceOf(address user) public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.clearingHouse.couponBalanceOf(user);
+    uint256 total = 0;
+    uint256 epoch = _epochAt(block.timestamp);
+    for (uint i = 0; i < $.couponBalances[user].length; i++) {
+      if ($.couponBalances[user][i].expirationEpoch >= epoch) {
+        total += $.couponBalances[user][i].amount - $.couponBalances[user][i].usedAmount;
+      }
+    }
+    return total;
   }
 
   function couponHolders() public view returns (address[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.clearingHouse.couponHolders();
+    return $.couponHolders;
   }
 
   function userCoupons(address user) public view returns (Coupon[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.clearingHouse.userCoupons(user);
+    return $.couponBalances[user];
   }
+
+
 
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -438,14 +498,27 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     return $.filledOrders[epoch];
   }
 
-  function filledOrdersWithResult(uint256 epoch) public view returns (FilledOrder[] memory, SettlementResult[] memory) {
+  function filledOrdersWithResult(
+    uint256 epoch,
+    uint256 chunkSize,
+    uint256 offset
+  ) public view returns (FilledOrder[] memory, SettlementResult[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     FilledOrder[] memory orders = $.filledOrders[epoch];
-    SettlementResult[] memory results = new SettlementResult[](orders.length);
-    for (uint i = 0; i < orders.length ; i++) {
-      results[i] = $.settlementResults[orders[i].idx];
+    if (offset >= orders.length) {
+      return (new FilledOrder[](0), new SettlementResult[](0));
     }
-    return (orders, results);
+    uint256 end = offset + chunkSize;
+    if (end > orders.length) {
+      end = orders.length;
+    }
+    FilledOrder[] memory chunkedOrders = new FilledOrder[](end - offset);
+    SettlementResult[] memory chunkedResults = new SettlementResult[](end - offset);
+    for (uint i = offset; i < end; i++) {
+      chunkedOrders[i - offset] = orders[i];
+      chunkedResults[i - offset] = $.settlementResults[orders[i].idx];
+    }
+    return (chunkedOrders, chunkedResults);
   }
 
   function userFilledOrders(
@@ -627,15 +700,15 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
         order.underUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.underUser],
-        $.userBalances[order.underUser]
+        $.clearingHouse.userBalances(order.underUser),
+        $.clearingHouse.userBalances(order.underUser)
       );
       emit OrderSettled(
         order.overUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.overUser],
-        $.userBalances[order.overUser]
+        $.clearingHouse.userBalances(order.overUser),
+        $.clearingHouse.userBalances(order.overUser)
       );
       
       $.settlementResults[order.idx] = SettlementResult({
@@ -655,18 +728,18 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
       uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
       uint256 remainingAmount = _useCoupon(order.overUser, fee, order.epoch);
 
-      $.userBalances[order.overUser] -= remainingAmount;
       if ($.vault.isVault(order.overUser)) {
         _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
       } 
-      $.treasuryAmount += fee;
+      $.clearingHouse.subtractUserBalance(order.overUser, remainingAmount);
+      $.clearingHouse.addTreasuryAmount(fee);
       collectedFee += fee;
       emit OrderSettled(
         order.overUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.overUser] + fee,
-        $.userBalances[order.overUser]
+        $.clearingHouse.userBalances(order.overUser) + fee,
+        $.clearingHouse.userBalances(order.overUser)
       );
       $.settlementResults[order.idx] = SettlementResult({
         idx: order.idx, 
@@ -680,14 +753,13 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
       uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
       uint256 remainingAmount = _useCoupon(order.overUser, amount, order.epoch);
       
-      $.userBalances[order.overUser] -= remainingAmount;
       if ($.vault.isVault(order.overUser)) {
         _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
       } 
 
       uint256 fee = (amount * $.commissionfee) / BASE;
-      $.treasuryAmount += fee;
-      $.userBalances[order.underUser] += (amount - fee);
+      $.clearingHouse.addUserBalance(order.underUser, amount - fee);
+      $.clearingHouse.addTreasuryAmount(fee);
       collectedFee += fee;
       if ($.vault.isVault(order.underUser)) {
         _processVaultTransaction(order.idx, order.underUser, (amount - fee), true);
@@ -697,15 +769,15 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
         order.overUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.overUser] + amount,
-        $.userBalances[order.overUser]
+        $.clearingHouse.userBalances(order.overUser) + amount,
+        $.clearingHouse.userBalances(order.overUser)
       );
       emit OrderSettled(
         order.underUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.underUser] - (amount - fee),
-        $.userBalances[order.underUser]
+        $.clearingHouse.userBalances(order.underUser) - (amount - fee),
+        $.clearingHouse.userBalances(order.underUser)
       );
 
       $.settlementResults[order.idx] = SettlementResult({
@@ -719,14 +791,15 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     } else if (isOverWin) {
       uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
       uint256 remainingAmount = _useCoupon(order.underUser, amount, order.epoch);
-      $.userBalances[order.underUser] -= remainingAmount;
+
+      $.clearingHouse.subtractUserBalance(order.underUser, remainingAmount);
       if ($.vault.isVault(order.underUser)) {
         _processVaultTransaction(order.idx, order.underUser, remainingAmount, false);
       } 
 
       uint256 fee = (amount * $.commissionfee) / BASE;
-      $.treasuryAmount += fee;
-      $.userBalances[order.overUser] += (amount - fee);
+      $.clearingHouse.addUserBalance(order.overUser, amount - fee);
+      $.clearingHouse.addTreasuryAmount(fee);
       collectedFee += fee;
       if ($.vault.isVault(order.overUser)) {
         _processVaultTransaction(order.idx, order.overUser, (amount - fee), true);
@@ -736,15 +809,15 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
         order.underUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.underUser] + amount,
-        $.userBalances[order.underUser]
+        $.clearingHouse.userBalances(order.underUser) + amount,
+        $.clearingHouse.userBalances(order.underUser)
       );
       emit OrderSettled(
         order.overUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.overUser] - (amount - fee),
-        $.userBalances[order.overUser]
+        $.clearingHouse.userBalances(order.overUser) - (amount - fee),
+        $.clearingHouse.userBalances(order.overUser)
       );
 
       $.settlementResults[order.idx] = SettlementResult({
@@ -761,15 +834,15 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
         order.underUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.underUser],
-        $.userBalances[order.underUser]
+        $.clearingHouse.userBalances(order.underUser),
+        $.clearingHouse.userBalances(order.underUser)
       );
       emit OrderSettled(
         order.overUser,
         order.idx,
         order.epoch,
-        $.userBalances[order.overUser],
-        $.userBalances[order.overUser]
+        $.clearingHouse.userBalances(order.overUser),
+        $.clearingHouse.userBalances(order.overUser)
       );
 
       $.settlementResults[order.idx] = SettlementResult({
@@ -792,14 +865,14 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
   function _epochAt(uint256 timestamp) internal pure returns (uint256) {
-    require(timestamp >= START_TIMESTAMP, "Epoch has not started yet");
+    if (timestamp < START_TIMESTAMP) revert EpochHasNotStartedYet();
     uint256 elapsedSeconds = timestamp - START_TIMESTAMP;
     uint256 elapsedHours = elapsedSeconds / 3600;
     return elapsedHours;
   }
 
   function _epochTimes(uint256 epoch) internal pure returns (uint256 startTime, uint256 endTime) {
-    require(epoch >= 0, "Invalid epoch");
+    if (epoch < 0) revert InvalidEpoch();
     startTime = START_TIMESTAMP + (epoch * 3600);
     endTime = startTime + 3600;
     return (startTime, endTime);
@@ -826,53 +899,8 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
     return remainingAmount;
   }
 
-  function _reclaimExpiredCoupons(address user) internal {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 epoch = _epochAt(block.timestamp);
-
-    Coupon[] storage coupons = $.couponBalances[user];
-
-    uint256 validCount = 0;
-    for (uint i = 0; i < coupons.length; i++) {
-      Coupon storage coupon = coupons[i];
-      if (coupon.expirationEpoch < epoch) {
-        uint256 availableAmount = coupon.amount - coupon.usedAmount;
-        if (availableAmount > 0) {
-          $.token.safeTransfer(coupon.issuer, availableAmount);
-          $.couponAmount -= availableAmount;
-          coupon.usedAmount = coupon.amount;
-        }
-      } else {
-        // move valid coupons to the front of the array
-        coupons[validCount] = coupon;
-        validCount++;
-      }
-    }
-
-    // remove expired coupons from the array
-    while (coupons.length > validCount) {
-      coupons.pop();
-    }
-
-    if (validCount == 0) {
-      // remove user from couponHolders array
-      uint length = $.couponHolders.length;
-      for (uint i = 0; i < length; i++) {
-        if ($.couponHolders[i] == user) {
-          $.couponHolders[i] = $.couponHolders[length - 1];
-          $.couponHolders.pop();
-          break;
-        }
-      }
-    }
-  }
-
   function _processVaultTransaction(uint256 orderIdx, address vaultAddress, uint256 amount, bool isWin) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);  
-  }
-
-  function userBalance(address user) public view returns (uint256) {
-    return clearingHouse.userBalances(user);
   }
 }
