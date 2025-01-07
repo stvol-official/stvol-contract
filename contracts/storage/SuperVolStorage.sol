@@ -4,6 +4,7 @@ pragma solidity ^0.8.4;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import { IVault } from "../interfaces/IVault.sol";
+import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import {
     Round,
     FilledOrder,
@@ -24,7 +25,6 @@ library SuperVolStorage {
         address operatorAddress; // address of the operator
         address operatorVaultAddress; // address of the operator vault
         uint256 commissionfee; // commission rate (e.g. 200 = 2%, 150 = 1.50%)
-        uint256 treasuryAmount; // treasury amount that was not claimed
         mapping(uint256 => Round) rounds;
         mapping(address => uint256) userBalances; // key: user address, value: balance
         mapping(uint256 => FilledOrder[]) filledOrders; // key: epoch
@@ -39,6 +39,7 @@ library SuperVolStorage {
         address[] couponHolders;
         mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
         IVault vault;
+        IClearingHouse clearingHouse;
     }
 
     function layout() internal pure returns (Layout storage $) {

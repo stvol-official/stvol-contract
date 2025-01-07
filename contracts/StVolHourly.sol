@@ -199,21 +199,13 @@ contract StVolHourly is
 
   function deposit(uint256 amount) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(!$.vault.isVault(msg.sender), "vault cannot deposit");
-
-    $.token.safeTransferFrom(msg.sender, address(this), amount);
-    $.userBalances[msg.sender] += amount;
-    emit Deposit(msg.sender, msg.sender, amount, $.userBalances[msg.sender]);
+    $.clearingHouse.deposit(msg.sender, amount);
   }
 
-  // function depositTo(address user, uint256 amount) external nonReentrant {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   require(!$.vault.isVault(user), "vault cannot deposit");
-
-  //   $.token.safeTransferFrom(msg.sender, address(this), amount);
-  //   $.userBalances[user] += amount;
-  //   emit Deposit(user, msg.sender, amount, $.userBalances[user]);
-  // }
+  function depositTo(address user, uint256 amount) external nonReentrant {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    $.clearingHouse.depositTo(msg.sender, user, amount);
+  }
 
   function depositCouponTo(
     address user,
@@ -221,36 +213,7 @@ contract StVolHourly is
     uint256 expirationEpoch
   ) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-
-    $.token.safeTransferFrom(msg.sender, address(this), amount);
-    $.couponAmount += amount;
-
-    Coupon[] storage coupons = $.couponBalances[user];
-
-    Coupon memory newCoupon = Coupon({
-      user: user,
-      amount: amount,
-      usedAmount: 0,
-      expirationEpoch: expirationEpoch,
-      created: block.timestamp,
-      issuer: msg.sender
-    });
-
-    uint i = coupons.length;
-    coupons.push(newCoupon);
-
-    if (i == 0) {
-      // add user to couponHolders array
-      $.couponHolders.push(user);
-    }
-
-    while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
-      coupons[i] = coupons[i - 1];
-      i--;
-    }
-    coupons[i] = newCoupon;
-
-    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
+    $.clearingHouse.depositCouponTo(user, amount, expirationEpoch);
   }
 
   function reclaimAllExpiredCoupons() external nonReentrant {

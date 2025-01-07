@@ -14,6 +14,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "./interfaces/IVault.sol";
 import { SuperVolStorage } from "./storage/SuperVolStorage.sol";
 import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon, ProductRound, WinPosition } from "./Types.sol";
+import "./interfaces/IClearingHouse.sol";
 
 
 contract SuperVolHourly is
@@ -24,6 +25,7 @@ contract SuperVolHourly is
   ReentrancyGuardUpgradeable
 {
   using SafeERC20 for IERC20;
+  IClearingHouse public clearingHouse;
 
   function _priceIds() internal pure returns (bytes32[] memory) {
     // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
@@ -91,6 +93,7 @@ contract SuperVolHourly is
     address _operatorAddress,
     address _operatorVaultAddress,
     uint256 _commissionfee,
+    address _clearingHouseAddress,
     address _vaultAddress
   ) public initializer {
     __UUPSUpgradeable_init();
@@ -105,6 +108,7 @@ contract SuperVolHourly is
     $.token = IERC20(0x770D5DE8dd09660F1141CF887D6B50976FBb12A0); // minato usdc
     $.oracle = IPyth(_oracleAddress);
     $.vault = IVault(_vaultAddress);
+    $.clearingHouse = IClearingHouse(_clearingHouseAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
     $.operatorVaultAddress = _operatorVaultAddress;
@@ -197,23 +201,10 @@ contract SuperVolHourly is
     return orders.length - index;
   }
 
-  function deposit(uint256 amount) external nonReentrant {
+ function deposit(uint256 amount) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(!$.vault.isVault(msg.sender), "vault cannot deposit");
-
-    $.token.safeTransferFrom(msg.sender, address(this), amount);
-    $.userBalances[msg.sender] += amount;
-    emit Deposit(msg.sender, msg.sender, amount, $.userBalances[msg.sender]);
+    $.clearingHouse.deposit(msg.sender, amount);
   }
-
-  // function depositTo(address user, uint256 amount) external nonReentrant {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   require(!$.vault.isVault(user), "vault cannot deposit");
-
-  //   $.token.safeTransferFrom(msg.sender, address(this), amount);
-  //   $.userBalances[user] += amount;
-  //   emit Deposit(user, msg.sender, amount, $.userBalances[user]);
-  // }
 
   function depositCouponTo(
     address user,
@@ -221,36 +212,7 @@ contract SuperVolHourly is
     uint256 expirationEpoch
   ) external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-
-    $.token.safeTransferFrom(msg.sender, address(this), amount);
-    $.couponAmount += amount;
-
-    Coupon[] storage coupons = $.couponBalances[user];
-
-    Coupon memory newCoupon = Coupon({
-      user: user,
-      amount: amount,
-      usedAmount: 0,
-      expirationEpoch: expirationEpoch,
-      created: block.timestamp,
-      issuer: msg.sender
-    });
-
-    uint i = coupons.length;
-    coupons.push(newCoupon);
-
-    if (i == 0) {
-      // add user to couponHolders array
-      $.couponHolders.push(user);
-    }
-
-    while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
-      coupons[i] = coupons[i - 1];
-      i--;
-    }
-    coupons[i] = newCoupon;
-
-    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
+    $.clearingHouse.depositCouponTo(user, amount, expirationEpoch);
   }
 
   function reclaimAllExpiredCoupons() external nonReentrant {
@@ -272,37 +234,12 @@ contract SuperVolHourly is
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(!$.vault.isVault(user), "Vault cannot withdraw");
-    require(amount > 0, "Amount must be greater than 0");
-    require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
-    $.userBalances[user] -= amount + WITHDRAWAL_FEE;
-    $.treasuryAmount += WITHDRAWAL_FEE;
-    $.token.safeTransfer(user, amount);
-    emit Withdraw(user, amount, $.userBalances[user]);
+    $.clearingHouse.withdraw(user, amount);
   }
 
-  function requestWithdrawal(
-    uint256 amount
-  ) external nonReentrant returns (WithdrawalRequest memory) {
-    address user = msg.sender;
+  function requestWithdrawal(uint256 amount) external nonReentrant returns (WithdrawalRequest memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(!$.vault.isVault(user), "Vault cannot withdraw");
-    require(amount > 0, "Amount must be greater than 0");
-    require($.userBalances[user] >= amount + WITHDRAWAL_FEE, "Insufficient user balance");
-
-    WithdrawalRequest memory request = WithdrawalRequest({
-      idx: $.withdrawalRequests.length,
-      user: msg.sender,
-      amount: amount,
-      processed: false,
-      message: "",
-      created: block.timestamp
-    });
-
-    $.withdrawalRequests.push(request);
-
-    emit WithdrawalRequested(msg.sender, amount);
-    return request;
+    return $.clearingHouse.requestWithdrawal(msg.sender, amount);
   }
 
   function createVault(address vaultAddress, address user, uint256 sharePercentage) external nonReentrant onlyOperator {
@@ -326,62 +263,13 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
 }
 
   function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
-    // return 100 requests (from ~ from+100)
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 totalRequests = $.withdrawalRequests.length;
-
-    if (totalRequests < 100) {
-      return $.withdrawalRequests;
-    } else {
-      uint256 startFrom = from < totalRequests - 100 ? from : totalRequests - 100;
-
-      WithdrawalRequest[] memory recentRequests = new WithdrawalRequest[](100);
-      for (uint256 i = 0; i < 100; i++) {
-        recentRequests[i] = $.withdrawalRequests[startFrom + i];
-      }
-
-      return recentRequests;
-    }
-  }
-
-  function approveWithdrawal(uint256 idx) public nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(idx < $.withdrawalRequests.length, "Invalid idx");
-    WithdrawalRequest storage request = $.withdrawalRequests[idx];
-    require(!request.processed, "Request already processed");
-    require(
-      $.userBalances[request.user] >= request.amount + WITHDRAWAL_FEE,
-      "Insufficient user balance"
-    );
-    request.processed = true;
-    $.userBalances[request.user] -= request.amount + WITHDRAWAL_FEE;
-    $.treasuryAmount += WITHDRAWAL_FEE;
-    $.token.safeTransfer(request.user, request.amount);
-    emit WithdrawalApproved(request.user, request.amount);
-  }
-
-  function rejectWithdrawal(uint256 idx, string calldata reason) public nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(idx < $.withdrawalRequests.length, "Invalid idx");
-    WithdrawalRequest storage request = $.withdrawalRequests[idx];
-    require(!request.processed, "Request already processed");
-
-    request.processed = true;
-    request.message = reason;
-
-    emit WithdrawalRejected(request.user, request.amount);
+    return $.clearingHouse.getWithdrawalRequests(from);
   }
 
   function forceWithdrawAll() external nonReentrant {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    require(block.timestamp >= $.lastSubmissionTime + 1 hours, "invalid time");
-
-    uint256 balance = $.userBalances[msg.sender];
-    require(balance >= WITHDRAWAL_FEE, "insufficient user balance");
-    $.userBalances[msg.sender] = 0;
-    $.treasuryAmount += WITHDRAWAL_FEE;
-    $.token.safeTransfer(msg.sender, balance - WITHDRAWAL_FEE);
-    emit Withdraw(msg.sender, balance, 0);
+    $.clearingHouse.forceWithdrawAll(msg.sender);
   }
 
   function submitFilledOrders(
@@ -410,9 +298,7 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
 
   function claimTreasury() external nonReentrant onlyAdmin {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 currentTreasuryAmount = $.treasuryAmount;
-    $.treasuryAmount = 0;
-    $.token.safeTransfer($.operatorVaultAddress, currentTreasuryAmount);
+    $.clearingHouse.claimTreasury($.operatorVaultAddress);
   }
 
   function retrieveMisplacedETH() external onlyAdmin {
@@ -481,7 +367,7 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
 
   function treasuryAmount() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.treasuryAmount;
+    return $.clearingHouse.treasuryAmount();
   }
 
   function addresses() public view returns (address, address, address) {
@@ -504,24 +390,17 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
 
   function couponBalanceOf(address user) public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 total = 0;
-    uint256 epoch = _epochAt(block.timestamp);
-    for (uint i = 0; i < $.couponBalances[user].length; i++) {
-      if ($.couponBalances[user][i].expirationEpoch >= epoch) {
-        total += $.couponBalances[user][i].amount - $.couponBalances[user][i].usedAmount;
-      }
-    }
-    return total;
+    return $.clearingHouse.couponBalanceOf(user);
   }
 
   function couponHolders() public view returns (address[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.couponHolders;
+    return $.clearingHouse.couponHolders();
   }
 
   function userCoupons(address user) public view returns (Coupon[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.couponBalances[user];
+    return $.clearingHouse.userCoupons(user);
   }
 
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
@@ -991,5 +870,9 @@ function withdrawFromVault(address vaultAddress, address user, uint256 amount) e
   function _processVaultTransaction(uint256 orderIdx, address vaultAddress, uint256 amount, bool isWin) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);  
+  }
+
+  function userBalance(address user) public view returns (uint256) {
+    return clearingHouse.userBalances(user);
   }
 }
