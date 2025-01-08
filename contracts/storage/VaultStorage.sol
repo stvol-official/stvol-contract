@@ -20,6 +20,7 @@ library VaultStorage {
         mapping(address => VaultInfo) vaults; // key: vault address 
         mapping(address => VaultMember[]) vaultMembers; // key: vault address, value: vault members 
         mapping(uint256 => VaultSnapshot) orderVaultSnapshots; // Mapping from order index to vault snapshot
+        /* IMPROTANT: you can add new variables here */
     }
 
     function layout() internal pure returns (Layout storage $) {

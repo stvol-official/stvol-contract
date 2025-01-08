@@ -44,7 +44,7 @@ contract SuperVolHourly is
   uint256 private constant MAX_COMMISSION_FEE = 500; // 5%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
-  uint256 private constant START_TIMESTAMP = 1732838400; // for epoch
+  uint256 private constant START_TIMESTAMP = 1736294400; // for epoch
 
   event StartRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);
   event EndRound(uint256 indexed epoch, uint256 productId, uint256 price, uint256 timestamp);

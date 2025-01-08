@@ -75,11 +75,11 @@ contract Vault is
     }
 
     function createVault(address vault, address leader, uint256 sharePercentage) external nonReentrant onlyOperator {
+        if (leader == address(0)) revert InvalidLeaderAddress();
+        if (vault == address(0)) revert InvalidVaultAddress();
         if (sharePercentage > BASE) revert InvalidAmount();
         if (isVault(leader)) revert InvalidLeaderAddress();
         if (isVault(vault)) revert VaultAlreadyExists();
-        if (leader == address(0)) revert InvalidLeaderAddress();
-        if (vault == address(0)) revert InvalidVaultAddress();
         if (leader == vault) revert LeaderCannotBeVault();
 
         VaultStorage.Layout storage $ = VaultStorage.layout();
@@ -105,6 +105,7 @@ contract Vault is
     function closeVault(address vault, address leader) external nonReentrant onlyOperator {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         VaultInfo storage vaultInfo = $.vaults[vault];
+
         if (vaultInfo.vault == address(0)) revert VaultNotFound();
         if (vaultInfo.leader != leader) revert Unauthorized();
         if (vaultInfo.closed) revert VaultAlreadyClosed();
@@ -115,8 +116,8 @@ contract Vault is
     } 
 
     function depositToVault(address vault, address user, uint256 amount) external nonReentrant onlyOperator returns (uint256) {
+        if (isVault(user)) revert VaultCannotDeposit();
         VaultInfo storage vaultInfo = _validateVaultOperation(vault, amount, false);
-        if (isVault(user)) revert Unauthorized();
 
         vaultInfo.balance += amount;
         uint256 memberBalance = _updateVaultMemberBalance(vault, user, amount, true);
@@ -126,8 +127,8 @@ contract Vault is
     }
 
     function withdrawFromVault(address vault, address user, uint256 amount) external nonReentrant onlyOperator returns (uint256) {
-        VaultInfo storage vaultInfo = _validateVaultOperation(vault, amount, true);
         if (isVault(user) || !isVaultMember(vault, user)) revert Unauthorized();
+        VaultInfo storage vaultInfo = _validateVaultOperation(vault, amount, true);
 
         uint256 memberShare;
         uint256 leaderShare;
@@ -143,7 +144,8 @@ contract Vault is
         
         uint256 memberBalance;
         if (user != vaultInfo.leader) {
-            memberBalance = _updateVaultMemberBalance(vault, vaultInfo.leader, leaderShare, true);
+            // update leader balance
+            _updateVaultMemberBalance(vault, vaultInfo.leader, leaderShare, true);
         }
         memberBalance = _updateVaultMemberBalance(vault, user, memberShare, false);
         

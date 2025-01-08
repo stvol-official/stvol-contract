@@ -1,12 +1,13 @@
 import { ethers, network, run, upgrades } from "hardhat";
+import config from "../config";
 import input from "@inquirer/input";
 
 /*
- npx hardhat run --network minato scripts/upgrade-supervol-hourly.ts
+ npx hardhat run --network minato scripts/upgrade-vault.ts
 */
 
 const NETWORK = ["sonieum_testnet"];
-const DEPLOYED_PROXY = "0x492a3118b1c6328C01e123a1E38C6bed7375C92F"; // for minato
+const DEPLOYED_PROXY = "0x49Ff93096bD296E70652969a2205461998b75550"; // for minato
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -15,7 +16,7 @@ function sleep(ms: number) {
 const upgrade = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const contractName = "SuperVolHourly";
+  const contractName = "ClearingHouse";
 
   const PROXY = await input({
     message: "Enter the proxy address",
@@ -34,17 +35,17 @@ const upgrade = async () => {
     console.log("Compiled contracts...");
 
     // Deploy contracts.
-    const SuperVolFactory = await ethers.getContractFactory(contractName);
+    const ClearingHouseFactory = await ethers.getContractFactory(contractName);
 
-    // const stVolContract = await upgrades.forceImport(PROXY, StVolFactory, { kind: "uups" });
-    const superVolContract = await upgrades.upgradeProxy(PROXY, SuperVolFactory, {
+    const stVolContract = await upgrades.forceImport(PROXY, ClearingHouseFactory, { kind: "uups" });
+    const contract = await upgrades.upgradeProxy(PROXY, ClearingHouseFactory, {
       kind: "uups",
       redeployImplementation: "always",
     });
 
-    await superVolContract.waitForDeployment();
-    const superVolContractAddress = await superVolContract.getAddress();
-    console.log(`🍣 ${contractName} Contract deployed at ${superVolContractAddress}`);
+    await contract.waitForDeployment();
+    const contractAddress = await contract.getAddress();
+    console.log(`🍣 ${contractName} Contract deployed at ${contractAddress}`);
 
     const network = await ethers.getDefaultProvider().getNetwork();
 
@@ -52,10 +53,9 @@ const upgrade = async () => {
 
     console.log("Verifying contracts...");
     await run("verify:verify", {
-      address: superVolContractAddress,
+      address: contractAddress,
       network: network,
       contract: `contracts/${contractName}.sol:${contractName}`,
-      constructorArguments: [],
     });
     console.log("verify the contractAction done");
   } else {

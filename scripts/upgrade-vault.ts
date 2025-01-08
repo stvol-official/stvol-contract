@@ -5,7 +5,7 @@ import input from "@inquirer/input";
  npx hardhat run --network minato scripts/upgrade-vault.ts
 */
 
-const NETWORK = ["base", "base_sepolia", "minato"];
+const NETWORK = ["sonieum_testnet"];
 const DEPLOYED_PROXY = "0x49Ff93096bD296E70652969a2205461998b75550"; // for minato
 
 function sleep(ms: number) {
@@ -15,7 +15,7 @@ function sleep(ms: number) {
 const upgrade = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const CONTRACT_NAME = "Vault";
+  const contractName = "Vault";
 
   const PROXY = await input({
     message: "Enter the proxy address",
@@ -34,7 +34,7 @@ const upgrade = async () => {
     console.log("Compiled contracts...");
 
     // Deploy contracts.
-    const VaultFactory = await ethers.getContractFactory(CONTRACT_NAME);
+    const VaultFactory = await ethers.getContractFactory(contractName);
 
     const stVolContract = await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
     const contract = await upgrades.upgradeProxy(PROXY, VaultFactory, {
@@ -44,7 +44,7 @@ const upgrade = async () => {
 
     await contract.waitForDeployment();
     const contractAddress = await contract.getAddress();
-    console.log(`🍣 ${CONTRACT_NAME} Contract deployed at ${contractAddress}`);
+    console.log(`🍣 ${contractName} Contract deployed at ${contractAddress}`);
 
     const network = await ethers.getDefaultProvider().getNetwork();
 
@@ -54,7 +54,7 @@ const upgrade = async () => {
     await run("verify:verify", {
       address: contractAddress,
       network: network,
-      contract: `contracts/${CONTRACT_NAME}.sol:${CONTRACT_NAME}`,
+      contract: `contracts/${contractName}.sol:${contractName}`,
       constructorArguments: [],
     });
     console.log("verify the contractAction done");

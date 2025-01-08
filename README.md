@@ -1,21 +1,29 @@
-# stVol:On Chain Short-term Vol market
+# SuperVol:On Chain Short-term Vol market
 
 ## Description
 
 Digital option market for crypto trade on 1 day price change
 
-
 ## Documentation
 
 ## Oracle Price Feed (Pyth)
 
+### BTC/USD
+
+- Sonieum: `0x0000000000000000000000000000000000000000000000000000000000000000`
+- Sonieum Minato: `0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43`
+
 ### ETH/USD
 
-- Arbitrum: `0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace` 
-- Arbitrum Goerli: `0xca80ba6dc32e08d06f1aa886011eed1d77c77be9eb761cc10d72b7d0a2fd57a6`
+- Sonieum: `0x0000000000000000000000000000000000000000000000000000000000000000`
+- Sonieum Minato: `0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace`
+
+### ASTR/USD
+
+- Sonieum: `0x0000000000000000000000000000000000000000000000000000000000000000`
+- Sonieum Minato: `0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853`
 
 ## Deployment
-
 
 ### Operation
 
@@ -63,7 +71,7 @@ executeRound()
 
 ## Common Errors
 
-Refer to `test/stVol.test.js`
+Refer to `test/SuperVol.test.ts`
 
 ## Architecture Illustration
 

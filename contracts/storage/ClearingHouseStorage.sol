@@ -11,13 +11,14 @@ library ClearingHouseStorage {
         0x8813a153063d7fe54e4155b960ce0bcfaac345da276d07e649f6c356f4752100;
 
   struct Layout {
-    IERC20 token;
-    address adminAddress;
-    address operatorVaultAddress;
-    mapping(address => bool) operators;
-    mapping(address => uint256) userBalances;
-    uint256 treasuryAmount;
-    WithdrawalRequest[] withdrawalRequests;
+    IERC20 token; // Prediction token
+    address adminAddress; // Admin address
+    address operatorVaultAddress; // Operator vault address
+    mapping(address => bool) operators; // Operators
+    mapping(address => uint256) userBalances; // User balances
+    uint256 treasuryAmount; // Treasury amount
+    WithdrawalRequest[] withdrawalRequests; // Withdrawal requests
+    /* IMPROTANT: you can add new variables here */
   }
   
   function layout() internal pure returns (Layout storage $) {
