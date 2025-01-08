@@ -209,10 +209,21 @@ contract ClearingHouse is
     }
   }
 
+  function getToken() external view returns (address) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return address($.token);
+  }
+
   function setAdmin(address _adminAddress) external onlyOwner {
     if (_adminAddress == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.adminAddress = _adminAddress;
+  }
+
+    function setToken(address _token) external onlyAdmin {
+    if (_token == address(0)) revert InvalidAddress();
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    $.token = IERC20(_token); 
   }
 
   function setOperatorVault(address _operatorVaultAddress) external onlyAdmin {
@@ -246,15 +257,28 @@ contract ClearingHouse is
     $.userBalances[user] -= amount;
   }
 
+  function getOperators() public view returns (address[] memory) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.operatorList;
+  }
+
   function addOperator(address operator) external onlyAdmin {
     if (operator == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.operators[operator] = true;
+    $.operatorList.push(operator);
   }
 
   function removeOperator(address operator) external onlyAdmin {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.operators[operator] = false;
+    for (uint i = 0; i < $.operatorList.length; i++) {
+      if ($.operatorList[i] == operator) {
+        $.operatorList[i] = $.operatorList[$.operatorList.length - 1];
+        $.operatorList.pop();
+        break;
+      }
+    }
   }  
   
   function pause() external whenNotPaused onlyAdmin {

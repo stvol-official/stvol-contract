@@ -18,6 +18,7 @@ library ClearingHouseStorage {
     mapping(address => uint256) userBalances; // User balances
     uint256 treasuryAmount; // Treasury amount
     WithdrawalRequest[] withdrawalRequests; // Withdrawal requests
+    address[] operatorList; // List of operators
     /* IMPROTANT: you can add new variables here */
   }
   

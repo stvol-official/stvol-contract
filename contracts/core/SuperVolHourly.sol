@@ -393,9 +393,9 @@ contract SuperVolHourly is
     return $.clearingHouse.treasuryAmount();
   }
 
-  function addresses() public view returns (address, address, address, address) {
+  function addresses() public view returns (address, address, address, address, address) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return ($.adminAddress, $.operatorAddress, address($.vault), address($.clearingHouse));
+    return ($.adminAddress, $.operatorAddress, address($.vault), address($.clearingHouse), address($.token));
   }
 
   function balances(address user) public view returns (uint256, uint256, uint256) {

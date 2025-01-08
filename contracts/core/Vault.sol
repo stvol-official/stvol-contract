@@ -267,6 +267,11 @@ contract Vault is
         return ($.adminAddress);
     }
 
+    function getOperators() public view returns (address[] memory) {
+        VaultStorage.Layout storage $ = VaultStorage.layout();
+        return $.operatorList;
+    }
+
     function getVaultInfo(address vault) public view returns (VaultInfo memory) {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         return $.vaults[vault];
@@ -299,11 +304,19 @@ contract Vault is
         if (operator == address(0)) revert InvalidAddress();
         VaultStorage.Layout storage $ = VaultStorage.layout();
         $.operators[operator] = true;
+        $.operatorList.push(operator);
     }
 
     function removeOperator(address operator) external onlyAdmin {
         VaultStorage.Layout storage $ = VaultStorage.layout();
         $.operators[operator] = false;
+        for (uint i = 0; i < $.operatorList.length; i++) {
+            if ($.operatorList[i] == operator) {
+                $.operatorList[i] = $.operatorList[$.operatorList.length - 1];
+                $.operatorList.pop();
+                break;
+            }
+        }
     }  
 
     /* internal functions */

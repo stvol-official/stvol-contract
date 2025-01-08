@@ -2,11 +2,11 @@ import { ethers, network, run, upgrades } from "hardhat";
 import input from "@inquirer/input";
 
 /*
- npx hardhat run --network minato scripts/upgrade-supervol-hourly.ts
+ npx hardhat run --network sonieum_testnet scripts/upgrade-supervol-hourly.ts
 */
 
 const NETWORK = ["sonieum_testnet"];
-const DEPLOYED_PROXY = "0x492a3118b1c6328C01e123a1E38C6bed7375C92F"; // for minato
+const DEPLOYED_PROXY = "0x6022C15bE2889f9Fca24891e6df82b5A46BaC832"; // for minato
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -54,7 +54,7 @@ const upgrade = async () => {
     await run("verify:verify", {
       address: superVolContractAddress,
       network: network,
-      contract: `contracts/${contractName}.sol:${contractName}`,
+      contract: `contracts/core/${contractName}.sol:${contractName}`,
       constructorArguments: [],
     });
     console.log("verify the contractAction done");

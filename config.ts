@@ -1,7 +1,7 @@
 export default {
   Address: {
     Usdc: {
-      sonieum_testnet: "0xe722424e913f48bAC7CD2C1Ae981e2cD09bd95EC", // supervol USDC
+      sonieum_testnet: "0x770D5DE8dd09660F1141CF887D6B50976FBb12A0", // supervol USDC
     },
     Oracle: {
       sonieum_testnet: "0x2880aB155794e7179c9eE2e38200202908C17B43",

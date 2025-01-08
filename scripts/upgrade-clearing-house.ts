@@ -1,13 +1,12 @@
 import { ethers, network, run, upgrades } from "hardhat";
-import config from "../config";
 import input from "@inquirer/input";
 
 /*
- npx hardhat run --network minato scripts/upgrade-vault.ts
+ npx hardhat run --network sonieum_testnet scripts/upgrade-clearing-house.ts
 */
 
 const NETWORK = ["sonieum_testnet"];
-const DEPLOYED_PROXY = "0x49Ff93096bD296E70652969a2205461998b75550"; // for minato
+const DEPLOYED_PROXY = "0x7D17584f8D6d798EdD4fBEA0EE5a8fAF0f4d6bd2"; 
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -55,7 +54,7 @@ const upgrade = async () => {
     await run("verify:verify", {
       address: contractAddress,
       network: network,
-      contract: `contracts/${contractName}.sol:${contractName}`,
+      contract: `contracts/core/${contractName}.sol:${contractName}`,
     });
     console.log("verify the contractAction done");
   } else {
