@@ -46,7 +46,6 @@ contract ClearingHouse is
 
   modifier validWithdrawal(address user, uint256 amount) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    if ($.vault.isVault(user)) revert VaultCannotWithdraw();
     if (amount == 0) revert InvalidAmount();
     if ($.userBalances[user] < amount + WITHDRAWAL_FEE) revert InsufficientBalance();
     _;

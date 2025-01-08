@@ -199,10 +199,10 @@ contract SuperVolHourly is
     $.clearingHouse.deposit(msg.sender, amount);
   }
 
-  function depositTo(address from, address to, uint256 amount) external nonReentrant onlyOperator {
+  function depositTo(address user, uint256 amount) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.vault.isVault(to)) revert VaultCannotDeposit();
-    $.clearingHouse.depositTo(from, to, amount);
+    if ($.vault.isVault(user)) revert VaultCannotDeposit();
+    $.clearingHouse.depositTo(msg.sender, user, amount);
   }
 
   function depositCouponTo(
@@ -238,7 +238,7 @@ contract SuperVolHourly is
       i--;
     }
     coupons[i] = newCoupon;
-    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user));
+    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
   
   function reclaimAllExpiredCoupons() external nonReentrant {
@@ -247,6 +247,7 @@ contract SuperVolHourly is
     for (uint i = 0; i < $.couponHolders.length; i++) {
         memoryArray[i] = $.couponHolders[i];
     }
+
     for (uint i = 0; i < memoryArray.length; i++) {
         _reclaimExpiredCoupons(memoryArray[i]);
     }
@@ -256,55 +257,31 @@ contract SuperVolHourly is
     _reclaimExpiredCoupons(user);
   }
 
-  function _reclaimExpiredCoupons(address user) internal {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 epoch = _epochAt(block.timestamp);
-
-    Coupon[] storage coupons = $.couponBalances[user];
-
-    uint256 validCount = 0;
-    for (uint i = 0; i < coupons.length; i++) {
-        Coupon storage coupon = coupons[i];
-        if (coupon.expirationEpoch < epoch) {
-            uint256 availableAmount = coupon.amount - coupon.usedAmount;
-            if (availableAmount > 0) {
-                $.token.safeTransfer(coupon.issuer, availableAmount);
-                $.couponAmount -= availableAmount;
-                coupon.usedAmount = coupon.amount;
-            }
-        } else {
-            // move valid coupons to the front of the array
-            coupons[validCount] = coupon;
-            validCount++;
-        }
-    }
-
-    // remove expired coupons from the array
-    while (coupons.length > validCount) {
-        coupons.pop();
-    }
-
-    if (validCount == 0) {
-        // remove user from couponHolders array
-        uint length = $.couponHolders.length;
-        for (uint i = 0; i < length; i++) {
-            if ($.couponHolders[i] == user) {
-                $.couponHolders[i] = $.couponHolders[length - 1];
-                $.couponHolders.pop();
-                break;
-            }
-        }
-    }
-  }
-
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    if ($.vault.isVault(user)) revert VaultCannotWithdraw();
     $.clearingHouse.withdraw(user, amount);
   }
 
   function requestWithdrawal(uint256 amount) external nonReentrant returns (WithdrawalRequest memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    if ($.vault.isVault(msg.sender)) revert VaultCannotWithdraw();
     return $.clearingHouse.requestWithdrawal(msg.sender, amount);
+  }
+
+  function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    return $.clearingHouse.getWithdrawalRequests(from);
+  }
+
+  function approveWithdrawal(uint256 idx) public nonReentrant onlyOperator {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    $.clearingHouse.approveWithdrawal(idx);
+  }
+
+  function rejectWithdrawal(uint256 idx, string calldata reason) public nonReentrant onlyOperator {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    $.clearingHouse.rejectWithdrawal(idx, reason);
   }
 
   function createVault(address vaultAddress, address user, uint256 sharePercentage) external nonReentrant onlyOperator {
@@ -329,16 +306,11 @@ contract SuperVolHourly is
     $.clearingHouse.transferBalance(vaultAddress, user, balance);
   }
 
-  function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.clearingHouse.getWithdrawalRequests(from);
-  }
-
   function submitFilledOrders(
     FilledOrder[] calldata transactions
   ) external nonReentrant onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.lastFilledOrderId + 1 <= transactions[0].idx) revert InvalidId();
+    if ($.lastFilledOrderId + 1 > transactions[0].idx) revert InvalidId();
 
     for (uint i = 0; i < transactions.length; i++) {
       FilledOrder calldata order = transactions[i];
@@ -409,6 +381,7 @@ contract SuperVolHourly is
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.vault = IVault(_vault);
   } 
+
 
   /* public views */
   function commissionfee() public view returns (uint256) {
@@ -555,11 +528,6 @@ contract SuperVolHourly is
   function lastSettledFilledOrderId() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.lastSettledFilledOrderId;
-  }
-
-  function vault() public view returns (address) {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return address($.vault);
   }
 
   /* internal functions */
@@ -897,6 +865,47 @@ contract SuperVolHourly is
     $.usedCouponAmount += amount - remainingAmount;
 
     return remainingAmount;
+  }
+
+  function _reclaimExpiredCoupons(address user) internal {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 epoch = _epochAt(block.timestamp);
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    uint256 validCount = 0;
+    for (uint i = 0; i < coupons.length; i++) {
+        Coupon storage coupon = coupons[i];
+        if (coupon.expirationEpoch < epoch) {
+            uint256 availableAmount = coupon.amount - coupon.usedAmount;
+            if (availableAmount > 0) {
+                $.token.safeTransfer(coupon.issuer, availableAmount);
+                $.couponAmount -= availableAmount;
+                coupon.usedAmount = coupon.amount;
+            }
+        } else {
+            // move valid coupons to the front of the array
+            coupons[validCount] = coupon;
+            validCount++;
+        }
+    }
+
+    // remove expired coupons from the array
+    while (coupons.length > validCount) {
+        coupons.pop();
+    }
+
+    if (validCount == 0) {
+        // remove user from couponHolders array
+        uint length = $.couponHolders.length;
+        for (uint i = 0; i < length; i++) {
+            if ($.couponHolders[i] == user) {
+                $.couponHolders[i] = $.couponHolders[length - 1];
+                $.couponHolders.pop();
+                break;
+            }
+        }
+    }
   }
 
   function _processVaultTransaction(uint256 orderIdx, address vaultAddress, uint256 amount, bool isWin) internal {

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 pragma abicoder v2;
 
-import {VaultInfo} from "../Types.sol";
+import {VaultInfo} from "../types/Types.sol";
 
 interface IVault {
     // Events

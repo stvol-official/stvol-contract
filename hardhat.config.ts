@@ -1,9 +1,3 @@
-//import "@nomiclabs/hardhat-truffle5";
-//import "@nomiclabs/hardhat-waffle";
-//import "@nomiclabs/hardhat-etherscan";
-//import "hardhat-abi-exporter";
-//import "hardhat-gas-reporter";
-
 import "@nomicfoundation/hardhat-verify";
 import "solidity-coverage";
 import "@openzeppelin/hardhat-upgrades";
