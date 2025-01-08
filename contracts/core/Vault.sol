@@ -8,7 +8,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import { VaultStorage } from "../storage/VaultStorage.sol";
-import { ICommonErrors } from "../errors/CommonErrors.sol";
+import { IVaultErrors } from "../errors/VaultErrors.sol";
 import "../types/Types.sol";
 
 contract Vault is
@@ -17,7 +17,7 @@ contract Vault is
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
-    ICommonErrors
+    IVaultErrors
 {
     uint256 private constant BASE = 10000; // 100%
 

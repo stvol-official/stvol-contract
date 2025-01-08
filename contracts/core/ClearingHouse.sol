@@ -11,6 +11,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
 import { WithdrawalRequest } from "../types/Types.sol";
+import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 
 contract ClearingHouse is
   Initializable,
@@ -18,7 +19,7 @@ contract ClearingHouse is
   OwnableUpgradeable,
   PausableUpgradeable,
   ReentrancyGuardUpgradeable,
-  ICommonErrors
+  IClearingHouseErrors
 {
   using SafeERC20 for IERC20;
 

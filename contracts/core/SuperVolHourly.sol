@@ -11,12 +11,11 @@ import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ICommonErrors } from "../errors/CommonErrors.sol";
 import { IVault } from "../interfaces/IVault.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolStorage} from "../storage/SuperVolStorage.sol";
-import "../types/Types.sol";
-
+import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition } from "../types/Types.sol";
+import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 
 contract SuperVolHourly is
   Initializable,
@@ -24,7 +23,7 @@ contract SuperVolHourly is
   OwnableUpgradeable,
   PausableUpgradeable,
   ReentrancyGuardUpgradeable,
-  ICommonErrors
+  ISuperVolErrors
 {
   using SafeERC20 for IERC20;
 
@@ -649,6 +648,22 @@ contract SuperVolHourly is
     }
   }
 
+  function _emitSettlement(
+    uint256 idx,
+    uint256 epoch,
+    address user,
+    uint256 prevBalance,
+    uint256 newBalance
+  ) private {
+    emit OrderSettled(
+        user,
+        idx,
+        epoch,
+        prevBalance,
+        newBalance
+    );
+  }
+
   function _settleFilledOrder(
     Round storage round,
     FilledOrder storage order
@@ -657,175 +672,113 @@ contract SuperVolHourly is
 
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 strikePrice = (round.startPrice[order.productId] * order.strike) / 10000;
-
     bool isOverWin = strikePrice < round.endPrice[order.productId];
     bool isUnderWin = strikePrice > round.endPrice[order.productId];
 
     uint256 collectedFee = 0;
+    WinPosition winPosition;
+    uint256 winAmount = 0;
 
     if (order.overPrice + order.underPrice != 100) {
-      emit OrderSettled(
-        order.underUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.underUser),
-        $.clearingHouse.userBalances(order.underUser)
-      );
-      emit OrderSettled(
-        order.overUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.userBalances(order.overUser)
-      );
-      
-      $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Invalid, 
-        winAmount: 0, 
-        feeRate: $.commissionfee,
-        fee: 0
-      });
-
+        winPosition = WinPosition.Invalid;
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            order.underUser,
+            $.clearingHouse.userBalances(order.underUser),
+            $.clearingHouse.userBalances(order.underUser)
+        );
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            order.overUser,
+            $.clearingHouse.userBalances(order.overUser),
+            $.clearingHouse.userBalances(order.overUser)
+        );
     } else if (order.overUser == order.underUser) {
-      uint256 loosePositionAmount = (
-        isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0
-      ) *
-        order.unit *
-        PRICE_UNIT;
-      uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
-      uint256 remainingAmount = _useCoupon(order.overUser, fee, order.epoch);
+        winAmount = (isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0) * order.unit * PRICE_UNIT;
+        winPosition = isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie;
+        
+        uint256 fee = (winAmount * $.commissionfee) / BASE;
+        uint256 remainingAmount = _useCoupon(order.overUser, fee, order.epoch);
 
-      if ($.vault.isVault(order.overUser)) {
-        _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
-      } 
-      $.clearingHouse.subtractUserBalance(order.overUser, remainingAmount);
-      $.clearingHouse.addTreasuryAmount(fee);
-      collectedFee += fee;
-      emit OrderSettled(
-        order.overUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.overUser) + fee,
-        $.clearingHouse.userBalances(order.overUser)
-      );
-      $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie, 
-        winAmount: loosePositionAmount, 
-        feeRate: $.commissionfee,
-        fee: fee
-      });
+        if ($.vault.isVault(order.overUser)) {
+            _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
+        }
+        $.clearingHouse.subtractUserBalance(order.overUser, remainingAmount);
+        $.clearingHouse.addTreasuryAmount(fee);
+        collectedFee = fee;
+        
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            order.overUser,
+            $.clearingHouse.userBalances(order.overUser) + fee,
+            $.clearingHouse.userBalances(order.overUser)
+        );
+    } else if (isOverWin || isUnderWin) {
+        address winner = isUnderWin ? order.underUser : order.overUser;
+        address loser = isUnderWin ? order.overUser : order.underUser;
+        winAmount = (isUnderWin ? order.overPrice : order.underPrice) * order.unit * PRICE_UNIT;
+        winPosition = isUnderWin ? WinPosition.Under : WinPosition.Over;
 
-    } else if (isUnderWin) {
-      uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
-      uint256 remainingAmount = _useCoupon(order.overUser, amount, order.epoch);
-      
-      if ($.vault.isVault(order.overUser)) {
-        _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
-      } 
+        uint256 remainingAmount = _useCoupon(loser, winAmount, order.epoch);
+        if ($.vault.isVault(loser)) {
+            _processVaultTransaction(order.idx, loser, remainingAmount, false);
+        }
+        $.clearingHouse.subtractUserBalance(loser, remainingAmount);
 
-      uint256 fee = (amount * $.commissionfee) / BASE;
-      $.clearingHouse.addUserBalance(order.underUser, amount - fee);
-      $.clearingHouse.addTreasuryAmount(fee);
-      collectedFee += fee;
-      if ($.vault.isVault(order.underUser)) {
-        _processVaultTransaction(order.idx, order.underUser, (amount - fee), true);
-      } 
+        uint256 fee = (winAmount * $.commissionfee) / BASE;
+        $.clearingHouse.addUserBalance(winner, winAmount - fee);
+        $.clearingHouse.addTreasuryAmount(fee);
+        if ($.vault.isVault(winner)) {
+            _processVaultTransaction(order.idx, winner, (winAmount - fee), true);
+        }
+        collectedFee = fee;
 
-      emit OrderSettled(
-        order.overUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.overUser) + amount,
-        $.clearingHouse.userBalances(order.overUser)
-      );
-      emit OrderSettled(
-        order.underUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.underUser) - (amount - fee),
-        $.clearingHouse.userBalances(order.underUser)
-      );
-
-      $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Under, 
-        winAmount: amount, 
-        feeRate: $.commissionfee,
-        fee: fee
-      });
-
-    } else if (isOverWin) {
-      uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
-      uint256 remainingAmount = _useCoupon(order.underUser, amount, order.epoch);
-
-      $.clearingHouse.subtractUserBalance(order.underUser, remainingAmount);
-      if ($.vault.isVault(order.underUser)) {
-        _processVaultTransaction(order.idx, order.underUser, remainingAmount, false);
-      } 
-
-      uint256 fee = (amount * $.commissionfee) / BASE;
-      $.clearingHouse.addUserBalance(order.overUser, amount - fee);
-      $.clearingHouse.addTreasuryAmount(fee);
-      collectedFee += fee;
-      if ($.vault.isVault(order.overUser)) {
-        _processVaultTransaction(order.idx, order.overUser, (amount - fee), true);
-      } 
-
-      emit OrderSettled(
-        order.underUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.underUser) + amount,
-        $.clearingHouse.userBalances(order.underUser)
-      );
-      emit OrderSettled(
-        order.overUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.overUser) - (amount - fee),
-        $.clearingHouse.userBalances(order.overUser)
-      );
-
-      $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Over, 
-        winAmount: amount, 
-        feeRate: $.commissionfee,
-        fee: fee
-      });
-
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            loser,
+            $.clearingHouse.userBalances(loser) + winAmount,
+            $.clearingHouse.userBalances(loser)
+        );
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            winner, 
+            $.clearingHouse.userBalances(winner) - (winAmount - fee),
+            $.clearingHouse.userBalances(winner)
+        );
     } else {
-      // no one wins
-      emit OrderSettled(
-        order.underUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.underUser),
-        $.clearingHouse.userBalances(order.underUser)
-      );
-      emit OrderSettled(
-        order.overUser,
-        order.idx,
-        order.epoch,
-        $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.userBalances(order.overUser)
-      );
-
-      $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Tie, 
-        winAmount: 0, 
-        feeRate: $.commissionfee,
-        fee: 0
-      });
-
+        winPosition = WinPosition.Tie;
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            order.underUser,
+            $.clearingHouse.userBalances(order.underUser),
+            $.clearingHouse.userBalances(order.underUser)
+        );
+        _emitSettlement(
+            order.idx,
+            order.epoch,
+            order.overUser,
+            $.clearingHouse.userBalances(order.overUser),
+            $.clearingHouse.userBalances(order.overUser)
+        );
     }
+
+    $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx,
+        winPosition: winPosition,
+        winAmount: winAmount,
+        feeRate: $.commissionfee,
+        fee: collectedFee
+    });
 
     order.isSettled = true;
     if ($.lastSettledFilledOrderId < order.idx) {
-      $.lastSettledFilledOrderId = order.idx;
+        $.lastSettledFilledOrderId = order.idx;
     }
     return collectedFee;
   }
