@@ -34,6 +34,16 @@ export default {
       chainId: 1946,
       timeout: 60000,
     },
+    sonieum_mainnet: {
+      url: `https://soneium.rpc.scs.startale.com?apikey=WIW3bW9VR6NydF09EMd451ojzd84TfHe`,
+      gas: 22000000,
+      allowUnlimitedContractSize: true,
+      accounts: {
+        mnemonic,
+      },
+      chainId: 1868,
+      timeout: 60000,
+    },
   },
   solidity: {
     compilers: [
@@ -70,6 +80,7 @@ export default {
   etherscan: {
     apiKey: {
       sonieum_testnet: "empty", // apiKey is not required, just set a placeholder
+      sonieum_mainnet: "empty", // apiKey is not required, just set a placeholder
     },
     customChains: [
       {
@@ -78,6 +89,14 @@ export default {
         urls: {
           apiURL: "https://soneium-minato.blockscout.com/api",
           browserURL: "https://soneium-minato.blockscout.com",
+        },
+      },
+      {
+        network: "sonieum_mainnet",
+        chainId: 1868,
+        urls: {
+          apiURL: "https://soneium.blockscout.com/api",
+          browserURL: "https://soneium.blockscout.com",
         },
       },
     ],
