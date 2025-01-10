@@ -10,23 +10,23 @@ export default {
     },
     Admin: {
       sonieum_testnet: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      sonieum_mainnet: "",
+      sonieum_mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
     },
     Operator: {
       sonieum_testnet: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      sonieum_mainnet: "",
+      sonieum_mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
     },
     OperatorVault: {
       sonieum_testnet: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      sonieum_mainnet: "",
+      sonieum_mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
     },
     ClearingHouse: {
       sonieum_testnet: "0x7D17584f8D6d798EdD4fBEA0EE5a8fAF0f4d6bd2", // ClearingHouse Contract
-      sonieum_mainnet: "",
+      sonieum_mainnet: "0x618148f2Bb58C5c89737BB160070613d4E1b790a",
     },
     Vault: {
       sonieum_testnet: "0x2202469A4505d0cd28204fA5eA27198b334dE378", // Vault Contract
-      sonieum_mainnet: "",
+      sonieum_mainnet: "0xF94e7F50120fe8276B85E21f31C6de097eab8813",
     },
   },
   CommissionFee: {

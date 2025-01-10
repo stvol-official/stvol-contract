@@ -3,8 +3,9 @@ import config from "../config";
 
 /*
  npx hardhat run --network sonieum_testnet scripts/deploy-vault.ts
+npx hardhat run --network sonieum_mainnet scripts/deploy-vault.ts 
 */
-const NETWORK = ["sonieum_testnet"] as const;
+const NETWORK = ["sonieum_testnet", "sonieum_mainnet"] as const;
 type SupportedNetwork = (typeof NETWORK)[number];
 const main = async () => {
   // Get network data from Hardhat config
@@ -16,9 +17,7 @@ const main = async () => {
     console.log(`Deploying to ${networkName} network...`);
 
     // Check if the addresses in the config are set
-    if (
-      config.Address.Admin[networkName] === ethers.ZeroAddress
-    ) {
+    if (config.Address.Admin[networkName] === ethers.ZeroAddress) {
       throw new Error("Missing addresses (Admin/Operator)");
     }
 

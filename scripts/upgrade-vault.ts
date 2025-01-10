@@ -5,8 +5,8 @@ import input from "@inquirer/input";
  npx hardhat run --network sonieum_testnet scripts/upgrade-vault.ts
 */
 
-const NETWORK = ["sonieum_testnet"];
-const DEPLOYED_PROXY = "0x2202469A4505d0cd28204fA5eA27198b334dE378"; 
+const NETWORK = ["sonieum_testnet", "sonieum_mainnet"];
+const DEPLOYED_PROXY = "0x2202469A4505d0cd28204fA5eA27198b334dE378"; // for testnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));

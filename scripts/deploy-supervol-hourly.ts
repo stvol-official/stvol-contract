@@ -3,8 +3,9 @@ import config from "../config";
 
 /*
  npx hardhat run --network sonieum_testnet scripts/deploy-supervol-hourly.ts
+ npx hardhat run --network sonieum_mainnet scripts/deploy-supervol-hourly.ts
 */
-const NETWORK = ["sonieum_testnet"] as const;
+const NETWORK = ["sonieum_testnet", "sonieum_mainnet"] as const;
 type SupportedNetwork = (typeof NETWORK)[number];
 const main = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
