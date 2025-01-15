@@ -4152,7 +4152,11 @@
             }
           ]
         }
-      }
+      },
+      "allAddresses": [
+        "0x3D3D5F1d3F3376aaE8B09bca61c7b66f28D5F4ef",
+        "0xDfB40D9D4D9C96EC65c036aEe2a3D70E6468D7c4"
+      ]
     }
   }
 }
