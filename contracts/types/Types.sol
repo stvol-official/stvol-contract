@@ -59,6 +59,14 @@ struct WithdrawalRequest {
     uint256 created;
 }
 
+struct ForceWithdrawalRequest {
+    uint256 idx;
+    address user;
+    uint256 amount;
+    bool processed;
+    uint256 created;
+}
+
 struct Coupon {
     address user;
     uint256 amount;

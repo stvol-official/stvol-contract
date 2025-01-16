@@ -37,7 +37,7 @@ const upgrade = async () => {
     // Deploy contracts.
     const ClearingHouseFactory = await ethers.getContractFactory(contractName);
 
-    const stVolContract = await upgrades.forceImport(PROXY, ClearingHouseFactory, { kind: "uups" });
+    // await upgrades.forceImport(PROXY, ClearingHouseFactory, { kind: "uups" });
     const contract = await upgrades.upgradeProxy(PROXY, ClearingHouseFactory, {
       kind: "uups",
       redeployImplementation: "always",

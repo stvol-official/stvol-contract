@@ -9,4 +9,9 @@ interface IClearingHouseErrors is ICommonErrors {
     error InvalidSettlement();
     error InvalidCommissionFee();
     error InvalidTokenAddress();
+    error RequestNotFound();
+    error WithdrawalTooEarly();
+    error ForceWithdrawalRequestNotFound();
+    error ForceWithdrawalTooEarly();
+    error ExistingForceWithdrawalRequest();
 } 

@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 
 contract ClearingHouse is
@@ -25,6 +25,7 @@ contract ClearingHouse is
 
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
+  uint256 private constant DEFAULT_FORCE_WITHDRAWAL_DELAY = 24 hours;
 
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
@@ -32,6 +33,8 @@ contract ClearingHouse is
   event WithdrawalApproved(address indexed user, uint256 amount);
   event WithdrawalRejected(address indexed user, uint256 amount);
   event BalanceTransferred(address indexed from, address indexed to, uint256 amount);
+  event ForceWithdrawalRequested(address indexed user, uint256 amount);
+  event ForceWithdrawalExecuted(address indexed user, uint256 amount);
 
   modifier onlyAdmin() {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
@@ -74,6 +77,7 @@ contract ClearingHouse is
     $.token = IERC20(_usdcAddress);
     $.adminAddress = _adminAddress;
     $.operatorVaultAddress = _operatorVaultAddress;
+    $.forceWithdrawalDelay = DEFAULT_FORCE_WITHDRAWAL_DELAY;
   }
 
   function deposit(address user, uint256 amount) external nonReentrant onlyOperator {
@@ -146,15 +150,59 @@ contract ClearingHouse is
     emit WithdrawalRejected(request.user, request.amount);
   }
 
-  function forceWithdrawAll() external nonReentrant {
+  function requestForceWithdraw() external nonReentrant {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     uint256 balance = $.userBalances[msg.sender];
     if (balance < WITHDRAWAL_FEE) revert InsufficientBalance();
+    
+    // check if there is an existing force withdrawal request
+    for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
+      if ($.forceWithdrawalRequests[i-1].user == msg.sender && 
+          !$.forceWithdrawalRequests[i-1].processed) {
+        revert ExistingForceWithdrawalRequest();
+      }
+    }
+    
+    ForceWithdrawalRequest memory request = ForceWithdrawalRequest({
+      idx: $.forceWithdrawalRequests.length,
+      user: msg.sender,
+      amount: balance - WITHDRAWAL_FEE,
+      processed: false,
+      created: block.timestamp
+    });
+
+    $.forceWithdrawalRequests.push(request);
+    emit ForceWithdrawalRequested(msg.sender, balance - WITHDRAWAL_FEE);
+  }
+
+  function executeForceWithdraw() external nonReentrant {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 requestIdx;
+    bool found = false;
+    
+    for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
+      if ($.forceWithdrawalRequests[i-1].user == msg.sender && 
+          !$.forceWithdrawalRequests[i-1].processed) {
+        requestIdx = i-1;
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) revert ForceWithdrawalRequestNotFound();
+    
+    ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[requestIdx];
+    
+    if (block.timestamp < request.created + $.forceWithdrawalDelay) revert ForceWithdrawalTooEarly();
+    if ($.userBalances[msg.sender] < request.amount + WITHDRAWAL_FEE) revert InsufficientBalance();
+    
+    request.processed = true;
     $.userBalances[msg.sender] = 0;
     $.treasuryAmount += WITHDRAWAL_FEE;
-    $.token.safeTransfer(msg.sender, balance - WITHDRAWAL_FEE);
-    emit Withdraw(msg.sender, balance, 0);
+    $.token.safeTransfer(msg.sender, request.amount);
+    
+    emit ForceWithdrawalExecuted(msg.sender, request.amount);
   }
 
   function claimTreasury() external nonReentrant onlyAdmin {
@@ -209,6 +257,29 @@ contract ClearingHouse is
     }
   }
 
+  function getForceWithdrawStatus(address user) external view returns (
+    bool hasRequest,
+    uint256 requestTime,
+    uint256 amount,
+    bool canWithdraw
+  ) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    
+    for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
+      ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[i-1];
+      if (request.user == user && !request.processed) {
+        return (
+          true,
+          request.created,
+          request.amount,
+          block.timestamp >= request.created + 86400
+        );
+      }
+    }
+    
+    return (false, 0, 0, false);
+  }
+
   function getToken() external view returns (address) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return address($.token);
@@ -230,6 +301,17 @@ contract ClearingHouse is
     if (_operatorVaultAddress == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.operatorVaultAddress = _operatorVaultAddress;
+  }
+  
+  function setForceWithdrawalDelay(uint256 newDelay) external onlyAdmin {
+    if (newDelay == 0) revert InvalidAmount();
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    $.forceWithdrawalDelay = newDelay;
+  }
+
+  function getForceWithdrawalDelay() external view returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.forceWithdrawalDelay;
   }
 
   function transferBalance(
@@ -291,5 +373,6 @@ contract ClearingHouse is
 
   /* internal functions */
   function _authorizeUpgrade(address) internal override onlyOwner {}
+
 
 } 
