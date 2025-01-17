@@ -239,51 +239,6 @@ contract ClearingHouse is
     $.treasuryAmount += amount;
   }
 
-  function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    uint256 totalRequests = $.withdrawalRequests.length;
-
-    if (totalRequests < 100) {
-      return $.withdrawalRequests;
-    } else {
-      uint256 startFrom = from < totalRequests - 100 ? from : totalRequests - 100;
-
-      WithdrawalRequest[] memory recentRequests = new WithdrawalRequest[](100);
-      for (uint256 i = 0; i < 100; i++) {
-        recentRequests[i] = $.withdrawalRequests[startFrom + i];
-      }
-
-      return recentRequests;
-    }
-  }
-
-  function getForceWithdrawStatus(address user) external view returns (
-    bool hasRequest,
-    uint256 requestTime,
-    uint256 amount,
-    bool canWithdraw
-  ) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    
-    for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
-      ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[i-1];
-      if (request.user == user && !request.processed) {
-        return (
-          true,
-          request.created,
-          request.amount,
-          block.timestamp >= request.created + $.forceWithdrawalDelay
-        );
-      }
-    }
-    
-    return (false, 0, 0, false);
-  }
-
-  function getToken() external view returns (address) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    return address($.token);
-  }
 
   function setAdmin(address _adminAddress) external onlyOwner {
     if (_adminAddress == address(0)) revert InvalidAddress();
@@ -309,11 +264,6 @@ contract ClearingHouse is
     $.forceWithdrawalDelay = newDelay;
   }
 
-  function getForceWithdrawalDelay() external view returns (uint256) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    return $.forceWithdrawalDelay;
-  }
-
   function transferBalance(
     address from, 
     address to, 
@@ -337,11 +287,6 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if ($.userBalances[user] < amount) revert InsufficientBalance();
     $.userBalances[user] -= amount;
-  }
-
-  function getOperators() public view returns (address[] memory) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    return $.operatorList;
   }
 
   function addOperator(address operator) external onlyAdmin {
@@ -371,8 +316,70 @@ contract ClearingHouse is
     _unpause();
   }
 
+   /* public views */
+  function addresses() public view returns (address, address) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return ($.adminAddress, $.operatorVaultAddress);
+  }
+
+  function getToken() external view returns (address) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return address($.token);
+  }
+
+  function getOperators() public view returns (address[] memory) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.operatorList;
+  }
+
+  function getForceWithdrawalDelay() external view returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.forceWithdrawalDelay;
+  }
+
+  function getForceWithdrawStatus(address user) external view returns (
+    bool hasRequest,
+    uint256 requestTime,
+    uint256 amount,
+    bool canWithdraw
+  ) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    
+    for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
+      ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[i-1];
+      if (request.user == user && !request.processed) {
+        return (
+          true,
+          request.created,
+          request.amount,
+          block.timestamp >= request.created + $.forceWithdrawalDelay
+        );
+      }
+    }
+    
+    return (false, 0, 0, false);
+  }
+
+  function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 totalRequests = $.withdrawalRequests.length;
+
+    if (totalRequests < 100) {
+      return $.withdrawalRequests;
+    } else {
+      uint256 startFrom = from < totalRequests - 100 ? from : totalRequests - 100;
+
+      WithdrawalRequest[] memory recentRequests = new WithdrawalRequest[](100);
+      for (uint256 i = 0; i < 100; i++) {
+        recentRequests[i] = $.withdrawalRequests[startFrom + i];
+      }
+
+      return recentRequests;
+    }
+  }
+
+
   /* internal functions */
   function _authorizeUpgrade(address) internal override onlyOwner {}
-
 
 } 
