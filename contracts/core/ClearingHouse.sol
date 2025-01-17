@@ -272,7 +272,7 @@ contract ClearingHouse is
           true,
           request.created,
           request.amount,
-          block.timestamp >= request.created + 86400
+          block.timestamp >= request.created + $.forceWithdrawalDelay
         );
       }
     }
