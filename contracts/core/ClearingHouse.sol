@@ -339,9 +339,9 @@ contract ClearingHouse is
   }
 
    /* public views */
-  function addresses() public view returns (address, address) {
+  function addresses() public view returns (address, address, address, address) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    return ($.adminAddress, $.operatorVaultAddress);
+    return ($.adminAddress, $.operatorVaultAddress, address($.token), address($.vault));
   }
 
   function getToken() external view returns (address) {
@@ -402,6 +402,6 @@ contract ClearingHouse is
 
 
   /* internal functions */
-  function _authorizeUpgrade(address) internal override onlyOwner {}
+  function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
 } 
