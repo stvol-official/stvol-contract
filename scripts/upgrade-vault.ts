@@ -3,10 +3,12 @@ import input from "@inquirer/input";
 
 /*
  npx hardhat run --network sonieum_testnet scripts/upgrade-vault.ts
+ npx hardhat run --network sonieum_mainnet scripts/upgrade-vault.ts
 */
 
 const NETWORK = ["sonieum_testnet", "sonieum_mainnet"];
 const DEPLOYED_PROXY = "0x2202469A4505d0cd28204fA5eA27198b334dE378"; // for testnet
+// const DEPLOYED_PROXY = "0xF94e7F50120fe8276B85E21f31C6de097eab8813"; // for mainnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));

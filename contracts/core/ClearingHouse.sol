@@ -12,6 +12,7 @@ import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
 import { WithdrawalRequest, ForceWithdrawalRequest } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
+import { IVault } from "../interfaces/IVault.sol";
 
 contract ClearingHouse is
   Initializable,
@@ -80,20 +81,36 @@ contract ClearingHouse is
     $.forceWithdrawalDelay = DEFAULT_FORCE_WITHDRAWAL_DELAY;
   }
 
-  function deposit(address user, uint256 amount) external nonReentrant onlyOperator {
+  function deposit(uint256 amount) external nonReentrant {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-
-    $.token.safeTransferFrom(user, address(this), amount);
-    $.userBalances[user] += amount;
-    emit Deposit(user, user, amount, $.userBalances[user]);
+    $.token.safeTransferFrom(msg.sender, address(this), amount);
+    $.userBalances[msg.sender] += amount;
+    emit Deposit(msg.sender, msg.sender, amount, $.userBalances[msg.sender]);
   }
 
-  function depositTo(address from, address to, uint256 amount) external nonReentrant onlyOperator {
+  function depositTo(address user, uint256 amount) external nonReentrant {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
-    $.token.safeTransferFrom(from, address(this), amount);
-    $.userBalances[to] += amount;
-    emit Deposit(to, from, amount, $.userBalances[to]);
+    $.token.safeTransferFrom(msg.sender, address(this), amount);
+    $.userBalances[user] += amount;
+    emit Deposit(user, msg.sender, amount, $.userBalances[user]);
+  }
+
+  function depositToVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    if ($.userBalances[user] < amount) revert InsufficientBalance();
+    uint256 balance = $.vault.depositToVault(vaultAddress, user, amount);
+    
+    // user -> vaultAddress
+    _transferBalance(user, vaultAddress, balance);
+  }
+
+  function withdrawFromVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 balance = $.vault.withdrawFromVault(vaultAddress, user, amount);
+    
+    // vaultAddress -> user
+    _transferBalance(vaultAddress, user, balance);
   }
 
   function withdraw(address user, uint256 amount) external nonReentrant onlyOperator validWithdrawal(user, amount) {
@@ -105,14 +122,13 @@ contract ClearingHouse is
   }
 
   function requestWithdrawal(
-    address user,
     uint256 amount
-  ) external nonReentrant onlyOperator validWithdrawal(user, amount) returns (WithdrawalRequest memory) {
+  ) external nonReentrant validWithdrawal(msg.sender, amount) returns (WithdrawalRequest memory) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     WithdrawalRequest memory request = WithdrawalRequest({
       idx: $.withdrawalRequests.length,
-      user: user,
+      user: msg.sender,
       amount: amount,
       processed: false,
       message: "",
@@ -121,7 +137,7 @@ contract ClearingHouse is
 
     $.withdrawalRequests.push(request);
 
-    emit WithdrawalRequested(user, amount);
+    emit WithdrawalRequested(msg.sender, amount);
     return request;
   }
 
@@ -264,11 +280,17 @@ contract ClearingHouse is
     $.forceWithdrawalDelay = newDelay;
   }
 
-  function transferBalance(
+  function setVault(address _vault) external onlyAdmin {
+    if (_vault == address(0)) revert InvalidAddress();
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    $.vault = IVault(_vault);
+  }
+
+  function _transferBalance(
     address from, 
     address to, 
     uint256 amount
-  ) external nonReentrant onlyOperator {
+  ) internal {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     
     if ($.userBalances[from] < amount) revert InsufficientBalance();

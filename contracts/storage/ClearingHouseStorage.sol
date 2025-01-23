@@ -21,6 +21,7 @@ library ClearingHouseStorage {
     address[] operatorList; // List of operators
     ForceWithdrawalRequest[] forceWithdrawalRequests;
     uint256 forceWithdrawalDelay;
+    IVault vault;
     /* IMPROTANT: you can add new variables here */
   }
   

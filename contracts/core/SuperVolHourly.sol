@@ -192,18 +192,6 @@ contract SuperVolHourly is
     return orders.length - index;
   }
 
- function deposit(uint256 amount) external nonReentrant {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.vault.isVault(msg.sender)) revert VaultCannotDeposit();
-    $.clearingHouse.deposit(msg.sender, amount);
-  }
-
-  function depositTo(address user, uint256 amount) external nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.vault.isVault(user)) revert VaultCannotDeposit();
-    $.clearingHouse.depositTo(msg.sender, user, amount);
-  }
-
   function depositCouponTo(
     address user,
     uint256 amount,
@@ -254,55 +242,6 @@ contract SuperVolHourly is
 
   function reclaimExpiredCoupons(address user) external nonReentrant {
     _reclaimExpiredCoupons(user);
-  }
-
-  function withdraw(address user, uint256 amount) external nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.vault.isVault(user)) revert VaultCannotWithdraw();
-    $.clearingHouse.withdraw(user, amount);
-  }
-
-  function requestWithdrawal(uint256 amount) external nonReentrant returns (WithdrawalRequest memory) {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.vault.isVault(msg.sender)) revert VaultCannotWithdraw();
-    return $.clearingHouse.requestWithdrawal(msg.sender, amount);
-  }
-
-  function getWithdrawalRequests(uint256 from) public view returns (WithdrawalRequest[] memory) {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.clearingHouse.getWithdrawalRequests(from);
-  }
-
-  function approveWithdrawal(uint256 idx) public nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.clearingHouse.approveWithdrawal(idx);
-  }
-
-  function rejectWithdrawal(uint256 idx, string calldata reason) public nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.clearingHouse.rejectWithdrawal(idx, reason);
-  }
-
-  function createVault(address vaultAddress, address user, uint256 sharePercentage) external nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.vault.createVault(vaultAddress, user, sharePercentage);
-  }
-
-  function depositToVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if ($.clearingHouse.userBalances(user) < amount) revert InsufficientBalance();
-    uint256 balance = $.vault.depositToVault(vaultAddress, user, amount);
-    
-    // user -> vaultAddress
-    $.clearingHouse.transferBalance(user, vaultAddress, balance);
-  }
-
-  function withdrawFromVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 balance = $.vault.withdrawFromVault(vaultAddress, user, amount);
-    
-    // vaultAddress -> user
-    $.clearingHouse.transferBalance(vaultAddress, user, balance);
   }
 
   function submitFilledOrders(
