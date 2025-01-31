@@ -13,4 +13,5 @@ interface ISuperVolErrors is ICommonErrors {
     error InvalidRoundPrice();
     error EpochHasNotStartedYet();
     error InvalidEpoch();
+    error InvalidIndex();
 } 

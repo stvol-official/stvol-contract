@@ -228,16 +228,20 @@ contract SuperVolHourly is
     emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
   
-  function reclaimAllExpiredCoupons() external nonReentrant {
+  function reclaimExpiredCouponsByChunk(uint256 startIndex, uint256 size) external nonReentrant returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    address[] memory memoryArray = new address[]($.couponHolders.length);
-    for (uint i = 0; i < $.couponHolders.length; i++) {
-        memoryArray[i] = $.couponHolders[i];
+    
+    if (startIndex >= $.couponHolders.length) revert InvalidIndex();
+
+    uint256 endIndex = startIndex + size;
+    if (endIndex > $.couponHolders.length) {
+        endIndex = $.couponHolders.length;
     }
 
-    for (uint i = 0; i < memoryArray.length; i++) {
-        _reclaimExpiredCoupons(memoryArray[i]);
+    for (uint256 i = startIndex; i < endIndex; i++) {
+        _reclaimExpiredCoupons($.couponHolders[i]);
     }
+    return endIndex;  // Return the next start index for subsequent calls
   }
 
   function reclaimExpiredCoupons(address user) external nonReentrant {
@@ -466,6 +470,11 @@ contract SuperVolHourly is
   function lastSettledFilledOrderId() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.lastSettledFilledOrderId;
+  }
+
+  function getCouponHoldersLength() external view returns (uint256) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    return $.couponHolders.length;
   }
 
   /* internal functions */

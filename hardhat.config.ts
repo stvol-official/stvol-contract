@@ -25,7 +25,7 @@ export default {
       chainId: 31337,
     },
     sonieum_testnet: {
-      url: `https://soneium-minato.rpc.scs.startale.com?apikey=GmiicS3QQg2znrM6ml2vxupFlf6X7Rns`,
+      url: `https://rpc.minato.soneium.org`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
       accounts: {
