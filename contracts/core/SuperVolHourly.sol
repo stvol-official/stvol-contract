@@ -371,12 +371,26 @@ contract SuperVolHourly is
     return $.couponHolders;
   }
 
+  function getCouponHoldersPaged(uint256 offset, uint256 size) public view returns (address[] memory) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 length = $.couponHolders.length;
+    
+    if (offset >= length || size == 0) return new address[](0);
+    
+    uint256 endIndex = offset + size;
+    if (endIndex > length) endIndex = length;
+    
+    address[] memory pagedHolders = new address[](endIndex - offset);
+    for (uint256 i = offset; i < endIndex; i++) {
+        pagedHolders[i - offset] = $.couponHolders[i];
+    }
+    return pagedHolders;
+  }
+
   function userCoupons(address user) public view returns (Coupon[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.couponBalances[user];
   }
-
-
 
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
