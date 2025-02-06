@@ -30,11 +30,12 @@ contract SuperVolHourly is
   function _priceIds() internal pure returns (bytes32[] memory) {
     // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
     // to add products, upgrade the contract
-    bytes32[] memory priceIds = new bytes32[](3);
+    bytes32[] memory priceIds = new bytes32[](4);
     // priceIds[productId] = pyth price id
     priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
     priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
     priceIds[2] = 0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853; // astr
+    priceIds[3] = 0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d; // sol
     return priceIds;
   }
 
