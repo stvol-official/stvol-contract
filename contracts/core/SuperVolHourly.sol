@@ -53,7 +53,8 @@ contract SuperVolHourly is
     uint256 indexed idx,
     uint256 epoch,
     uint256 prevBalance,
-    uint256 newBalance
+    uint256 newBalance,
+    uint256 usedCouponAmount
   );
   event RoundSettled(uint256 indexed epoch, uint256 orderCount, uint256 collectedFee);
   event DepositCoupon(
@@ -616,14 +617,16 @@ contract SuperVolHourly is
     uint256 epoch,
     address user,
     uint256 prevBalance,
-    uint256 newBalance
+    uint256 newBalance,
+    uint256 usedCouponAmount
   ) private {
     emit OrderSettled(
         user,
         idx,
         epoch,
         prevBalance,
-        newBalance
+        newBalance,
+        usedCouponAmount
     );
   }
 
@@ -649,14 +652,16 @@ contract SuperVolHourly is
             order.epoch,
             order.underUser,
             $.clearingHouse.userBalances(order.underUser),
-            $.clearingHouse.userBalances(order.underUser)
+            $.clearingHouse.userBalances(order.underUser),
+            0
         );
         _emitSettlement(
             order.idx,
             order.epoch,
             order.overUser,
             $.clearingHouse.userBalances(order.overUser),
-            $.clearingHouse.userBalances(order.overUser)
+            $.clearingHouse.userBalances(order.overUser),
+            0
         );
     } else if (order.overUser == order.underUser) {
         winAmount = (isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0) * order.unit * PRICE_UNIT;
@@ -677,7 +682,8 @@ contract SuperVolHourly is
             order.epoch,
             order.overUser,
             $.clearingHouse.userBalances(order.overUser) + fee,
-            $.clearingHouse.userBalances(order.overUser)
+            $.clearingHouse.userBalances(order.overUser),
+            winAmount - remainingAmount
         );
     } else if (isOverWin || isUnderWin) {
         address winner = isUnderWin ? order.underUser : order.overUser;
@@ -704,14 +710,16 @@ contract SuperVolHourly is
             order.epoch,
             loser,
             $.clearingHouse.userBalances(loser) + winAmount,
-            $.clearingHouse.userBalances(loser)
+            $.clearingHouse.userBalances(loser),
+            winAmount - remainingAmount
         );
         _emitSettlement(
             order.idx,
             order.epoch,
             winner, 
             $.clearingHouse.userBalances(winner) - (winAmount - fee),
-            $.clearingHouse.userBalances(winner)
+            $.clearingHouse.userBalances(winner),
+            0
         );
     } else {
         winPosition = WinPosition.Tie;
@@ -720,14 +728,16 @@ contract SuperVolHourly is
             order.epoch,
             order.underUser,
             $.clearingHouse.userBalances(order.underUser),
-            $.clearingHouse.userBalances(order.underUser)
+            $.clearingHouse.userBalances(order.underUser),
+            0
         );
         _emitSettlement(
             order.idx,
             order.epoch,
             order.overUser,
             $.clearingHouse.userBalances(order.overUser),
-            $.clearingHouse.userBalances(order.overUser)
+            $.clearingHouse.userBalances(order.overUser),
+            0
         );
     }
 
