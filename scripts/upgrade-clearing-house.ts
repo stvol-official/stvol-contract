@@ -7,8 +7,8 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["sonieum_testnet", "sonieum_mainnet"];
-const DEPLOYED_PROXY = "0x7D17584f8D6d798EdD4fBEA0EE5a8fAF0f4d6bd2"; // for testnet
-// const DEPLOYED_PROXY = "0x618148f2Bb58C5c89737BB160070613d4E1b790a"; // for mainnet
+// const DEPLOYED_PROXY = "0x7D17584f8D6d798EdD4fBEA0EE5a8fAF0f4d6bd2"; // for testnet
+const DEPLOYED_PROXY = "0x618148f2Bb58C5c89737BB160070613d4E1b790a"; // for mainnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -27,6 +27,11 @@ const upgrade = async () => {
     },
   });
 
+  const isSafeOwner = await input({
+    message: "Is the owner safe address?",
+    default: "N",
+  });
+
   // Check if the network is supported.
   if (NETWORK.includes(networkName)) {
     console.log(`Deploying to ${networkName} network...`);
@@ -38,23 +43,60 @@ const upgrade = async () => {
     // Deploy contracts.
     const ClearingHouseFactory = await ethers.getContractFactory(contractName);
 
-    // await upgrades.forceImport(PROXY, ClearingHouseFactory, { kind: "uups" });
-    const contract = await upgrades.upgradeProxy(PROXY, ClearingHouseFactory, {
-      kind: "uups",
-      redeployImplementation: "always",
-    });
+    let clearingHouseContractAddress;
+    if (isSafeOwner === "N") {
+      const clearingHouseContract = await upgrades.upgradeProxy(PROXY, ClearingHouseFactory, {
+        kind: "uups",
+        redeployImplementation: "always",
+      });
+      await clearingHouseContract.waitForDeployment();
+      clearingHouseContractAddress = await clearingHouseContract.getAddress();
+      console.log(`🍣 ${contractName} Contract deployed at ${clearingHouseContractAddress}`);
+    } else {
+      const clearingHouseContract = await upgrades.prepareUpgrade(PROXY, ClearingHouseFactory, {
+        kind: "uups",
+        redeployImplementation: "always",
+      });
+      clearingHouseContractAddress = clearingHouseContract;
+      console.log(`🍣 New implementation contract deployed at: ${clearingHouseContract}`);
+      console.log("Use this address in your Safe transaction to upgrade the proxy");
 
-    await contract.waitForDeployment();
-    const contractAddress = await contract.getAddress();
-    console.log(`🍣 ${contractName} Contract deployed at ${contractAddress}`);
-
+      /**
+       * Usage: https://safe.optimism.io/
+       * Enter Address: 0x7D17584f8D6d798EdD4fBEA0EE5a8fAF0f4d6bd2
+       * Enter ABI:
+       [
+          {
+            "inputs": [
+              {
+                "internalType": "address",
+                "name": "newImplementation",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes",
+                "name": "data",
+                "type": "bytes"
+              }
+            ],
+            "name": "upgradeToAndCall",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ]
+       * Contract Method: upgradeToAndCall(address newImplementation, bytes data)
+       * newImplementation: ${superVolContract}
+       * Enter Data: 0x
+       */
+    }
     const network = await ethers.getDefaultProvider().getNetwork();
 
     await sleep(6000);
 
     console.log("Verifying contracts...");
     await run("verify:verify", {
-      address: contractAddress,
+      address: clearingHouseContractAddress,
       network: network,
       contract: `contracts/core/${contractName}.sol:${contractName}`,
     });
