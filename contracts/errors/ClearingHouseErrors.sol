@@ -15,4 +15,5 @@ interface IClearingHouseErrors is ICommonErrors {
     error ForceWithdrawalTooEarly();
     error ExistingForceWithdrawalRequest();
     error EpochHasNotStartedYet();
+    error InvalidIndex();
 } 

@@ -374,28 +374,6 @@ contract ClearingHouse is
     emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
   
-  function reclaimExpiredCouponsPaged(uint256 size) external nonReentrant returns (uint256) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    
-    if ($.couponHolders.length == 0) {
-        return 0;
-    }
-
-    // Process holders from the end of the array to avoid issues with array modifications
-    uint256 startIndex = $.couponHolders.length;
-    uint256 endIndex = startIndex > size ? startIndex - size : 0;
-    
-    for (uint256 i = startIndex; i > endIndex;) {
-        i--;
-        address holder = $.couponHolders[i];
-        if (holder != address(0)) {
-            _reclaimExpiredCoupons(holder);
-        }
-    }
-    
-    return $.couponHolders.length;
-  }
-  
   function pause() external whenNotPaused onlyAdmin {
     _pause();
   }
@@ -508,6 +486,32 @@ contract ClearingHouse is
   function getCouponHoldersLength() external view returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return $.couponHolders.length;
+  }
+
+  function reclaimExpiredCouponsByChunk(uint256 startIndex, uint256 size) external nonReentrant returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    
+    if (startIndex >= $.couponHolders.length) revert InvalidIndex();
+
+    uint256 currentIndex = startIndex;
+    uint256 processedCount = 0;
+    
+    while (processedCount < size && currentIndex < $.couponHolders.length) {
+        address holder = $.couponHolders[currentIndex];
+        if (holder != address(0)) {
+            uint256 preLength = $.couponHolders.length;
+            _reclaimExpiredCoupons(holder);
+            
+            if (preLength == $.couponHolders.length) {
+                currentIndex++;
+            }
+            processedCount++;
+        } else {
+            currentIndex++;
+        }
+    }
+    
+    return currentIndex;
   }
 
   function reclaimExpiredCoupons(address user) external nonReentrant {
