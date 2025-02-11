@@ -37,6 +37,8 @@ library SuperVolStorage {
         uint256 usedCouponAmount; // coupon vault
         address[] couponHolders;
         mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
+        mapping(address => bool) migratedHolders;
+        uint256 migratedHoldersCount;
         /* IMPROTANT: you can add new variables here */
     }
 

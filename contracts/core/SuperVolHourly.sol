@@ -848,15 +848,15 @@ contract SuperVolHourly is
     $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);  
   }
 
-  // check if the holder is migrated
-  mapping(address => bool) public migratedHolders;
-  uint256 public migratedHoldersCount;
-
   // used for migration
-  function migrateCouponsToNewContract(uint256 startIndex, uint256 size) external onlyAdmin returns (uint256) {
+  function migrateCouponsToClearingHouse(uint256 startIndex, uint256 size) external returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     
     if (startIndex >= $.couponHolders.length) revert InvalidIndex();
+    uint256 currentAllowance = $.token.allowance(address(this), address($.clearingHouse));
+    if (currentAllowance == 0) {
+        $.token.approve(address($.clearingHouse), type(uint256).max);
+    }
     
     uint256 endIndex = startIndex + size;
     if (endIndex > $.couponHolders.length) {
@@ -865,7 +865,7 @@ contract SuperVolHourly is
 
     for (uint256 i = startIndex; i < endIndex; i++) {
         address holder = $.couponHolders[i];
-        if (migratedHolders[holder]) continue;
+        if ($.migratedHolders[holder]) continue;
 
         Coupon[] storage coupons = $.couponBalances[holder];
         
@@ -878,12 +878,21 @@ contract SuperVolHourly is
         }
         
         // check if the holder is migrated
-        if (!migratedHolders[holder]) {
-            migratedHolders[holder] = true;
-            migratedHoldersCount++;
+        if (!$.migratedHolders[holder]) {
+            $.migratedHolders[holder] = true;
+            $.migratedHoldersCount++;
         }
     }
-    return migratedHoldersCount;
+    return $.migratedHoldersCount;
+  }
+
+  // used for migration
+  function migrateTokenBalanceToClearingHouse() external onlyAdmin {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 balance = $.token.balanceOf(address(this));
+    if (balance > 0) {
+      $.token.safeTransfer(address($.clearingHouse), balance);
+    }
   }
 
   // used for migration
@@ -896,7 +905,7 @@ contract SuperVolHourly is
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return (
         $.couponHolders.length,
-        migratedHoldersCount,
+        $.migratedHoldersCount,
         $.couponAmount,
         $.usedCouponAmount
     );
