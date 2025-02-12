@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest, ForceWithdrawalRequest } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest, Coupon } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 import { IVault } from "../interfaces/IVault.sol";
 
@@ -27,6 +27,7 @@ contract ClearingHouse is
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
   uint256 private constant DEFAULT_FORCE_WITHDRAWAL_DELAY = 24 hours;
+  uint256 private constant START_TIMESTAMP = 1736294400; // for epoch
 
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
@@ -36,6 +37,13 @@ contract ClearingHouse is
   event BalanceTransferred(address indexed from, address indexed to, uint256 amount);
   event ForceWithdrawalRequested(address indexed user, uint256 amount);
   event ForceWithdrawalExecuted(address indexed user, uint256 amount);
+  event DepositCoupon(
+    address indexed to,
+    address from,
+    uint256 amount,
+    uint256 expirationEpoch,
+    uint256 result
+  );
 
   modifier onlyAdmin() {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
@@ -262,7 +270,7 @@ contract ClearingHouse is
     $.adminAddress = _adminAddress;
   }
 
-    function setToken(address _token) external onlyAdmin {
+  function setToken(address _token) external onlyAdmin {
     if (_token == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.token = IERC20(_token); 
@@ -329,6 +337,42 @@ contract ClearingHouse is
       }
     }
   }  
+
+  function depositCouponTo(
+    address user,
+    uint256 amount,
+    uint256 expirationEpoch
+  ) external nonReentrant {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    $.token.safeTransferFrom(msg.sender, address(this), amount);
+    $.couponAmount += amount;
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    Coupon memory newCoupon = Coupon({
+      user: user,
+      amount: amount,
+      usedAmount: 0,
+      expirationEpoch: expirationEpoch,
+      created: block.timestamp,
+      issuer: msg.sender
+    });
+
+    uint i = coupons.length;
+    coupons.push(newCoupon);
+
+    if (i == 0) {
+      // add user to couponHolders array
+      $.couponHolders.push(user);
+    }
+
+    while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
+      coupons[i] = coupons[i - 1];
+      i--;
+    }
+    coupons[i] = newCoupon;
+    emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
+  }
   
   function pause() external whenNotPaused onlyAdmin {
     _pause();
@@ -401,7 +445,150 @@ contract ClearingHouse is
   }
 
 
+  function couponHolders() public view returns (address[] memory) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.couponHolders;
+  }
+
+  function getCouponHoldersPaged(uint256 offset, uint256 size) public view returns (address[] memory) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 length = $.couponHolders.length;
+    
+    if (offset >= length || size == 0) return new address[](0);
+    
+    uint256 endIndex = offset + size;
+    if (endIndex > length) endIndex = length;
+    
+    address[] memory pagedHolders = new address[](endIndex - offset);
+    for (uint256 i = offset; i < endIndex; i++) {
+        pagedHolders[i - offset] = $.couponHolders[i];
+    }
+    return pagedHolders;
+  }
+
+  function couponBalanceOf(address user) public view returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 total = 0;
+    uint256 epoch = _epochAt(block.timestamp);
+    for (uint i = 0; i < $.couponBalances[user].length; i++) {
+      if ($.couponBalances[user][i].expirationEpoch >= epoch) {
+        total += $.couponBalances[user][i].amount - $.couponBalances[user][i].usedAmount;
+      }
+    }
+    return total;
+  }
+
+  function userCoupons(address user) public view returns (Coupon[] memory) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.couponBalances[user];
+  }
+
+  function getCouponHoldersLength() external view returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.couponHolders.length;
+  }
+
+  function reclaimExpiredCouponsByChunk(uint256 startIndex, uint256 size) external nonReentrant returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    
+    if (startIndex >= $.couponHolders.length) revert InvalidIndex();
+
+    uint256 currentIndex = startIndex;
+    uint256 processedCount = 0;
+    
+    while (processedCount < size && currentIndex < $.couponHolders.length) {
+        address holder = $.couponHolders[currentIndex];
+        if (holder != address(0)) {
+            uint256 preLength = $.couponHolders.length;
+            _reclaimExpiredCoupons(holder);
+            
+            if (preLength == $.couponHolders.length) {
+                currentIndex++;
+            }
+            processedCount++;
+        } else {
+            currentIndex++;
+        }
+    }
+    
+    return currentIndex;
+  }
+
+  function reclaimExpiredCoupons(address user) external nonReentrant {
+    _reclaimExpiredCoupons(user);
+  }
+
+
   /* internal functions */
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+  function _epochAt(uint256 timestamp) internal pure returns (uint256) {
+    if (timestamp < START_TIMESTAMP) revert EpochHasNotStartedYet();
+    uint256 elapsedSeconds = timestamp - START_TIMESTAMP;
+    uint256 elapsedHours = elapsedSeconds / 3600;
+    return elapsedHours;
+  }
+
+  function useCoupon(address user, uint256 amount, uint256 epoch) external nonReentrant returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 remainingAmount = amount;
+    for (uint i = 0; i < $.couponBalances[user].length && remainingAmount > 0; i++) {
+      if ($.couponBalances[user][i].expirationEpoch >= epoch) {
+        uint256 availableAmount = $.couponBalances[user][i].amount -
+          $.couponBalances[user][i].usedAmount;
+        if (availableAmount >= remainingAmount) {
+          $.couponBalances[user][i].usedAmount += remainingAmount;
+          remainingAmount = 0;
+        } else {
+          $.couponBalances[user][i].usedAmount += availableAmount;
+          remainingAmount -= availableAmount;
+        }
+      }
+    }
+    $.usedCouponAmount += amount - remainingAmount;
+
+    return remainingAmount;
+  }
+
+  function _reclaimExpiredCoupons(address user) internal {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 epoch = _epochAt(block.timestamp);
+
+    Coupon[] storage coupons = $.couponBalances[user];
+
+    uint256 validCount = 0;
+    for (uint i = 0; i < coupons.length; i++) {
+        Coupon storage coupon = coupons[i];
+        if (coupon.expirationEpoch < epoch) {
+            uint256 availableAmount = coupon.amount - coupon.usedAmount;
+            if (availableAmount > 0) {
+                $.token.safeTransfer(coupon.issuer, availableAmount);
+                $.couponAmount -= availableAmount;
+                coupon.usedAmount = coupon.amount;
+            }
+        } else {
+            // move valid coupons to the front of the array
+            coupons[validCount] = coupon;
+            validCount++;
+        }
+    }
+
+    // remove expired coupons from the array
+    while (coupons.length > validCount) {
+        coupons.pop();
+    }
+
+    if (validCount == 0) {
+        // remove user from couponHolders array
+        uint length = $.couponHolders.length;
+        for (uint i = 0; i < length; i++) {
+            if ($.couponHolders[i] == user) {
+                $.couponHolders[i] = $.couponHolders[length - 1];
+                $.couponHolders.pop();
+                break;
+            }
+        }
+    }
+  }
 
 } 

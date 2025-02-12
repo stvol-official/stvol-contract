@@ -22,6 +22,10 @@ library ClearingHouseStorage {
     ForceWithdrawalRequest[] forceWithdrawalRequests;
     uint256 forceWithdrawalDelay;
     IVault vault;
+    mapping(address => Coupon[]) couponBalances; // user to coupon list
+    uint256 couponAmount; // coupon amount
+    uint256 usedCouponAmount; // used coupon amount
+    address[] couponHolders;
     /* IMPROTANT: you can add new variables here */
   }
   

@@ -34,4 +34,7 @@ interface IClearingHouse {
     function subtractUserBalance(address user, uint256 amount) external;
     function addOperator(address operator) external;
     function removeOperator(address operator) external;
+    function useCoupon(address user, uint256 amount, uint256 epoch) external returns (uint256);
+    function couponBalanceOf(address user) external view returns (uint256);
+    function depositCouponTo(address user, uint256 amount, uint256 expirationEpoch) external;
 }

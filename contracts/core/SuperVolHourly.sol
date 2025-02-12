@@ -246,6 +246,7 @@ contract SuperVolHourly is
     return endIndex;  // Return the next start index for subsequent calls
   }
 
+  // @Deprecated
   function reclaimExpiredCoupons(address user) external nonReentrant {
     _reclaimExpiredCoupons(user);
   }
@@ -346,7 +347,7 @@ contract SuperVolHourly is
   function balances(address user) public view returns (uint256, uint256, uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 depositBalance = $.clearingHouse.userBalances(user);
-    uint256 couponBalance = couponBalanceOf(user);
+    uint256 couponBalance = $.clearingHouse.couponBalanceOf(user);
     uint256 totalBalance = depositBalance + couponBalance;
     return (depositBalance, couponBalance, totalBalance);
   }
@@ -356,6 +357,7 @@ contract SuperVolHourly is
     return $.clearingHouse.userBalances(user);
   }
 
+  // @Deprecated
   function couponBalanceOf(address user) public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 total = 0;
@@ -368,11 +370,13 @@ contract SuperVolHourly is
     return total;
   }
 
+  // @Deprecated
   function couponHolders() public view returns (address[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.couponHolders;
   }
 
+  // @Deprecated
   function getCouponHoldersPaged(uint256 offset, uint256 size) public view returns (address[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 length = $.couponHolders.length;
@@ -389,6 +393,7 @@ contract SuperVolHourly is
     return pagedHolders;
   }
 
+  // @Deprecated
   function userCoupons(address user) public view returns (Coupon[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.couponBalances[user];
@@ -488,10 +493,12 @@ contract SuperVolHourly is
     return $.lastSettledFilledOrderId;
   }
 
+  // @Deprecated
   function getCouponHoldersLength() external view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.couponHolders.length;
   }
+
 
   /* internal functions */
   function _getPythPrices(
@@ -668,7 +675,7 @@ contract SuperVolHourly is
         winPosition = isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie;
         
         uint256 fee = (winAmount * $.commissionfee) / BASE;
-        uint256 remainingAmount = _useCoupon(order.overUser, fee, order.epoch);
+        uint256 remainingAmount = $.clearingHouse.useCoupon(order.overUser, fee, order.epoch);
 
         if ($.vault.isVault(order.overUser)) {
             _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
@@ -691,7 +698,7 @@ contract SuperVolHourly is
         winAmount = (isUnderWin ? order.overPrice : order.underPrice) * order.unit * PRICE_UNIT;
         winPosition = isUnderWin ? WinPosition.Under : WinPosition.Over;
 
-        uint256 remainingAmount = _useCoupon(loser, winAmount, order.epoch);
+        uint256 remainingAmount = $.clearingHouse.useCoupon(loser, winAmount, order.epoch);
         if ($.vault.isVault(loser)) {
             _processVaultTransaction(order.idx, loser, remainingAmount, false);
         }
@@ -772,6 +779,7 @@ contract SuperVolHourly is
     return (startTime, endTime);
   }
 
+  // @Deprecated
   function _useCoupon(address user, uint256 amount, uint256 epoch) internal returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 remainingAmount = amount;
@@ -793,6 +801,7 @@ contract SuperVolHourly is
     return remainingAmount;
   }
 
+  // @Deprecated
   function _reclaimExpiredCoupons(address user) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 epoch = _epochAt(block.timestamp);
@@ -837,5 +846,68 @@ contract SuperVolHourly is
   function _processVaultTransaction(uint256 orderIdx, address vaultAddress, uint256 amount, bool isWin) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);  
+  }
+
+  // used for migration
+  function migrateCouponsToClearingHouse(uint256 startIndex, uint256 size) external returns (uint256) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    
+    if (startIndex >= $.couponHolders.length) revert InvalidIndex();
+    uint256 currentAllowance = $.token.allowance(address(this), address($.clearingHouse));
+    if (currentAllowance == 0) {
+        $.token.approve(address($.clearingHouse), type(uint256).max);
+    }
+    
+    uint256 endIndex = startIndex + size;
+    if (endIndex > $.couponHolders.length) {
+        endIndex = $.couponHolders.length;
+    }
+
+    for (uint256 i = startIndex; i < endIndex; i++) {
+        address holder = $.couponHolders[i];
+        if ($.migratedHolders[holder]) continue;
+
+        Coupon[] storage coupons = $.couponBalances[holder];
+        
+        for (uint256 j = 0; j < coupons.length; j++) {
+            Coupon storage coupon = coupons[j];
+            
+            if (coupon.amount == coupon.usedAmount) continue;
+            uint256 remainingAmount = coupon.amount - coupon.usedAmount;
+            $.clearingHouse.depositCouponTo(holder, remainingAmount, coupon.expirationEpoch);
+        }
+        
+        // check if the holder is migrated
+        if (!$.migratedHolders[holder]) {
+            $.migratedHolders[holder] = true;
+            $.migratedHoldersCount++;
+        }
+    }
+    return $.migratedHoldersCount;
+  }
+
+  // used for migration
+  function migrateTokenBalanceToClearingHouse() external onlyAdmin {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 balance = $.token.balanceOf(address(this));
+    if (balance > 0) {
+      $.token.safeTransfer(address($.clearingHouse), balance);
+    }
+  }
+
+  // used for migration
+  function getMigrationStatus() external view returns (
+    uint256 totalHolders,
+    uint256 migratedHolders,
+    uint256 totalCouponAmount,
+    uint256 totalUsedAmount
+  ) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    return (
+        $.couponHolders.length,
+        $.migratedHoldersCount,
+        $.couponAmount,
+        $.usedCouponAmount
+    );
   }
 }
