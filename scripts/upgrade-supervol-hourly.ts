@@ -2,11 +2,11 @@ import { ethers, network, run, upgrades } from "hardhat";
 import input from "@inquirer/input";
 
 /*
- npx hardhat run --network sonieum_testnet scripts/upgrade-supervol-hourly.ts
- npx hardhat run --network sonieum_mainnet scripts/upgrade-supervol-hourly.ts
+ npx hardhat run --network soneium_testnet scripts/upgrade-supervol-hourly.ts
+ npx hardhat run --network soneium_mainnet scripts/upgrade-supervol-hourly.ts
 */
 
-const NETWORK = ["sonieum_testnet", "sonieum_mainnet"];
+const NETWORK = ["soneium_testnet", "soneium_mainnet"];
 // const DEPLOYED_PROXY = "0x6022C15bE2889f9Fca24891e6df82b5A46BaC832"; // for testnet
 const DEPLOYED_PROXY = "0x34834F208F149e0269394324c3f19e06dF2ca9cB"; // for mainnet
 

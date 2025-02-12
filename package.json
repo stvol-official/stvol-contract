@@ -7,12 +7,12 @@
   "private": true,
   "scripts": {
     "compile": "npx hardhat compile",
-    "deploy:clearing-house:testnet": "npx hardhat run --network sonieum_testnet scripts/deploy-clearing-house.ts",
-    "deploy:vault:testnet": "npx hardhat run --network sonieum_testnet scripts/deploy-vault.ts",
-    "deploy:supervol-hourly:testnet": "npx hardhat run --network sonieum_testnet scripts/deploy-supervol-hourly.ts",
-    "deploy:clearing-house:mainnet": "npx hardhat run --network sonieum_mainnet scripts/deploy-clearing-house.ts",
-    "deploy:vault:mainnet": "npx hardhat run --network sonieum_mainnet scripts/deploy-vault.ts",
-    "deploy:supervol-hourly:mainnet": "npx hardhat run --network sonieum_mainnet scripts/deploy-supervol-hourly.ts",
+    "deploy:clearing-house:testnet": "npx hardhat run --network soneium_testnet scripts/deploy-clearing-house.ts",
+    "deploy:vault:testnet": "npx hardhat run --network soneium_testnet scripts/deploy-vault.ts",
+    "deploy:supervol-hourly:testnet": "npx hardhat run --network soneium_testnet scripts/deploy-supervol-hourly.ts",
+    "deploy:clearing-house:mainnet": "npx hardhat run --network soneium_mainnet scripts/deploy-clearing-house.ts",
+    "deploy:vault:mainnet": "npx hardhat run --network soneium_mainnet scripts/deploy-vault.ts",
+    "deploy:supervol-hourly:mainnet": "npx hardhat run --network soneium_mainnet scripts/deploy-supervol-hourly.ts",
     "test": "npx hardhat test"
   },
   "devDependencies": {

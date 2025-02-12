@@ -1,10 +1,10 @@
 import { ethers, network, run, upgrades } from "hardhat";
 
 /*
- npx hardhat run --network sonieum_testnet scripts/recovery-vault.ts
+ npx hardhat run --network soneium_testnet scripts/recovery-vault.ts
 */
-const NETWORK = ["sonieum_testnet"];
-const DEPLOYED_PROXY = "0x49Ff93096bD296E70652969a2205461998b75550"; // for sonieum_testnet
+const NETWORK = ["soneium_testnet"];
+const DEPLOYED_PROXY = "0x49Ff93096bD296E70652969a2205461998b75550"; // for soneium_testnet
 const OLD_IMPLEMENTATION_ADDRESS = "0xE10a008306B13514DFdf155449FFB21dbFdBd285";
 const contractName = "Vault";
 

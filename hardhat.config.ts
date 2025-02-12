@@ -24,7 +24,7 @@ export default {
     localhost: {
       chainId: 31337,
     },
-    sonieum_testnet: {
+    soneium_testnet: {
       url: `https://rpc.minato.soneium.org`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
@@ -34,7 +34,7 @@ export default {
       chainId: 1946,
       timeout: 60000,
     },
-    sonieum_mainnet: {
+    soneium_mainnet: {
       url: `https://soneium.rpc.scs.startale.com?apikey=WIW3bW9VR6NydF09EMd451ojzd84TfHe`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
@@ -79,12 +79,12 @@ export default {
   defaultNetwork: "hardhat",
   etherscan: {
     apiKey: {
-      sonieum_testnet: "empty", // apiKey is not required, just set a placeholder
-      sonieum_mainnet: "empty", // apiKey is not required, just set a placeholder
+      soneium_testnet: "empty", // apiKey is not required, just set a placeholder
+      soneium_mainnet: "empty", // apiKey is not required, just set a placeholder
     },
     customChains: [
       {
-        network: "sonieum_testnet",
+        network: "soneium_testnet",
         chainId: 1946,
         urls: {
           apiURL: "https://soneium-minato.blockscout.com/api",
@@ -92,7 +92,7 @@ export default {
         },
       },
       {
-        network: "sonieum_mainnet",
+        network: "soneium_mainnet",
         chainId: 1868,
         urls: {
           apiURL: "https://soneium.blockscout.com/api",
