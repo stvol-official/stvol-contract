@@ -529,7 +529,7 @@ contract ClearingHouse is
     return elapsedHours;
   }
 
-  function useCoupon(address user, uint256 amount, uint256 epoch) external nonReentrant returns (uint256) {
+  function useCoupon(address user, uint256 amount, uint256 epoch) external nonReentrant onlyOperator returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 remainingAmount = amount;
     for (uint i = 0; i < $.couponBalances[user].length && remainingAmount > 0; i++) {
