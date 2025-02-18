@@ -14,7 +14,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { IVault } from "../interfaces/IVault.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
-import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition } from "../types/Types.sol";
+import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 
 contract SuperVolOneMin is
@@ -37,26 +37,6 @@ contract SuperVolOneMin is
     priceIds[2] = 0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853; // astr
     priceIds[3] = 0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d; // sol
     return priceIds;
-  }
-
-  enum Position {
-    Over,
-    Under
-  }
-
-  struct OneMinOrder {
-    uint256 idx;
-    uint256 epoch;
-    address user;
-    uint256 productId;
-    Position position;
-    uint256 amount;
-    uint256 collateralAmount;
-    uint256 entryPrice;
-    uint256 entryTime;
-    uint256 closingPrice;
-    uint256 closingTime;
-    uint256 settleAmount;
   }
 
   uint256 private constant PRICE_UNIT = 1e6;
