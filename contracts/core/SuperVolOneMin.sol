@@ -160,7 +160,7 @@ contract SuperVolOneMin is
 
       if (isWin) {
         // Winner gets back collateral + profit
-        _processVaultTransaction(order.idx, vaultAddress, order.collateralAmount, false);
+        // _processVaultTransaction(order.idx, vaultAddress, order.collateralAmount, false);
         $.clearingHouse.subtractUserBalance(vaultAddress, order.collateralAmount);
         $.clearingHouse.addUserBalance(order.user, order.collateralAmount);
         order.settleAmount = order.collateralAmount + order.amount;
@@ -168,7 +168,7 @@ contract SuperVolOneMin is
         // Loser loses collateral
         $.clearingHouse.subtractUserBalance(order.user, order.amount);
         $.clearingHouse.addUserBalance(vaultAddress, order.amount);
-        _processVaultTransaction(order.idx, vaultAddress, order.amount, true);
+        // _processVaultTransaction(order.idx, vaultAddress, order.amount, true);
         order.settleAmount = 0;
       }
 
