@@ -16,6 +16,7 @@ import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
 import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract SuperVolOneMin is
   Initializable,
@@ -65,6 +66,8 @@ contract SuperVolOneMin is
     uint256 expirationEpoch,
     uint256 result
   );
+
+  event DebugLog(string message);
 
   modifier onlyAdmin() {
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
@@ -138,19 +141,100 @@ contract SuperVolOneMin is
     }
   }
 
-  function settleOneMinOrders(uint256[] calldata orderIds) public onlyOperator {
+  function submitOneMinOrders(OneMinOrder[] calldata orders) external nonReentrant onlyOperator {
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+    for (uint i = 0; i < orders.length; i++) {
+      OneMinOrder calldata order = orders[i];
+      if ($.oneMinOrders[order.idx].idx != 0) continue;
+      $.oneMinOrders[order.idx] = order;
+    }
+  }
+
+  function settleOneMinOrders(
+    uint256[] calldata orderIds
+  ) public onlyOperator returns (uint256[] memory) {
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
     address vaultAddress = address($.vault);
+    if (vaultAddress == address(0)) revert InvalidAddress();
+
+    // Create dynamic array to store successful order IDs
+    uint256[] memory successfulOrderIds = new uint256[](orderIds.length);
+    uint256 successCount = 0;
 
     for (uint i = 0; i < orderIds.length; i++) {
+      // Validate order ID exists
+      if (orderIds[i] == 0) continue;
+
       OneMinOrder storage order = $.oneMinOrders[orderIds[i]];
+      // Validate order exists and hasn't been settled
+      if (order.idx == 0) continue;
       if (order.closingPrice != 0 || order.closingTime != 0 || order.settleAmount != 0) continue;
 
-      (uint256 startTime, uint256 endTime) = _epochTimes(order.epoch);
-      if (block.timestamp < startTime || block.timestamp > endTime) continue;
+      // Validate user and amounts
+      if (order.user == address(0)) continue;
+      if (order.amount == 0 || order.collateralAmount == 0) continue;
+
+      (, uint256 endTime) = _epochTimes(order.epoch);
+      if (block.timestamp < endTime) {
+        emit DebugLog(
+          string.concat(
+            "Order ",
+            Strings.toString(order.idx),
+            " - Epoch ",
+            Strings.toString(order.epoch),
+            " is not finished"
+          )
+        );
+        continue;
+      }
 
       uint256 closingPrice = $.priceHistory[endTime][order.productId];
-      if (closingPrice == 0) continue;
+      if (closingPrice == 0) {
+        emit DebugLog(
+          string.concat(
+            "Order ",
+            Strings.toString(order.idx),
+            " - Closing price is 0 for epoch ",
+            Strings.toString(order.epoch)
+          )
+        );
+        continue;
+      }
+
+      // Validate balances before settlement
+      uint256 userBalance = $.clearingHouse.userBalances(order.user);
+      if (userBalance < order.amount) {
+        emit DebugLog(
+          string.concat(
+            "Order ",
+            Strings.toString(order.idx),
+            " - User ",
+            Strings.toHexString(uint160(order.user), 20),
+            " has insufficient balance (",
+            Strings.toString(userBalance),
+            " < ",
+            Strings.toString(order.amount),
+            ")"
+          )
+        );
+        continue;
+      }
+
+      uint256 vaultBalance = $.clearingHouse.userBalances(vaultAddress);
+      if (vaultBalance < order.collateralAmount) {
+        emit DebugLog(
+          string.concat(
+            "Order ",
+            Strings.toString(order.idx),
+            " - Vault has insufficient balance (",
+            Strings.toString(vaultBalance),
+            " < ",
+            Strings.toString(order.collateralAmount),
+            ")"
+          )
+        );
+        continue;
+      }
 
       order.closingPrice = closingPrice;
       order.closingTime = endTime;
@@ -159,17 +243,51 @@ contract SuperVolOneMin is
         (order.closingPrice < order.entryPrice && order.position == Position.Under);
 
       if (isWin) {
-        // Winner gets back collateral + profit
-        // _processVaultTransaction(order.idx, vaultAddress, order.collateralAmount, false);
-        $.clearingHouse.subtractUserBalance(vaultAddress, order.collateralAmount);
-        $.clearingHouse.addUserBalance(order.user, order.collateralAmount);
-        order.settleAmount = order.collateralAmount + order.amount;
+        try $.clearingHouse.subtractUserBalance(vaultAddress, order.collateralAmount) {
+          try $.clearingHouse.addUserBalance(order.user, order.collateralAmount) {
+            order.settleAmount = order.collateralAmount + order.amount;
+          } catch {
+            order.closingPrice = 0;
+            order.closingTime = 0;
+            emit DebugLog(
+              string.concat(
+                "Order ",
+                Strings.toString(order.idx),
+                " - User ",
+                Strings.toHexString(uint160(order.user), 20),
+                " addUserBalance failed"
+              )
+            );
+            continue;
+          }
+        } catch {
+          order.closingPrice = 0;
+          order.closingTime = 0;
+          emit DebugLog(
+            string.concat("Order ", Strings.toString(order.idx), " - subtractVaultBalance failed")
+          );
+          continue;
+        }
       } else {
-        // Loser loses collateral
-        $.clearingHouse.subtractUserBalance(order.user, order.amount);
-        $.clearingHouse.addUserBalance(vaultAddress, order.amount);
-        // _processVaultTransaction(order.idx, vaultAddress, order.amount, true);
-        order.settleAmount = 0;
+        try $.clearingHouse.subtractUserBalance(order.user, order.amount) {
+          try $.clearingHouse.addUserBalance(vaultAddress, order.amount) {
+            order.settleAmount = 0;
+          } catch {
+            order.closingPrice = 0;
+            order.closingTime = 0;
+            emit DebugLog(
+              string.concat("Order ", Strings.toString(order.idx), " - addVaultBalance failed")
+            );
+            continue;
+          }
+        } catch {
+          order.closingPrice = 0;
+          order.closingTime = 0;
+          emit DebugLog(
+            string.concat("Order ", Strings.toString(order.idx), " - subtractUserBalance failed")
+          );
+          continue;
+        }
       }
 
       emit OrderSettled(
@@ -180,17 +298,18 @@ contract SuperVolOneMin is
         order.closingTime,
         order.settleAmount
       );
-    }
-  }
 
-  function submitOneMinOrders(OneMinOrder[] calldata orders) external nonReentrant onlyOperator {
-    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
-
-    for (uint i = 0; i < orders.length; i++) {
-      OneMinOrder calldata order = orders[i];
-      if ($.oneMinOrders[order.idx].idx != 0) continue;
-      $.oneMinOrders[order.idx] = order;
+      successfulOrderIds[successCount] = orderIds[i];
+      successCount++;
     }
+
+    // Create final array with exact size
+    uint256[] memory result = new uint256[](successCount);
+    for (uint i = 0; i < successCount; i++) {
+      result[i] = successfulOrderIds[i];
+    }
+
+    return result;
   }
 
   function closeOneMinOrder(uint256 idx, uint256 price) public onlyOperator {

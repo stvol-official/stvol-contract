@@ -2,8 +2,8 @@ import { ethers, network, run, upgrades } from "hardhat";
 import input from "@inquirer/input";
 
 /*
- npx hardhat run --network soneium_testnet scripts/upgrade-supervol-hourly.ts
- npx hardhat run --network soneium_mainnet scripts/upgrade-supervol-hourly.ts
+ npx hardhat run --network soneium_testnet scripts/upgrade-supervol-1min.ts
+ npx hardhat run --network soneium_mainnet scripts/upgrade-supervol-1min.ts
 */
 
 const NETWORK = ["soneium_testnet", "soneium_mainnet"];
