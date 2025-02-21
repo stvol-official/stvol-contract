@@ -8,7 +8,7 @@ import { WithdrawalRequest, Coupon, ForceWithdrawalRequest } from "../types/Type
 library ClearingHouseStorage {
   // keccak256(abi.encode(uint256(keccak256("io.supervol.storage.clearinghouse")) - 1)) & ~bytes32(uint256(0xff));
   bytes32 internal constant SLOT =
-        0x8813a153063d7fe54e4155b960ce0bcfaac345da276d07e649f6c356f4752100;
+    0x8813a153063d7fe54e4155b960ce0bcfaac345da276d07e649f6c356f4752100;
 
   struct Layout {
     IERC20 token; // Prediction token
@@ -26,13 +26,14 @@ library ClearingHouseStorage {
     uint256 couponAmount; // coupon amount
     uint256 usedCouponAmount; // used coupon amount
     address[] couponHolders;
+    uint256 withdrawalFee; // withdrawal fee
     /* IMPROTANT: you can add new variables here */
   }
-  
+
   function layout() internal pure returns (Layout storage $) {
     bytes32 slot = SLOT;
     assembly {
       $.slot := slot
     }
   }
-} 
+}

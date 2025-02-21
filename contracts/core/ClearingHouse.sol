@@ -28,6 +28,7 @@ contract ClearingHouse is
   uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
   uint256 private constant DEFAULT_FORCE_WITHDRAWAL_DELAY = 24 hours;
   uint256 private constant START_TIMESTAMP = 1736294400; // for epoch
+  uint256 private constant MAX_WITHDRAWAL_FEE = 10 * PRICE_UNIT; // $10
 
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
@@ -60,7 +61,7 @@ contract ClearingHouse is
   modifier validWithdrawal(address user, uint256 amount) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if (amount == 0) revert InvalidAmount();
-    if ($.userBalances[user] < amount + WITHDRAWAL_FEE) revert InsufficientBalance();
+    if ($.userBalances[user] < amount + $.withdrawalFee) revert InsufficientBalance();
     _;
   }
 
@@ -87,6 +88,7 @@ contract ClearingHouse is
     $.adminAddress = _adminAddress;
     $.operatorVaultAddress = _operatorVaultAddress;
     $.forceWithdrawalDelay = DEFAULT_FORCE_WITHDRAWAL_DELAY;
+    $.withdrawalFee = WITHDRAWAL_FEE;
   }
 
   function deposit(uint256 amount) external nonReentrant {
@@ -104,27 +106,38 @@ contract ClearingHouse is
     emit Deposit(user, msg.sender, amount, $.userBalances[user]);
   }
 
-  function depositToVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
+  function depositToVault(
+    address vaultAddress,
+    address user,
+    uint256 amount
+  ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if ($.userBalances[user] < amount) revert InsufficientBalance();
     uint256 balance = $.vault.depositToVault(vaultAddress, user, amount);
-    
+
     // user -> vaultAddress
     _transferBalance(user, vaultAddress, balance);
   }
 
-  function withdrawFromVault(address vaultAddress, address user, uint256 amount) external nonReentrant onlyOperator {
+  function withdrawFromVault(
+    address vaultAddress,
+    address user,
+    uint256 amount
+  ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 balance = $.vault.withdrawFromVault(vaultAddress, user, amount);
-    
+
     // vaultAddress -> user
     _transferBalance(vaultAddress, user, balance);
   }
 
-  function withdraw(address user, uint256 amount) external nonReentrant onlyOperator validWithdrawal(user, amount) {
+  function withdraw(
+    address user,
+    uint256 amount
+  ) external nonReentrant onlyOperator validWithdrawal(user, amount) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    $.userBalances[user] -= amount + WITHDRAWAL_FEE;
-    $.treasuryAmount += WITHDRAWAL_FEE;
+    $.userBalances[user] -= amount + $.withdrawalFee;
+    $.treasuryAmount += $.withdrawalFee;
     $.token.safeTransfer(user, amount);
     emit Withdraw(user, amount, $.userBalances[user]);
   }
@@ -154,15 +167,19 @@ contract ClearingHouse is
     if (idx >= $.withdrawalRequests.length) revert InvalidIdx();
     WithdrawalRequest storage request = $.withdrawalRequests[idx];
     if (request.processed) revert RequestAlreadyProcessed();
-    if ($.userBalances[request.user] < request.amount + WITHDRAWAL_FEE) revert InsufficientBalance();
+    if ($.userBalances[request.user] < request.amount + $.withdrawalFee)
+      revert InsufficientBalance();
     request.processed = true;
-    $.userBalances[request.user] -= request.amount + WITHDRAWAL_FEE;
-    $.treasuryAmount += WITHDRAWAL_FEE;
+    $.userBalances[request.user] -= request.amount + $.withdrawalFee;
+    $.treasuryAmount += $.withdrawalFee;
     $.token.safeTransfer(request.user, request.amount);
     emit WithdrawalApproved(request.user, request.amount);
   }
 
-  function rejectWithdrawal(uint256 idx, string calldata reason) external nonReentrant onlyOperator {
+  function rejectWithdrawal(
+    uint256 idx,
+    string calldata reason
+  ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if (idx >= $.withdrawalRequests.length) revert InvalidIdx();
     WithdrawalRequest storage request = $.withdrawalRequests[idx];
@@ -178,54 +195,59 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     uint256 balance = $.userBalances[msg.sender];
-    if (balance < WITHDRAWAL_FEE) revert InsufficientBalance();
-    
+    if (balance < $.withdrawalFee) revert InsufficientBalance();
+
     // check if there is an existing force withdrawal request
     for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
-      if ($.forceWithdrawalRequests[i-1].user == msg.sender && 
-          !$.forceWithdrawalRequests[i-1].processed) {
+      if (
+        $.forceWithdrawalRequests[i - 1].user == msg.sender &&
+        !$.forceWithdrawalRequests[i - 1].processed
+      ) {
         revert ExistingForceWithdrawalRequest();
       }
     }
-    
+
     ForceWithdrawalRequest memory request = ForceWithdrawalRequest({
       idx: $.forceWithdrawalRequests.length,
       user: msg.sender,
-      amount: balance - WITHDRAWAL_FEE,
+      amount: balance - $.withdrawalFee,
       processed: false,
       created: block.timestamp
     });
 
     $.forceWithdrawalRequests.push(request);
-    emit ForceWithdrawalRequested(msg.sender, balance - WITHDRAWAL_FEE);
+    emit ForceWithdrawalRequested(msg.sender, balance - $.withdrawalFee);
   }
 
   function executeForceWithdraw() external nonReentrant {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 requestIdx;
     bool found = false;
-    
+
     for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
-      if ($.forceWithdrawalRequests[i-1].user == msg.sender && 
-          !$.forceWithdrawalRequests[i-1].processed) {
-        requestIdx = i-1;
+      if (
+        $.forceWithdrawalRequests[i - 1].user == msg.sender &&
+        !$.forceWithdrawalRequests[i - 1].processed
+      ) {
+        requestIdx = i - 1;
         found = true;
         break;
       }
     }
-    
+
     if (!found) revert ForceWithdrawalRequestNotFound();
-    
+
     ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[requestIdx];
-    
-    if (block.timestamp < request.created + $.forceWithdrawalDelay) revert ForceWithdrawalTooEarly();
-    if ($.userBalances[msg.sender] < request.amount + WITHDRAWAL_FEE) revert InsufficientBalance();
-    
+
+    if (block.timestamp < request.created + $.forceWithdrawalDelay)
+      revert ForceWithdrawalTooEarly();
+    if ($.userBalances[msg.sender] < request.amount + $.withdrawalFee) revert InsufficientBalance();
+
     request.processed = true;
     $.userBalances[msg.sender] = 0;
-    $.treasuryAmount += WITHDRAWAL_FEE;
+    $.treasuryAmount += $.withdrawalFee;
     $.token.safeTransfer(msg.sender, request.amount);
-    
+
     emit ForceWithdrawalExecuted(msg.sender, request.amount);
   }
 
@@ -263,7 +285,6 @@ contract ClearingHouse is
     $.treasuryAmount += amount;
   }
 
-
   function setAdmin(address _adminAddress) external onlyOwner {
     if (_adminAddress == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
@@ -273,7 +294,7 @@ contract ClearingHouse is
   function setToken(address _token) external onlyAdmin {
     if (_token == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    $.token = IERC20(_token); 
+    $.token = IERC20(_token);
   }
 
   function setOperatorVault(address _operatorVaultAddress) external onlyAdmin {
@@ -281,7 +302,7 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.operatorVaultAddress = _operatorVaultAddress;
   }
-  
+
   function setForceWithdrawalDelay(uint256 newDelay) external onlyAdmin {
     if (newDelay == 0) revert InvalidAmount();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
@@ -294,17 +315,19 @@ contract ClearingHouse is
     $.vault = IVault(_vault);
   }
 
-  function _transferBalance(
-    address from, 
-    address to, 
-    uint256 amount
-  ) internal {
+  function setWithdrawalFee(uint256 newFee) external onlyAdmin {
+    if (newFee > MAX_WITHDRAWAL_FEE) revert InvalidAmount();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    
+    $.withdrawalFee = newFee;
+  }
+
+  function _transferBalance(address from, address to, uint256 amount) internal {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+
     if ($.userBalances[from] < amount) revert InsufficientBalance();
     $.userBalances[from] -= amount;
     $.userBalances[to] += amount;
-    
+
     emit BalanceTransferred(from, to, amount);
   }
 
@@ -336,7 +359,7 @@ contract ClearingHouse is
         break;
       }
     }
-  }  
+  }
 
   function depositCouponTo(
     address user,
@@ -373,7 +396,7 @@ contract ClearingHouse is
     coupons[i] = newCoupon;
     emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
-  
+
   function pause() external whenNotPaused onlyAdmin {
     _pause();
   }
@@ -382,7 +405,7 @@ contract ClearingHouse is
     _unpause();
   }
 
-   /* public views */
+  /* public views */
   function addresses() public view returns (address, address, address, address) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return ($.adminAddress, $.operatorVaultAddress, address($.token), address($.vault));
@@ -403,16 +426,13 @@ contract ClearingHouse is
     return $.forceWithdrawalDelay;
   }
 
-  function getForceWithdrawStatus(address user) external view returns (
-    bool hasRequest,
-    uint256 requestTime,
-    uint256 amount,
-    bool canWithdraw
-  ) {
+  function getForceWithdrawStatus(
+    address user
+  ) external view returns (bool hasRequest, uint256 requestTime, uint256 amount, bool canWithdraw) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    
+
     for (uint256 i = $.forceWithdrawalRequests.length; i > 0; i--) {
-      ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[i-1];
+      ForceWithdrawalRequest storage request = $.forceWithdrawalRequests[i - 1];
       if (request.user == user && !request.processed) {
         return (
           true,
@@ -422,7 +442,7 @@ contract ClearingHouse is
         );
       }
     }
-    
+
     return (false, 0, 0, false);
   }
 
@@ -444,24 +464,26 @@ contract ClearingHouse is
     }
   }
 
-
   function couponHolders() public view returns (address[] memory) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return $.couponHolders;
   }
 
-  function getCouponHoldersPaged(uint256 offset, uint256 size) public view returns (address[] memory) {
+  function getCouponHoldersPaged(
+    uint256 offset,
+    uint256 size
+  ) public view returns (address[] memory) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 length = $.couponHolders.length;
-    
+
     if (offset >= length || size == 0) return new address[](0);
-    
+
     uint256 endIndex = offset + size;
     if (endIndex > length) endIndex = length;
-    
+
     address[] memory pagedHolders = new address[](endIndex - offset);
     for (uint256 i = offset; i < endIndex; i++) {
-        pagedHolders[i - offset] = $.couponHolders[i];
+      pagedHolders[i - offset] = $.couponHolders[i];
     }
     return pagedHolders;
   }
@@ -488,36 +510,38 @@ contract ClearingHouse is
     return $.couponHolders.length;
   }
 
-  function reclaimExpiredCouponsByChunk(uint256 startIndex, uint256 size) external nonReentrant returns (uint256) {
+  function reclaimExpiredCouponsByChunk(
+    uint256 startIndex,
+    uint256 size
+  ) external nonReentrant returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    
+
     if (startIndex >= $.couponHolders.length) revert InvalidIndex();
 
     uint256 currentIndex = startIndex;
     uint256 processedCount = 0;
-    
+
     while (processedCount < size && currentIndex < $.couponHolders.length) {
-        address holder = $.couponHolders[currentIndex];
-        if (holder != address(0)) {
-            uint256 preLength = $.couponHolders.length;
-            _reclaimExpiredCoupons(holder);
-            
-            if (preLength == $.couponHolders.length) {
-                currentIndex++;
-            }
-            processedCount++;
-        } else {
-            currentIndex++;
+      address holder = $.couponHolders[currentIndex];
+      if (holder != address(0)) {
+        uint256 preLength = $.couponHolders.length;
+        _reclaimExpiredCoupons(holder);
+
+        if (preLength == $.couponHolders.length) {
+          currentIndex++;
         }
+        processedCount++;
+      } else {
+        currentIndex++;
+      }
     }
-    
+
     return currentIndex;
   }
 
   function reclaimExpiredCoupons(address user) external nonReentrant {
     _reclaimExpiredCoupons(user);
   }
-
 
   /* internal functions */
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -529,7 +553,11 @@ contract ClearingHouse is
     return elapsedHours;
   }
 
-  function useCoupon(address user, uint256 amount, uint256 epoch) external nonReentrant onlyOperator returns (uint256) {
+  function useCoupon(
+    address user,
+    uint256 amount,
+    uint256 epoch
+  ) external nonReentrant onlyOperator returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 remainingAmount = amount;
     for (uint i = 0; i < $.couponBalances[user].length && remainingAmount > 0; i++) {
@@ -558,37 +586,36 @@ contract ClearingHouse is
 
     uint256 validCount = 0;
     for (uint i = 0; i < coupons.length; i++) {
-        Coupon storage coupon = coupons[i];
-        if (coupon.expirationEpoch < epoch) {
-            uint256 availableAmount = coupon.amount - coupon.usedAmount;
-            if (availableAmount > 0) {
-                $.token.safeTransfer(coupon.issuer, availableAmount);
-                $.couponAmount -= availableAmount;
-                coupon.usedAmount = coupon.amount;
-            }
-        } else {
-            // move valid coupons to the front of the array
-            coupons[validCount] = coupon;
-            validCount++;
+      Coupon storage coupon = coupons[i];
+      if (coupon.expirationEpoch < epoch) {
+        uint256 availableAmount = coupon.amount - coupon.usedAmount;
+        if (availableAmount > 0) {
+          $.token.safeTransfer(coupon.issuer, availableAmount);
+          $.couponAmount -= availableAmount;
+          coupon.usedAmount = coupon.amount;
         }
+      } else {
+        // move valid coupons to the front of the array
+        coupons[validCount] = coupon;
+        validCount++;
+      }
     }
 
     // remove expired coupons from the array
     while (coupons.length > validCount) {
-        coupons.pop();
+      coupons.pop();
     }
 
     if (validCount == 0) {
-        // remove user from couponHolders array
-        uint length = $.couponHolders.length;
-        for (uint i = 0; i < length; i++) {
-            if ($.couponHolders[i] == user) {
-                $.couponHolders[i] = $.couponHolders[length - 1];
-                $.couponHolders.pop();
-                break;
-            }
+      // remove user from couponHolders array
+      uint length = $.couponHolders.length;
+      for (uint i = 0; i < length; i++) {
+        if ($.couponHolders[i] == user) {
+          $.couponHolders[i] = $.couponHolders[length - 1];
+          $.couponHolders.pop();
+          break;
         }
+      }
     }
   }
-
-} 
+}

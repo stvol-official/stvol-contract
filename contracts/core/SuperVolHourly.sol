@@ -13,9 +13,10 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IVault } from "../interfaces/IVault.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
-import { SuperVolStorage} from "../storage/SuperVolStorage.sol";
+import { SuperVolStorage } from "../storage/SuperVolStorage.sol";
 import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract SuperVolHourly is
   Initializable,
@@ -64,6 +65,7 @@ contract SuperVolHourly is
     uint256 expirationEpoch,
     uint256 result
   );
+  event DebugLog(string message);
 
   modifier onlyAdmin() {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -76,7 +78,7 @@ contract SuperVolHourly is
     _;
   }
 
- /// @custom:oz-upgrades-unsafe-allow constructor
+  /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
     _disableInitializers();
   }
@@ -169,7 +171,8 @@ contract SuperVolHourly is
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     Round storage round = $.rounds[epoch];
 
-    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0) revert InvalidRound();
+    if (round.epoch == 0 || round.startTimestamp == 0 || round.endTimestamp == 0)
+      revert InvalidRound();
     if (round.startPrice[0] == 0 || round.endPrice[0] == 0) revert InvalidRoundPrice();
 
     FilledOrder[] storage orders = $.filledOrders[epoch];
@@ -229,21 +232,24 @@ contract SuperVolHourly is
     coupons[i] = newCoupon;
     emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
   }
-  
-  function reclaimExpiredCouponsByChunk(uint256 startIndex, uint256 size) external nonReentrant returns (uint256) {
+
+  function reclaimExpiredCouponsByChunk(
+    uint256 startIndex,
+    uint256 size
+  ) external nonReentrant returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    
+
     if (startIndex >= $.couponHolders.length) revert InvalidIndex();
 
     uint256 endIndex = startIndex + size;
     if (endIndex > $.couponHolders.length) {
-        endIndex = $.couponHolders.length;
+      endIndex = $.couponHolders.length;
     }
 
     for (uint256 i = startIndex; i < endIndex; i++) {
-        _reclaimExpiredCoupons($.couponHolders[i]);
+      _reclaimExpiredCoupons($.couponHolders[i]);
     }
-    return endIndex;  // Return the next start index for subsequent calls
+    return endIndex; // Return the next start index for subsequent calls
   }
 
   // @Deprecated
@@ -318,15 +324,14 @@ contract SuperVolHourly is
   function setToken(address _token) external onlyAdmin {
     if (_token == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.token = IERC20(_token); 
+    $.token = IERC20(_token);
   }
 
   function setVault(address _vault) external onlyAdmin {
     if (_vault == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.vault = IVault(_vault);
-  } 
-
+  }
 
   /* public views */
   function commissionfee() public view returns (uint256) {
@@ -341,7 +346,13 @@ contract SuperVolHourly is
 
   function addresses() public view returns (address, address, address, address, address) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return ($.adminAddress, $.operatorAddress, address($.vault), address($.clearingHouse), address($.token));
+    return (
+      $.adminAddress,
+      $.operatorAddress,
+      address($.vault),
+      address($.clearingHouse),
+      address($.token)
+    );
   }
 
   function balances(address user) public view returns (uint256, uint256, uint256) {
@@ -377,18 +388,21 @@ contract SuperVolHourly is
   }
 
   // @Deprecated
-  function getCouponHoldersPaged(uint256 offset, uint256 size) public view returns (address[] memory) {
+  function getCouponHoldersPaged(
+    uint256 offset,
+    uint256 size
+  ) public view returns (address[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     uint256 length = $.couponHolders.length;
-    
+
     if (offset >= length || size == 0) return new address[](0);
-    
+
     uint256 endIndex = offset + size;
     if (endIndex > length) endIndex = length;
-    
+
     address[] memory pagedHolders = new address[](endIndex - offset);
     for (uint256 i = offset; i < endIndex; i++) {
-        pagedHolders[i - offset] = $.couponHolders[i];
+      pagedHolders[i - offset] = $.couponHolders[i];
     }
     return pagedHolders;
   }
@@ -499,7 +513,6 @@ contract SuperVolHourly is
     return $.couponHolders.length;
   }
 
-
   /* internal functions */
   function _getPythPrices(
     bytes[] memory updateData,
@@ -532,24 +545,21 @@ contract SuperVolHourly is
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
 
-  function fillSettlementResult(
-    uint256[] calldata epochList
-  ) external {
+  function fillSettlementResult(uint256[] calldata epochList) external {
     // temporary function to fill settlement results
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    for (uint a = 0; a < epochList.length; a ++) {
+    for (uint a = 0; a < epochList.length; a++) {
       uint256 epoch = epochList[a];
       FilledOrder[] storage orders = $.filledOrders[epoch];
       Round storage round = $.rounds[epoch];
-      for (uint i = 0; i < orders.length ; i++) {
-        FilledOrder storage order =  orders[i];
+      for (uint i = 0; i < orders.length; i++) {
+        FilledOrder storage order = orders[i];
         _fillSettlementResult(round, order);
       }
     }
   }
 
-  function _fillSettlementResult(Round storage round,
-    FilledOrder storage order) internal {
+  function _fillSettlementResult(Round storage round, FilledOrder storage order) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
     if (round.startPrice[order.productId] == 0 || round.endPrice[order.productId] == 0) return;
@@ -561,58 +571,63 @@ contract SuperVolHourly is
 
     if (order.overPrice + order.underPrice != 100) {
       $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Invalid, 
-        winAmount: 0, 
+        idx: order.idx,
+        winPosition: WinPosition.Invalid,
+        winAmount: 0,
         feeRate: $.commissionfee,
         fee: 0
       });
     } else if (order.overUser == order.underUser) {
       uint256 loosePositionAmount = (
-        isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0
+        isOverWin
+          ? order.underPrice
+          : isUnderWin
+            ? order.overPrice
+            : 0
       ) *
         order.unit *
         PRICE_UNIT;
       uint256 fee = (loosePositionAmount * $.commissionfee) / BASE;
-      
+
       $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie, 
-        winAmount: loosePositionAmount, 
+        idx: order.idx,
+        winPosition: isOverWin
+          ? WinPosition.Over
+          : isUnderWin
+            ? WinPosition.Under
+            : WinPosition.Tie,
+        winAmount: loosePositionAmount,
         feeRate: $.commissionfee,
         fee: fee
       });
-
     } else if (isUnderWin) {
       uint256 amount = order.overPrice * order.unit * PRICE_UNIT;
       uint256 fee = (amount * $.commissionfee) / BASE;
-      
+
       $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Under, 
-        winAmount: amount, 
+        idx: order.idx,
+        winPosition: WinPosition.Under,
+        winAmount: amount,
         feeRate: $.commissionfee,
         fee: fee
       });
-
     } else if (isOverWin) {
       uint256 amount = order.underPrice * order.unit * PRICE_UNIT;
       uint256 fee = (amount * $.commissionfee) / BASE;
 
       $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Over, 
-        winAmount: amount, 
+        idx: order.idx,
+        winPosition: WinPosition.Over,
+        winAmount: amount,
         feeRate: $.commissionfee,
         fee: fee
       });
-
     } else {
       // no one wins
       $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx, 
-        winPosition: WinPosition.Tie, 
-        winAmount: 0, 
+        idx: order.idx,
+        winPosition: WinPosition.Tie,
+        winAmount: 0,
         feeRate: $.commissionfee,
         fee: 0
       });
@@ -627,14 +642,7 @@ contract SuperVolHourly is
     uint256 newBalance,
     uint256 usedCouponAmount
   ) private {
-    emit OrderSettled(
-        user,
-        idx,
-        epoch,
-        prevBalance,
-        newBalance,
-        usedCouponAmount
-    );
+    emit OrderSettled(user, idx, epoch, prevBalance, newBalance, usedCouponAmount);
   }
 
   function _settleFilledOrder(
@@ -653,112 +661,125 @@ contract SuperVolHourly is
     uint256 winAmount = 0;
 
     if (order.overPrice + order.underPrice != 100) {
-        winPosition = WinPosition.Invalid;
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            order.underUser,
-            $.clearingHouse.userBalances(order.underUser),
-            $.clearingHouse.userBalances(order.underUser),
-            0
-        );
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            order.overUser,
-            $.clearingHouse.userBalances(order.overUser),
-            $.clearingHouse.userBalances(order.overUser),
-            0
-        );
+      winPosition = WinPosition.Invalid;
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        order.underUser,
+        $.clearingHouse.userBalances(order.underUser),
+        $.clearingHouse.userBalances(order.underUser),
+        0
+      );
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        order.overUser,
+        $.clearingHouse.userBalances(order.overUser),
+        $.clearingHouse.userBalances(order.overUser),
+        0
+      );
     } else if (order.overUser == order.underUser) {
-        winAmount = (isOverWin ? order.underPrice : isUnderWin ? order.overPrice : 0) * order.unit * PRICE_UNIT;
-        winPosition = isOverWin ? WinPosition.Over : isUnderWin ? WinPosition.Under : WinPosition.Tie;
-        
-        uint256 fee = (winAmount * $.commissionfee) / BASE;
-        uint256 remainingAmount = $.clearingHouse.useCoupon(order.overUser, fee, order.epoch);
+      winAmount =
+        (
+          isOverWin
+            ? order.underPrice
+            : isUnderWin
+              ? order.overPrice
+              : 0
+        ) *
+        order.unit *
+        PRICE_UNIT;
+      winPosition = isOverWin
+        ? WinPosition.Over
+        : isUnderWin
+          ? WinPosition.Under
+          : WinPosition.Tie;
 
-        if ($.vault.isVault(order.overUser)) {
-            _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
-        }
-        $.clearingHouse.subtractUserBalance(order.overUser, remainingAmount);
-        $.clearingHouse.addTreasuryAmount(fee);
-        collectedFee = fee;
-        
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            order.overUser,
-            $.clearingHouse.userBalances(order.overUser) + fee,
-            $.clearingHouse.userBalances(order.overUser),
-            winAmount - remainingAmount
-        );
+      uint256 fee = (winAmount * $.commissionfee) / BASE;
+      uint256 remainingAmount = $.clearingHouse.useCoupon(order.overUser, fee, order.epoch);
+
+      if ($.vault.isVault(order.overUser)) {
+        _processVaultTransaction(order.idx, order.overUser, remainingAmount, false);
+      }
+      $.clearingHouse.subtractUserBalance(order.overUser, remainingAmount);
+      $.clearingHouse.addTreasuryAmount(fee);
+      collectedFee = fee;
+
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        order.overUser,
+        $.clearingHouse.userBalances(order.overUser) + fee,
+        $.clearingHouse.userBalances(order.overUser),
+        winAmount - remainingAmount
+      );
     } else if (isOverWin || isUnderWin) {
-        address winner = isUnderWin ? order.underUser : order.overUser;
-        address loser = isUnderWin ? order.overUser : order.underUser;
-        winAmount = (isUnderWin ? order.overPrice : order.underPrice) * order.unit * PRICE_UNIT;
-        winPosition = isUnderWin ? WinPosition.Under : WinPosition.Over;
+      address winner = isUnderWin ? order.underUser : order.overUser;
+      address loser = isUnderWin ? order.overUser : order.underUser;
+      winAmount = (isUnderWin ? order.overPrice : order.underPrice) * order.unit * PRICE_UNIT;
+      winPosition = isUnderWin ? WinPosition.Under : WinPosition.Over;
 
-        uint256 remainingAmount = $.clearingHouse.useCoupon(loser, winAmount, order.epoch);
-        if ($.vault.isVault(loser)) {
-            _processVaultTransaction(order.idx, loser, remainingAmount, false);
-        }
-        $.clearingHouse.subtractUserBalance(loser, remainingAmount);
+      uint256 remainingAmount = $.clearingHouse.useCoupon(loser, winAmount, order.epoch);
+      if ($.vault.isVault(loser)) {
+        _processVaultTransaction(order.idx, loser, remainingAmount, false);
+      }
+      $.clearingHouse.subtractUserBalance(loser, remainingAmount);
 
-        uint256 fee = (winAmount * $.commissionfee) / BASE;
-        $.clearingHouse.addUserBalance(winner, winAmount - fee);
-        $.clearingHouse.addTreasuryAmount(fee);
-        if ($.vault.isVault(winner)) {
-            _processVaultTransaction(order.idx, winner, (winAmount - fee), true);
-        }
-        collectedFee = fee;
+      uint256 fee = (winAmount * $.commissionfee) / BASE;
+      $.clearingHouse.addUserBalance(winner, winAmount - fee);
+      $.clearingHouse.addTreasuryAmount(fee);
+      if ($.vault.isVault(winner)) {
+        _processVaultTransaction(order.idx, winner, (winAmount - fee), true);
+      }
+      collectedFee = fee;
 
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            loser,
-            $.clearingHouse.userBalances(loser) + winAmount,
-            $.clearingHouse.userBalances(loser),
-            winAmount - remainingAmount
-        );
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            winner, 
-            $.clearingHouse.userBalances(winner) - (winAmount - fee),
-            $.clearingHouse.userBalances(winner),
-            0
-        );
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        loser,
+        $.clearingHouse.userBalances(loser) + winAmount,
+        $.clearingHouse.userBalances(loser),
+        winAmount - remainingAmount
+      );
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        winner,
+        $.clearingHouse.userBalances(winner) - (winAmount - fee),
+        $.clearingHouse.userBalances(winner),
+        0
+      );
     } else {
-        winPosition = WinPosition.Tie;
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            order.underUser,
-            $.clearingHouse.userBalances(order.underUser),
-            $.clearingHouse.userBalances(order.underUser),
-            0
-        );
-        _emitSettlement(
-            order.idx,
-            order.epoch,
-            order.overUser,
-            $.clearingHouse.userBalances(order.overUser),
-            $.clearingHouse.userBalances(order.overUser),
-            0
-        );
+      winPosition = WinPosition.Tie;
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        order.underUser,
+        $.clearingHouse.userBalances(order.underUser),
+        $.clearingHouse.userBalances(order.underUser),
+        0
+      );
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        order.overUser,
+        $.clearingHouse.userBalances(order.overUser),
+        $.clearingHouse.userBalances(order.overUser),
+        0
+      );
     }
 
     $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx,
-        winPosition: winPosition,
-        winAmount: winAmount,
-        feeRate: $.commissionfee,
-        fee: collectedFee
+      idx: order.idx,
+      winPosition: winPosition,
+      winAmount: winAmount,
+      feeRate: $.commissionfee,
+      fee: collectedFee
     });
 
     order.isSettled = true;
     if ($.lastSettledFilledOrderId < order.idx) {
-        $.lastSettledFilledOrderId = order.idx;
+      $.lastSettledFilledOrderId = order.idx;
     }
     return collectedFee;
   }
@@ -810,78 +831,86 @@ contract SuperVolHourly is
 
     uint256 validCount = 0;
     for (uint i = 0; i < coupons.length; i++) {
-        Coupon storage coupon = coupons[i];
-        if (coupon.expirationEpoch < epoch) {
-            uint256 availableAmount = coupon.amount - coupon.usedAmount;
-            if (availableAmount > 0) {
-                $.token.safeTransfer(coupon.issuer, availableAmount);
-                $.couponAmount -= availableAmount;
-                coupon.usedAmount = coupon.amount;
-            }
-        } else {
-            // move valid coupons to the front of the array
-            coupons[validCount] = coupon;
-            validCount++;
+      Coupon storage coupon = coupons[i];
+      if (coupon.expirationEpoch < epoch) {
+        uint256 availableAmount = coupon.amount - coupon.usedAmount;
+        if (availableAmount > 0) {
+          $.token.safeTransfer(coupon.issuer, availableAmount);
+          $.couponAmount -= availableAmount;
+          coupon.usedAmount = coupon.amount;
         }
+      } else {
+        // move valid coupons to the front of the array
+        coupons[validCount] = coupon;
+        validCount++;
+      }
     }
 
     // remove expired coupons from the array
     while (coupons.length > validCount) {
-        coupons.pop();
+      coupons.pop();
     }
 
     if (validCount == 0) {
-        // remove user from couponHolders array
-        uint length = $.couponHolders.length;
-        for (uint i = 0; i < length; i++) {
-            if ($.couponHolders[i] == user) {
-                $.couponHolders[i] = $.couponHolders[length - 1];
-                $.couponHolders.pop();
-                break;
-            }
+      // remove user from couponHolders array
+      uint length = $.couponHolders.length;
+      for (uint i = 0; i < length; i++) {
+        if ($.couponHolders[i] == user) {
+          $.couponHolders[i] = $.couponHolders[length - 1];
+          $.couponHolders.pop();
+          break;
         }
+      }
     }
   }
 
-  function _processVaultTransaction(uint256 orderIdx, address vaultAddress, uint256 amount, bool isWin) internal {
+  function _processVaultTransaction(
+    uint256 orderIdx,
+    address vaultAddress,
+    uint256 amount,
+    bool isWin
+  ) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);  
+    $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);
   }
 
   // used for migration
-  function migrateCouponsToClearingHouse(uint256 startIndex, uint256 size) external returns (uint256) {
+  function migrateCouponsToClearingHouse(
+    uint256 startIndex,
+    uint256 size
+  ) external returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    
+
     if (startIndex >= $.couponHolders.length) revert InvalidIndex();
     uint256 currentAllowance = $.token.allowance(address(this), address($.clearingHouse));
     if (currentAllowance == 0) {
-        $.token.approve(address($.clearingHouse), type(uint256).max);
+      $.token.approve(address($.clearingHouse), type(uint256).max);
     }
-    
+
     uint256 endIndex = startIndex + size;
     if (endIndex > $.couponHolders.length) {
-        endIndex = $.couponHolders.length;
+      endIndex = $.couponHolders.length;
     }
 
     for (uint256 i = startIndex; i < endIndex; i++) {
-        address holder = $.couponHolders[i];
-        if ($.migratedHolders[holder]) continue;
+      address holder = $.couponHolders[i];
+      if ($.migratedHolders[holder]) continue;
 
-        Coupon[] storage coupons = $.couponBalances[holder];
-        
-        for (uint256 j = 0; j < coupons.length; j++) {
-            Coupon storage coupon = coupons[j];
-            
-            if (coupon.amount == coupon.usedAmount) continue;
-            uint256 remainingAmount = coupon.amount - coupon.usedAmount;
-            $.clearingHouse.depositCouponTo(holder, remainingAmount, coupon.expirationEpoch);
-        }
-        
-        // check if the holder is migrated
-        if (!$.migratedHolders[holder]) {
-            $.migratedHolders[holder] = true;
-            $.migratedHoldersCount++;
-        }
+      Coupon[] storage coupons = $.couponBalances[holder];
+
+      for (uint256 j = 0; j < coupons.length; j++) {
+        Coupon storage coupon = coupons[j];
+
+        if (coupon.amount == coupon.usedAmount) continue;
+        uint256 remainingAmount = coupon.amount - coupon.usedAmount;
+        $.clearingHouse.depositCouponTo(holder, remainingAmount, coupon.expirationEpoch);
+      }
+
+      // check if the holder is migrated
+      if (!$.migratedHolders[holder]) {
+        $.migratedHolders[holder] = true;
+        $.migratedHoldersCount++;
+      }
     }
     return $.migratedHoldersCount;
   }
@@ -896,18 +925,74 @@ contract SuperVolHourly is
   }
 
   // used for migration
-  function getMigrationStatus() external view returns (
-    uint256 totalHolders,
-    uint256 migratedHolders,
-    uint256 totalCouponAmount,
-    uint256 totalUsedAmount
-  ) {
+  function getMigrationStatus()
+    external
+    view
+    returns (
+      uint256 totalHolders,
+      uint256 migratedHolders,
+      uint256 totalCouponAmount,
+      uint256 totalUsedAmount
+    )
+  {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return (
-        $.couponHolders.length,
-        $.migratedHoldersCount,
-        $.couponAmount,
-        $.usedCouponAmount
-    );
+    return ($.couponHolders.length, $.migratedHoldersCount, $.couponAmount, $.usedCouponAmount);
+  }
+
+  function transferRemainingTokens(address to) external onlyAdmin {
+    if (to == address(0)) revert InvalidAddress();
+
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 balance = $.token.balanceOf(address(this));
+    $.token.safeTransfer(to, balance);
+  }
+
+  function executeFallbackRoundWithManualPrices(
+    uint64[] calldata prices, // price array corresponding to _priceIds()
+    uint64 initDate,
+    bool skipSettlement
+  ) external onlyAdmin {
+    if (initDate % 3600 != 0) revert InvalidInitDate();
+    if (prices.length != _priceIds().length) revert PriceLengthMismatch();
+
+    uint256 problemEpoch = _epochAt(initDate);
+    uint256 currentEpochNumber = _epochAt(block.timestamp);
+
+    if (problemEpoch >= currentEpochNumber) revert InvalidEpoch();
+
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+
+    // end problem round
+    Round storage problemRound = $.rounds[problemEpoch];
+    if (
+      problemRound.epoch == problemEpoch &&
+      problemRound.startTimestamp > 0 &&
+      problemRound.isStarted &&
+      !problemRound.isSettled
+    ) {
+      problemRound.endTimestamp = initDate;
+
+      for (uint i = 0; i < prices.length; i++) {
+        problemRound.endPrice[i] = prices[i];
+        emit EndRound(problemEpoch, i, prices[i], initDate);
+        emit DebugLog(
+          string.concat(
+            "Manual Price Update | ",
+            "Epoch: ",
+            Strings.toString(problemEpoch),
+            " | ",
+            "Product[",
+            Strings.toString(i),
+            "]: ",
+            Strings.toString(prices[i])
+          )
+        );
+      }
+      problemRound.isSettled = true;
+    }
+
+    if (!skipSettlement) {
+      _settleFilledOrders(problemRound);
+    }
   }
 }
