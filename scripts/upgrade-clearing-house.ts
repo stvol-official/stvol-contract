@@ -7,8 +7,8 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["soneium_testnet", "soneium_mainnet"];
-const DEPLOYED_PROXY = "0xB48434a7160AAC2C4e5cdB3C3Cc2Ecfd83c6E292"; // for testnet
-// const DEPLOYED_PROXY = "0x618148f2Bb58C5c89737BB160070613d4E1b790a"; // for mainnet
+// const DEPLOYED_PROXY = "0xB48434a7160AAC2C4e5cdB3C3Cc2Ecfd83c6E292"; // for testnet
+const DEPLOYED_PROXY = "0x618148f2Bb58C5c89737BB160070613d4E1b790a"; // for mainnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -43,6 +43,7 @@ const upgrade = async () => {
     // Deploy contracts.
     const ClearingHouseFactory = await ethers.getContractFactory(contractName);
 
+    // await upgrades.forceImport(PROXY, ClearingHouseFactory, { kind: "uups" });
     let clearingHouseContractAddress;
     if (isSafeOwner === "N") {
       const clearingHouseContract = await upgrades.upgradeProxy(PROXY, ClearingHouseFactory, {
