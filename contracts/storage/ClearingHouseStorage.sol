@@ -27,6 +27,7 @@ library ClearingHouseStorage {
     uint256 usedCouponAmount; // used coupon amount
     address[] couponHolders;
     uint256 withdrawalFee; // withdrawal fee
+    mapping(uint256 => bool) processedBatchIds; // processed batch ids
     /* IMPROTANT: you can add new variables here */
   }
 

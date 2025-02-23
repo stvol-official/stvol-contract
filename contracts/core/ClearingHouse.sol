@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest, ForceWithdrawalRequest, Coupon } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 import { IVault } from "../interfaces/IVault.sol";
 
@@ -25,10 +25,10 @@ contract ClearingHouse is
   using SafeERC20 for IERC20;
 
   uint256 private constant PRICE_UNIT = 1e6;
-  uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // 0.1
+  uint256 private constant WITHDRAWAL_FEE = PRICE_UNIT / 10; // $0.1
+  uint256 private constant MAX_WITHDRAWAL_FEE = 10 * PRICE_UNIT; // $10
   uint256 private constant DEFAULT_FORCE_WITHDRAWAL_DELAY = 24 hours;
   uint256 private constant START_TIMESTAMP = 1736294400; // for epoch
-  uint256 private constant MAX_WITHDRAWAL_FEE = 10 * PRICE_UNIT; // $10
 
   event Deposit(address indexed to, address from, uint256 amount, uint256 result);
   event Withdraw(address indexed to, uint256 amount, uint256 result);
@@ -44,6 +44,15 @@ contract ClearingHouse is
     uint256 amount,
     uint256 expirationEpoch,
     uint256 result
+  );
+
+  event BatchWithdrawRequested(uint256 indexed batchId, uint256 totalAmount, uint256 requestCount);
+  event BatchWithdrawProcessed(
+    uint256 indexed batchId,
+    uint256 indexed requestId,
+    address indexed user,
+    uint256 amount,
+    uint256 fee
   );
 
   modifier onlyAdmin() {
@@ -249,6 +258,68 @@ contract ClearingHouse is
     $.token.safeTransfer(msg.sender, request.amount);
 
     emit ForceWithdrawalExecuted(msg.sender, request.amount);
+  }
+
+  function withdrawBatch(
+    BatchWithdrawRequest[] calldata requests,
+    uint256 batchId
+  ) external nonReentrant onlyOperator whenNotPaused {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+
+    // Check if batch has already been processed
+    if ($.processedBatchIds[batchId]) revert BatchAlreadyProcessed();
+    if (batchId == 0) revert InvalidBatchId();
+    if (requests.length == 0 || requests.length > 100) revert InvalidAmount();
+
+    uint256 totalAmount = 0;
+    uint256 totalFees = 0;
+
+    // First pass: Validation and total calculation
+    for (uint256 i = 0; i < requests.length; i++) {
+      BatchWithdrawRequest calldata request = requests[i];
+
+      if (request.user == address(0)) revert InvalidAddress();
+      if (request.amount == 0) revert InvalidAmount();
+      if (request.requestId == 0) revert InvalidRequestId();
+
+      uint256 requiredAmount = request.amount + $.withdrawalFee;
+      if ($.userBalances[request.user] < requiredAmount) {
+        revert InsufficientBalance();
+      }
+
+      totalAmount += request.amount;
+      totalFees += $.withdrawalFee;
+    }
+
+    // Check total contract balance including fees
+    if ($.token.balanceOf(address(this)) < totalAmount + totalFees) {
+      revert InsufficientBalance();
+    }
+
+    // Mark batch as processed
+    $.processedBatchIds[batchId] = true;
+
+    emit BatchWithdrawRequested(batchId, totalAmount, requests.length);
+
+    for (uint256 i = 0; i < requests.length; i++) {
+      BatchWithdrawRequest calldata request = requests[i];
+      $.userBalances[request.user] -= (request.amount + $.withdrawalFee);
+      $.treasuryAmount += $.withdrawalFee;
+    }
+
+    for (uint256 i = 0; i < requests.length; i++) {
+      BatchWithdrawRequest calldata request = requests[i];
+      $.token.safeTransfer(request.user, request.amount);
+
+      emit BatchWithdrawProcessed(
+        batchId,
+        request.requestId,
+        request.user,
+        request.amount,
+        $.withdrawalFee
+      );
+      emit Withdraw(request.user, request.amount, $.userBalances[request.user]);
+    }
   }
 
   function claimTreasury() external nonReentrant onlyAdmin {
@@ -541,6 +612,11 @@ contract ClearingHouse is
 
   function reclaimExpiredCoupons(address user) external nonReentrant {
     _reclaimExpiredCoupons(user);
+  }
+
+  function getWithdrawalFee() external view returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    return $.withdrawalFee;
   }
 
   /* internal functions */

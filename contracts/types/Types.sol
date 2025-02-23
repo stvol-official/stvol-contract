@@ -116,3 +116,9 @@ struct OneMinOrder {
   uint256 closingTime;
   uint256 settleAmount;
 }
+
+struct BatchWithdrawRequest {
+  address user;
+  uint256 amount;
+  uint256 requestId;
+}
