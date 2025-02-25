@@ -176,16 +176,25 @@ contract SuperVolHourly is
     if (round.startPrice[0] == 0 || round.endPrice[0] == 0) revert InvalidRoundPrice();
 
     FilledOrder[] storage orders = $.filledOrders[epoch];
-    uint256 startIndex = $.lastSettledFilledOrderIndex[epoch];
-    uint256 endIndex = startIndex + size < orders.length ? startIndex + size : orders.length;
+
+    uint256 endIndex = orders.length;
 
     uint256 collectedFee = 0;
 
-    for (uint i = startIndex; i < endIndex; i++) {
+    uint256 settledCount = 0;
+
+    for (uint i = 0; i < endIndex; i++) {
       FilledOrder storage order = orders[i];
-      collectedFee += _settleFilledOrder(round, order);
+      uint256 fee = _settleFilledOrder(round, order);
+      if (fee > 0) {
+        settledCount++;
+      }
+      if (settledCount >= size) {
+        break;
+      }
+
+      collectedFee += fee;
     }
-    $.lastSettledFilledOrderIndex[epoch] = endIndex;
 
     return orders.length - endIndex;
   }
@@ -545,7 +554,6 @@ contract SuperVolHourly is
       FilledOrder storage order = orders[i];
       collectedFee += _settleFilledOrder(round, order);
     }
-    $.lastSettledFilledOrderIndex[round.epoch] = orders.length;
 
     emit RoundSettled(round.epoch, orders.length, collectedFee);
   }
