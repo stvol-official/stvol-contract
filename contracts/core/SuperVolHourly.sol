@@ -192,9 +192,14 @@ contract SuperVolHourly is
 
   function countUnsettledFilledOrders(uint256 epoch) external view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 index = $.lastSettledFilledOrderIndex[epoch];
     FilledOrder[] storage orders = $.filledOrders[epoch];
-    return orders.length - index;
+    uint256 unsettledCount = 0;
+    for (uint i = 0; i < orders.length; i++) {
+      if (!orders[i].isSettled) {
+        unsettledCount++;
+      }
+    }
+    return unsettledCount;
   }
 
   function depositCouponTo(
@@ -726,7 +731,14 @@ contract SuperVolHourly is
 
       uint256 loserBalance = $.clearingHouse.userBalances(loser);
       if (loserBalance < remainingAmount) {
-        emit DebugLog(string.concat("Loser ", Strings.toHexString(loser), " balance is less than remaining amount for order: ", Strings.toString(order.idx)));
+        emit DebugLog(
+          string.concat(
+            "Loser ",
+            Strings.toHexString(loser),
+            " balance is less than remaining amount for order: ",
+            Strings.toString(order.idx)
+          )
+        );
         return 0;
       }
       $.clearingHouse.subtractUserBalance(loser, remainingAmount);
