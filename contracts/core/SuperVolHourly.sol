@@ -723,6 +723,12 @@ contract SuperVolHourly is
       if ($.vault.isVault(loser)) {
         _processVaultTransaction(order.idx, loser, remainingAmount, false);
       }
+
+      uint256 loserBalance = $.clearingHouse.userBalances(loser);
+      if (loserBalance < remainingAmount) {
+        emit DebugLog(string.concat("Loser ", Strings.toHexString(loser), " balance is less than remaining amount for order: ", Strings.toString(order.idx)));
+        return 0;
+      }
       $.clearingHouse.subtractUserBalance(loser, remainingAmount);
 
       uint256 fee = (winAmount * $.commissionfee) / BASE;
