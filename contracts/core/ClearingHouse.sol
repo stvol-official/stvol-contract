@@ -694,18 +694,4 @@ contract ClearingHouse is
       }
     }
   }
-
-  function returnCoupon(address user, uint256 amount, uint256 epoch) external onlySupervol {
-    // Return coupon amount to user's available coupon balance
-    Coupon[] storage coupons = userCoupons(user);
-    
-    for (uint i = 0; i < coupons.length; i++) {
-        if (coupons[i].expirationEpoch >= epoch) {
-            // Find the original coupon and restore its usedAmount
-            coupons[i].usedAmount = coupons[i].usedAmount > amount ? 
-                coupons[i].usedAmount - amount : 0;
-            break;
-        }
-    }
-  }
 }

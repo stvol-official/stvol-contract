@@ -318,22 +318,31 @@ contract SuperVolHourly is
     }
   }
 
-  function _releaseEscrow(address user, uint256 epoch) internal {
+  function _releaseEscrow(address user, uint256 epoch, uint256 amount) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    uint256 remainingAmount = amount;
 
-    // Return balance escrow
-    uint256 escrowBalance = $.escrowBalances[epoch][user];
-    if (escrowBalance > 0) {
-      $.clearingHouse.addUserBalance(user, escrowBalance);
-      $.escrowBalances[epoch][user] = 0;
-    }
-
-    // Return coupon escrow
+    // First try to release from coupon escrow
     uint256 escrowCoupon = $.escrowCoupons[epoch][user];
     if (escrowCoupon > 0) {
-      // Return coupon to user's available balance
-      $.clearingHouse.returnCoupon(user, escrowCoupon, epoch);
-      $.escrowCoupons[epoch][user] = 0;
+      uint256 couponToRelease = escrowCoupon >= remainingAmount ? remainingAmount : escrowCoupon;
+      // Issue new coupon with the released amount
+      $.clearingHouse.depositCouponTo(
+        user,
+        couponToRelease,
+        epoch + 3 // 3 hours later
+      );
+      $.escrowCoupons[epoch][user] = escrowCoupon - couponToRelease;
+      remainingAmount -= couponToRelease;
+    }
+
+    // If there's still remaining amount, release from balance escrow
+    if (remainingAmount > 0) {
+      uint256 escrowBalance = $.escrowBalances[epoch][user];
+      if (escrowBalance >= remainingAmount) {
+        $.clearingHouse.addUserBalance(user, remainingAmount);
+        $.escrowBalances[epoch][user] = escrowBalance - remainingAmount;
+      }
     }
   }
 
@@ -354,8 +363,8 @@ contract SuperVolHourly is
 
     if (order.overPrice + order.underPrice != 100) {
       winPosition = WinPosition.Invalid;
-      _releaseEscrow(order.overUser, order.epoch);
-      _releaseEscrow(order.underUser, order.epoch);
+      _releaseEscrow(order.overUser, order.epoch, order.overPrice * order.unit * PRICE_UNIT);
+      _releaseEscrow(order.underUser, order.epoch, order.underPrice * order.unit * PRICE_UNIT);
     } else if (isOverWin) {
       winPosition = WinPosition.Over;
       winAmount = order.underPrice * order.unit * PRICE_UNIT;
@@ -369,8 +378,8 @@ contract SuperVolHourly is
     } else {
       // Tie
       winPosition = WinPosition.Tie;
-      _releaseEscrow(order.overUser, order.epoch);
-      _releaseEscrow(order.underUser, order.epoch);
+      _releaseEscrow(order.overUser, order.epoch, order.overPrice * order.unit * PRICE_UNIT);
+      _releaseEscrow(order.underUser, order.epoch, order.underPrice * order.unit * PRICE_UNIT);
     }
 
     $.settlementResults[order.idx] = SettlementResult({
@@ -405,9 +414,16 @@ contract SuperVolHourly is
     // Add fee to treasury
     $.clearingHouse.addTreasuryAmount(fee);
 
-    // Clear escrow with epoch
-    _releaseEscrow(winner, order.epoch);
-    _releaseEscrow(loser, order.epoch);
+    // Clear escrow with specific amounts
+    uint256 winnerEscrowAmount = order.overUser == winner
+      ? order.overPrice * order.unit * PRICE_UNIT
+      : order.underPrice * order.unit * PRICE_UNIT;
+    uint256 loserEscrowAmount = order.overUser == loser
+      ? order.overPrice * order.unit * PRICE_UNIT
+      : order.underPrice * order.unit * PRICE_UNIT;
+
+    _releaseEscrow(winner, order.epoch, winnerEscrowAmount);
+    _releaseEscrow(loser, order.epoch, loserEscrowAmount);
 
     // Emit events
     _emitSettlement(
@@ -1017,8 +1033,8 @@ contract SuperVolHourly is
     for (uint i = 0; i < orders.length; i++) {
       FilledOrder storage order = orders[i];
       if (!order.isSettled) {
-        _releaseEscrow(order.overUser, epoch);
-        _releaseEscrow(order.underUser, epoch);
+        _releaseEscrow(order.overUser, order.epoch, order.overPrice * order.unit * PRICE_UNIT);
+        _releaseEscrow(order.underUser, order.epoch, order.underPrice * order.unit * PRICE_UNIT);
         order.isSettled = true;
 
         // Record settlement result as Invalid
