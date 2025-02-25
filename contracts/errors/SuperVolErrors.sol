@@ -15,4 +15,5 @@ interface ISuperVolErrors is ICommonErrors {
   error InvalidEpoch();
   error InvalidIndex();
   error PriceLengthMismatch();
+  error InsufficientBalance(address user, uint256 available, uint256 required);
 }
