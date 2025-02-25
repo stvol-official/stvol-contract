@@ -33,8 +33,8 @@ library SuperVolStorage {
     mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
     mapping(address => bool) migratedHolders;
     uint256 migratedHoldersCount;
-    mapping(uint256 => mapping(address => uint256)) escrowBalances; // epoch => user => amount
-    mapping(uint256 => mapping(address => uint256)) escrowCoupons; // epoch => user => amount
+    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowBalances; // epoch => user => idx => amount
+    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowCoupons; // epoch => user => idx => amount
     /* IMPROTANT: you can add new variables here */
   }
 
