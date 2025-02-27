@@ -822,14 +822,13 @@ contract SuperVolHourly is
     }
   }
 
-  // Add new function for emergency escrow release
-  function releaseEpochEscrow(uint256 epoch) external onlyAdmin {
+  function releaseEpochEscrow(uint256 epoch) external onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     Round storage round = $.rounds[epoch];
     FilledOrder[] storage orders = $.filledOrders[epoch];
 
     for (uint i = 0; i < orders.length; i++) {
-      FilledOrder storage order = orders[i];
+      FilledOrder memory order = orders[i];
       if (!order.isSettled) {
         $.clearingHouse.releaseEscrow(
           order.overUser,
@@ -845,7 +844,6 @@ contract SuperVolHourly is
         );
         order.isSettled = true;
 
-        // Record settlement result as Invalid
         $.settlementResults[order.idx] = SettlementResult({
           idx: order.idx,
           winPosition: WinPosition.Invalid,
@@ -855,6 +853,7 @@ contract SuperVolHourly is
         });
       }
     }
+    round.isSettled = true;
   }
   // @Deprecated
   // function couponBalanceOf(address user) public view returns (uint256) {

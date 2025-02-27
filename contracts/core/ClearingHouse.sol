@@ -841,4 +841,5 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return ($.escrowBalances[epoch][user][idx], $.escrowCoupons[epoch][user][idx]);
   }
+  
 }
