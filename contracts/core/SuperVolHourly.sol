@@ -352,16 +352,15 @@ contract SuperVolHourly is
   function _processWin(address winner, address loser, FilledOrder storage order) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
+    uint256 winnerAmount = order.overUser == winner
+      ? order.overPrice * order.unit * PRICE_UNIT
+      : order.underPrice * order.unit * PRICE_UNIT;
+
+    uint256 loserAmount = order.overUser == loser
+      ? order.overPrice * order.unit * PRICE_UNIT
+      : order.underPrice * order.unit * PRICE_UNIT;
+
     if (winner == loser) {
-      // Get winner and loser amounts
-      uint256 winnerAmount = order.overUser == winner
-        ? order.overPrice * order.unit * PRICE_UNIT
-        : order.underPrice * order.unit * PRICE_UNIT;
-
-      uint256 loserAmount = order.overUser == loser
-        ? order.overPrice * order.unit * PRICE_UNIT
-        : order.underPrice * order.unit * PRICE_UNIT;
-
       // Transfer loser's escrow to winner (with fee handling)
       $.clearingHouse.settleEscrowWithFee(
         loser,
@@ -387,33 +386,25 @@ contract SuperVolHourly is
       return;
     }
 
-    uint256 winnerEscrowAmount = order.overUser == winner
-      ? order.overPrice * order.unit * PRICE_UNIT
-      : order.underPrice * order.unit * PRICE_UNIT;
-
-    uint256 loserEscrowAmount = order.overUser == loser
-      ? order.overPrice * order.unit * PRICE_UNIT
-      : order.underPrice * order.unit * PRICE_UNIT;
-
-    // 2. Transfer loser's escrow to winner (with fee handling)
+    // Transfer loser's escrow to winner (with fee handling)
     $.clearingHouse.settleEscrowWithFee(
       loser,
       winner,
       order.epoch,
-      loserEscrowAmount,
+      loserAmount,
       order.idx,
       $.commissionfee
     );
 
-    // 3. Return winner's original escrow (no fee)
-    $.clearingHouse.releaseEscrow(winner, order.epoch, order.idx, winnerEscrowAmount);
+    // Return winner's original escrow (no fee)
+    $.clearingHouse.releaseEscrow(winner, order.epoch, order.idx, winnerAmount);
 
-    uint256 fee = (loserEscrowAmount * $.commissionfee) / BASE;
+    uint256 fee = (loserAmount * $.commissionfee) / BASE;
     _emitSettlement(
       order.idx,
       order.epoch,
       loser,
-      $.clearingHouse.userBalances(loser) + loserEscrowAmount,
+      $.clearingHouse.userBalances(loser) + loserAmount,
       $.clearingHouse.userBalances(loser),
       $.clearingHouse.escrowCoupons(loser, order.epoch, order.idx)
     );
@@ -421,7 +412,7 @@ contract SuperVolHourly is
       order.idx,
       order.epoch,
       winner,
-      $.clearingHouse.userBalances(winner) - (loserEscrowAmount - fee),
+      $.clearingHouse.userBalances(winner) - (loserAmount - fee),
       $.clearingHouse.userBalances(winner),
       0
     );
