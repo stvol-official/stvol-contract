@@ -832,8 +832,13 @@ contract ClearingHouse is
       $.treasuryAmount += fee;
     }
   }
-  function escrowCoupons(address user, uint256 epoch, uint256 idx) external view returns (uint256) {
+
+  function escrowBalances(
+    uint256 epoch,
+    address user,
+    uint256 idx
+  ) external view returns (uint256, uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    return $.escrowCoupons[epoch][user][idx];
+    return ($.escrowBalances[epoch][user][idx], $.escrowCoupons[epoch][user][idx]);
   }
 }
