@@ -28,6 +28,8 @@ library ClearingHouseStorage {
     address[] couponHolders;
     uint256 withdrawalFee; // withdrawal fee
     mapping(uint256 => bool) processedBatchIds; // processed batch ids
+    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowBalances; // epoch => user => idx => amount
+    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowCoupons; // epoch => user => idx => amount
     /* IMPROTANT: you can add new variables here */
   }
 
