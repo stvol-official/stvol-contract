@@ -369,7 +369,7 @@ contract SuperVolHourly is
         order.epoch,
         loserAmount,
         order.idx,
-        (loserAmount * $.commissionfee) / BASE // fee
+        $.commissionfee
       );
 
       // Return winner's original escrow (no fee)
@@ -395,7 +395,6 @@ contract SuperVolHourly is
       ? order.overPrice * order.unit * PRICE_UNIT
       : order.underPrice * order.unit * PRICE_UNIT;
 
-    uint256 fee = (loserEscrowAmount * $.commissionfee) / BASE;
     // 2. Transfer loser's escrow to winner (with fee handling)
     $.clearingHouse.settleEscrowWithFee(
       loser,
@@ -403,12 +402,13 @@ contract SuperVolHourly is
       order.epoch,
       loserEscrowAmount,
       order.idx,
-      fee
+      $.commissionfee
     );
 
     // 3. Return winner's original escrow (no fee)
     $.clearingHouse.releaseEscrow(winner, order.epoch, order.idx, winnerEscrowAmount);
 
+    uint256 fee = (loserEscrowAmount * $.commissionfee) / BASE;
     _emitSettlement(
       order.idx,
       order.epoch,
