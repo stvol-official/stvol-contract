@@ -46,6 +46,14 @@ contract ClearingHouse is
     uint256 expirationEpoch,
     uint256 result
   );
+  event LockInEscrow(
+    address indexed user,
+    uint256 indexed epoch,
+    uint256 indexed idx,
+    uint256 totalAmount,
+    uint256 couponAmount,
+    uint256 balanceAmount
+  );
 
   event BatchWithdrawRequested(uint256 indexed batchId, uint256 totalAmount, uint256 requestCount);
   event BatchWithdrawProcessed(
@@ -706,15 +714,12 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     // Try to use coupons first
-    uint256 currentCoupon = couponBalanceOf(user);
-    uint256 escrowFromCoupon = currentCoupon >= amount ? amount : currentCoupon;
+    uint256 availableCouponAmount = couponBalanceOf(user);
+    uint256 escrowFromCoupon = availableCouponAmount >= amount ? amount : availableCouponAmount;
 
     if (escrowFromCoupon > 0) {
-      uint256 unusedAmount = this.useCoupon(user, escrowFromCoupon, epoch);
-      uint256 actuallyUsedCoupon = escrowFromCoupon - unusedAmount;
-      if (actuallyUsedCoupon > 0) {
-        $.escrowCoupons[epoch][user][idx] = actuallyUsedCoupon;
-      }
+      this.useCoupon(user, amount, epoch);
+      $.escrowCoupons[epoch][user][idx] = escrowFromCoupon;
     }
 
     // If coupons weren't enough, check if balance can cover the remaining amount
@@ -731,12 +736,17 @@ contract ClearingHouse is
       string.concat(
         "Order ",
         Strings.toString(idx),
-        ": Set escrow for ",
+        ": Lock in escrow for ",
         Strings.toHexString(user),
-        " amount: ",
-        Strings.toString(amount)
+        " total amount: ",
+        Strings.toString(amount),
+        " coupon: ",
+        Strings.toString(escrowFromCoupon),
+        " balance: ",
+        Strings.toString(remainingAmount)
       )
     );
+    emit LockInEscrow(user, epoch, idx, amount, escrowFromCoupon, remainingAmount);
   }
 
   function releaseFromEscrow(
@@ -759,7 +769,7 @@ contract ClearingHouse is
       address originalIssuer = address(0);
       Coupon[] storage existingCoupons = $.couponBalances[user];
       for (uint256 i = 0; i < existingCoupons.length; i++) {
-        if (existingCoupons[i].expirationEpoch == epoch) {
+        if (existingCoupons[i].expirationEpoch >= epoch) {
           originalIssuer = existingCoupons[i].issuer;
           break;
         }
