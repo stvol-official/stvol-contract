@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 import { IVault } from "../interfaces/IVault.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -646,10 +646,12 @@ contract ClearingHouse is
   ) external nonReentrant onlyOperator returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 remainingAmount = amount;
+
     for (uint i = 0; i < $.couponBalances[user].length && remainingAmount > 0; i++) {
       if ($.couponBalances[user][i].expirationEpoch >= epoch) {
         uint256 availableAmount = $.couponBalances[user][i].amount -
           $.couponBalances[user][i].usedAmount;
+
         if (availableAmount >= remainingAmount) {
           $.couponBalances[user][i].usedAmount += remainingAmount;
           remainingAmount = 0;
@@ -657,10 +659,18 @@ contract ClearingHouse is
           $.couponBalances[user][i].usedAmount += availableAmount;
           remainingAmount -= availableAmount;
         }
+
+        $.couponUsageHistory[user][epoch].push(
+          CouponUsageDetail({
+            amountUsed: amount - remainingAmount,
+            usedAt: block.timestamp,
+            issuer: $.couponBalances[user][i].issuer,
+            expirationEpoch: $.couponBalances[user][i].expirationEpoch
+          })
+        );
       }
     }
     $.usedCouponAmount += amount - remainingAmount;
-
     return remainingAmount;
   }
 
@@ -756,7 +766,6 @@ contract ClearingHouse is
     uint256 amount
   ) external onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    uint256 currentEpoch = _epochAt(block.timestamp);
 
     // Validate total escrowed amount
     uint256 totalEscrowed = $.escrowCoupons[epoch][user][idx] + $.escrowBalances[epoch][user][idx];
@@ -767,15 +776,13 @@ contract ClearingHouse is
     if (couponAmount > 0) {
       // Find original coupon issuer
       address originalIssuer = address(0);
-      Coupon[] storage existingCoupons = $.couponBalances[user];
-      for (uint256 i = 0; i < existingCoupons.length; i++) {
-        if (existingCoupons[i].expirationEpoch >= epoch) {
-          originalIssuer = existingCoupons[i].issuer;
-          break;
-        }
-      }
-      // If original issuer is not found, use operator vault address
-      if (originalIssuer == address(0)) {
+      Coupon[] storage coupons = $.couponBalances[user];
+      CouponUsageDetail[] storage usageDetails = $.couponUsageHistory[user][epoch];
+
+      if (usageDetails.length > 0) {
+        originalIssuer = usageDetails[usageDetails.length - 1].issuer;
+      } else {
+        // If original issuer is not found, use operator vault address
         originalIssuer = $.operatorVaultAddress;
       }
 
@@ -784,15 +791,15 @@ contract ClearingHouse is
         user: user,
         amount: couponAmount,
         usedAmount: 0,
-        expirationEpoch: currentEpoch + 72, // 3 days later
+        expirationEpoch: usageDetails[usageDetails.length - 1].expirationEpoch,
         created: block.timestamp,
         issuer: originalIssuer
       });
 
-      if (existingCoupons.length == 0) {
+      if (coupons.length == 0) {
         $.couponHolders.push(user);
       }
-      existingCoupons.push(newCoupon);
+      coupons.push(newCoupon);
       $.escrowCoupons[epoch][user][idx] = 0;
     }
 

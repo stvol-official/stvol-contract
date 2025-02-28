@@ -122,3 +122,10 @@ struct BatchWithdrawRequest {
   uint256 amount;
   uint256 requestId;
 }
+
+struct CouponUsageDetail {
+  uint256 amountUsed;
+  uint256 usedAt;
+  address issuer;
+  uint256 expirationEpoch;
+}

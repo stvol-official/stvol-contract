@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interfaces/IVault.sol";
-import { WithdrawalRequest, Coupon, ForceWithdrawalRequest } from "../types/Types.sol";
+import { WithdrawalRequest, Coupon, ForceWithdrawalRequest, CouponUsageDetail } from "../types/Types.sol";
 
 library ClearingHouseStorage {
   // keccak256(abi.encode(uint256(keccak256("io.supervol.storage.clearinghouse")) - 1)) & ~bytes32(uint256(0xff));
@@ -30,6 +30,7 @@ library ClearingHouseStorage {
     mapping(uint256 => bool) processedBatchIds; // processed batch ids
     mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowBalances; // epoch => user => idx => amount
     mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowCoupons; // epoch => user => idx => amount
+    mapping(address => mapping(uint256 => CouponUsageDetail[])) couponUsageHistory; // user => epoch => CouponUsageDetail[]
     /* IMPROTANT: you can add new variables here */
   }
 
