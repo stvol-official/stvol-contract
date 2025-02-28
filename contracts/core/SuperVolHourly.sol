@@ -215,9 +215,9 @@ contract SuperVolHourly is
       uint256 overAmount = order.overPrice * order.unit * PRICE_UNIT;
       uint256 underAmount = order.underPrice * order.unit * PRICE_UNIT;
 
-      // Set escrow for both parties
-      $.clearingHouse.setEscrow(order.overUser, overAmount, order.epoch, order.idx);
-      $.clearingHouse.setEscrow(order.underUser, underAmount, order.epoch, order.idx);
+      // Lock in escrow for both parties
+      $.clearingHouse.lockInEscrow(order.overUser, overAmount, order.epoch, order.idx);
+      $.clearingHouse.lockInEscrow(order.underUser, underAmount, order.epoch, order.idx);
 
       FilledOrder[] storage orders = $.filledOrders[order.epoch];
       orders.push(order);
@@ -248,13 +248,13 @@ contract SuperVolHourly is
 
     if (order.overPrice + order.underPrice != 100) {
       winPosition = WinPosition.Invalid;
-      $.clearingHouse.releaseEscrow(
+      $.clearingHouse.releaseFromEscrow(
         order.overUser,
         order.epoch,
         order.idx,
         order.overPrice * order.unit * PRICE_UNIT
       );
-      $.clearingHouse.releaseEscrow(
+      $.clearingHouse.releaseFromEscrow(
         order.underUser,
         order.epoch,
         order.idx,
@@ -307,13 +307,13 @@ contract SuperVolHourly is
     } else {
       // Tie
       winPosition = WinPosition.Tie;
-      $.clearingHouse.releaseEscrow(
+      $.clearingHouse.releaseFromEscrow(
         order.overUser,
         order.epoch,
         order.idx,
         order.overPrice * order.unit * PRICE_UNIT
       );
-      $.clearingHouse.releaseEscrow(
+      $.clearingHouse.releaseFromEscrow(
         order.underUser,
         order.epoch,
         order.idx,
@@ -372,7 +372,7 @@ contract SuperVolHourly is
       );
 
       // Return winner's original escrow (no fee)
-      $.clearingHouse.releaseEscrow(winner, order.epoch, order.idx, winnerAmount);
+      $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount);
 
       // Emit settlement event
       _emitSettlement(
@@ -397,7 +397,7 @@ contract SuperVolHourly is
     );
 
     // Return winner's original escrow (no fee)
-    $.clearingHouse.releaseEscrow(winner, order.epoch, order.idx, winnerAmount);
+    $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount);
 
     uint256 fee = (loserAmount * $.commissionfee) / BASE;
     _emitSettlement(
@@ -821,13 +821,13 @@ contract SuperVolHourly is
     for (uint i = 0; i < orders.length; i++) {
       FilledOrder memory order = orders[i];
       if (!order.isSettled) {
-        $.clearingHouse.releaseEscrow(
+        $.clearingHouse.releaseFromEscrow(
           order.overUser,
           order.epoch,
           order.overPrice * order.unit * PRICE_UNIT,
           0
         );
-        $.clearingHouse.releaseEscrow(
+        $.clearingHouse.releaseFromEscrow(
           order.underUser,
           order.epoch,
           order.underPrice * order.unit * PRICE_UNIT,

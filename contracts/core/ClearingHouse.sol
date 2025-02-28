@@ -697,7 +697,7 @@ contract ClearingHouse is
     }
   }
 
-  function setEscrow(
+  function lockInEscrow(
     address user,
     uint256 amount,
     uint256 epoch,
@@ -739,7 +739,7 @@ contract ClearingHouse is
     );
   }
 
-  function releaseEscrow(
+  function releaseFromEscrow(
     address user,
     uint256 epoch,
     uint256 idx,
@@ -841,5 +841,4 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return ($.escrowBalances[epoch][user][idx], $.escrowCoupons[epoch][user][idx]);
   }
-  
 }
