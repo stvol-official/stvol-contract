@@ -46,7 +46,13 @@ interface IClearingHouse {
   function couponBalanceOf(address user) external view returns (uint256);
   function depositCouponTo(address user, uint256 amount, uint256 expirationEpoch) external;
   function lockInEscrow(address user, uint256 amount, uint256 epoch, uint256 idx) external;
-  function releaseFromEscrow(address user, uint256 epoch, uint256 idx, uint256 amount) external;
+  function releaseFromEscrow(
+    address user,
+    uint256 epoch,
+    uint256 idx,
+    uint256 amount,
+    uint256 fee
+  ) external;
   function settleEscrowWithFee(
     address from,
     address to,

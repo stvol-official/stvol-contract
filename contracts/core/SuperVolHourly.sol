@@ -248,34 +248,46 @@ contract SuperVolHourly is
 
     if (order.overPrice + order.underPrice != 100) {
       winPosition = WinPosition.Invalid;
-      $.clearingHouse.releaseFromEscrow(
-        order.overUser,
-        order.epoch,
-        order.idx,
-        order.overPrice * order.unit * PRICE_UNIT
-      );
-      $.clearingHouse.releaseFromEscrow(
-        order.underUser,
-        order.epoch,
-        order.idx,
-        order.underPrice * order.unit * PRICE_UNIT
-      );
-      _emitSettlement(
-        order.idx,
-        order.epoch,
-        order.underUser,
-        $.clearingHouse.userBalances(order.underUser),
-        $.clearingHouse.userBalances(order.underUser),
-        0
-      );
-      _emitSettlement(
-        order.idx,
-        order.epoch,
-        order.overUser,
-        $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.userBalances(order.overUser),
-        0
-      );
+      if (order.overUser != order.underUser) {
+        $.clearingHouse.releaseFromEscrow(
+          order.overUser,
+          order.epoch,
+          order.idx,
+          order.overPrice * order.unit * PRICE_UNIT,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          order.underUser,
+          order.epoch,
+          order.idx,
+          order.underPrice * order.unit * PRICE_UNIT,
+          0
+        );
+        _emitSettlement(
+          order.idx,
+          order.epoch,
+          order.underUser,
+          $.clearingHouse.userBalances(order.underUser),
+          $.clearingHouse.userBalances(order.underUser),
+          0
+        );
+        _emitSettlement(
+          order.idx,
+          order.epoch,
+          order.overUser,
+          $.clearingHouse.userBalances(order.overUser),
+          $.clearingHouse.userBalances(order.overUser),
+          0
+        );
+      } else {
+        $.clearingHouse.releaseFromEscrow(
+          order.overUser,
+          order.epoch,
+          order.idx,
+          100 * order.unit * PRICE_UNIT,
+          0
+        );
+      }
     } else if (order.overUser == order.underUser) {
       winAmount =
         (
@@ -292,64 +304,108 @@ contract SuperVolHourly is
         : isUnderWin
           ? WinPosition.Under
           : WinPosition.Tie;
-      _processWin(order.overUser, order.underUser, order);
-      collectedFee = (winAmount * $.commissionfee) / BASE;
+
+      uint256 fee = (winAmount * $.commissionfee) / BASE;
+      // Return winner's original escrow (no fee)
+      $.clearingHouse.releaseFromEscrow(
+        order.overUser,
+        order.epoch,
+        order.idx,
+        100 * order.unit * PRICE_UNIT,
+        fee
+      );
+
+      // Emit settlement event
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        order.overUser,
+        $.clearingHouse.userBalances(order.overUser) + fee,
+        $.clearingHouse.userBalances(order.overUser),
+        $.clearingHouse.escrowCoupons(order.overUser, order.epoch, order.idx)
+      );
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx,
+        winPosition: winPosition,
+        winAmount: winAmount,
+        feeRate: $.commissionfee,
+        fee: fee
+      });
     } else if (isOverWin) {
       winPosition = WinPosition.Over;
-      winAmount = order.underPrice * order.unit * PRICE_UNIT;
-      _processWin(order.overUser, order.underUser, order);
-      collectedFee = (winAmount * $.commissionfee) / BASE;
+      collectedFee += _processWin(order.overUser, order.underUser, order, winPosition);
     } else if (isUnderWin) {
       winPosition = WinPosition.Under;
-      winAmount = order.overPrice * order.unit * PRICE_UNIT;
-      _processWin(order.underUser, order.overUser, order);
-      collectedFee = (winAmount * $.commissionfee) / BASE;
+      collectedFee += _processWin(order.underUser, order.overUser, order, winPosition);
     } else {
-      // Tie
-      winPosition = WinPosition.Tie;
-      $.clearingHouse.releaseFromEscrow(
-        order.overUser,
-        order.epoch,
-        order.idx,
-        order.overPrice * order.unit * PRICE_UNIT
-      );
-      $.clearingHouse.releaseFromEscrow(
-        order.underUser,
-        order.epoch,
-        order.idx,
-        order.underPrice * order.unit * PRICE_UNIT
-      );
-      _emitSettlement(
-        order.idx,
-        order.epoch,
-        order.underUser,
-        $.clearingHouse.userBalances(order.underUser),
-        $.clearingHouse.userBalances(order.underUser),
-        0
-      );
-      _emitSettlement(
-        order.idx,
-        order.epoch,
-        order.overUser,
-        $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.userBalances(order.overUser),
-        0
-      );
+      if (order.overUser != order.underUser) {
+        // Tie
+        $.clearingHouse.releaseFromEscrow(
+          order.overUser,
+          order.epoch,
+          order.idx,
+          order.overPrice * order.unit * PRICE_UNIT,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          order.underUser,
+          order.epoch,
+          order.idx,
+          order.underPrice * order.unit * PRICE_UNIT,
+          0
+        );
+        _emitSettlement(
+          order.idx,
+          order.epoch,
+          order.underUser,
+          $.clearingHouse.userBalances(order.underUser),
+          $.clearingHouse.userBalances(order.underUser),
+          0
+        );
+        _emitSettlement(
+          order.idx,
+          order.epoch,
+          order.overUser,
+          $.clearingHouse.userBalances(order.overUser),
+          $.clearingHouse.userBalances(order.overUser),
+          0
+        );
+      } else {
+        $.clearingHouse.releaseFromEscrow(
+          order.overUser,
+          order.epoch,
+          order.idx,
+          100 * order.unit * PRICE_UNIT,
+          0
+        );
+        _emitSettlement(
+          order.idx,
+          order.epoch,
+          order.overUser,
+          $.clearingHouse.userBalances(order.overUser),
+          $.clearingHouse.userBalances(order.overUser),
+          0
+        );
+      }
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx,
+        winPosition: WinPosition.Tie,
+        winAmount: 0,
+        feeRate: $.commissionfee,
+        fee: 0
+      });
     }
-
-    $.settlementResults[order.idx] = SettlementResult({
-      idx: order.idx,
-      winPosition: winPosition,
-      winAmount: winAmount,
-      feeRate: $.commissionfee,
-      fee: collectedFee
-    });
 
     order.isSettled = true;
     return collectedFee;
   }
 
-  function _processWin(address winner, address loser, FilledOrder storage order) internal {
+  function _processWin(
+    address winner,
+    address loser,
+    FilledOrder storage order,
+    WinPosition winPosition
+  ) internal returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
     uint256 winnerAmount = order.overUser == winner
@@ -359,63 +415,64 @@ contract SuperVolHourly is
     uint256 loserAmount = order.overUser == loser
       ? order.overPrice * order.unit * PRICE_UNIT
       : order.underPrice * order.unit * PRICE_UNIT;
+    uint256 fee = (loserAmount * $.commissionfee) / BASE;
 
-    if (winner == loser) {
-      // Transfer loser's escrow to winner (with fee handling)
-      $.clearingHouse.settleEscrowWithFee(
-        loser,
-        winner,
-        order.epoch,
-        loserAmount,
-        order.idx,
-        $.commissionfee
-      );
-
+    // Transfer loser's escrow to winner (with fee handling)
+    try
+      $.clearingHouse.settleEscrowWithFee(loser, winner, order.epoch, loserAmount, order.idx, fee)
+    {
       // Return winner's original escrow (no fee)
-      $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount);
+      $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount, 0);
 
-      // Emit settlement event
+      _emitSettlement(
+        order.idx,
+        order.epoch,
+        loser,
+        $.clearingHouse.userBalances(loser) + loserAmount,
+        $.clearingHouse.userBalances(loser),
+        $.clearingHouse.escrowCoupons(loser, order.epoch, order.idx)
+      );
       _emitSettlement(
         order.idx,
         order.epoch,
         winner,
+        $.clearingHouse.userBalances(winner) - (loserAmount - fee),
         $.clearingHouse.userBalances(winner),
-        $.clearingHouse.userBalances(winner),
-        $.clearingHouse.escrowCoupons(winner, order.epoch, order.idx)
+        0
       );
-      return;
+      $.settlementResults[order.idx] = SettlementResult({
+        idx: order.idx,
+        winPosition: winPosition,
+        winAmount: loserAmount,
+        feeRate: $.commissionfee,
+        fee: fee
+      });
+      return fee;
+    } catch {
+      emit DebugLog(
+        string.concat(
+          "settleEscrowWithFee failed | ",
+          "Loser: ",
+          Strings.toString(uint256(uint160(loser))),
+          " | ",
+          "Winner: ",
+          Strings.toString(uint256(uint160(winner))),
+          " | ",
+          "Epoch: ",
+          Strings.toString(order.epoch),
+          " | ",
+          "Loser Amount: ",
+          Strings.toString(loserAmount),
+          " | ",
+          "Order Index: ",
+          Strings.toString(order.idx),
+          " | ",
+          "Fee: ",
+          Strings.toString(fee)
+        )
+      );
+      revert("settleEscrowWithFee failed");
     }
-
-    // Transfer loser's escrow to winner (with fee handling)
-    $.clearingHouse.settleEscrowWithFee(
-      loser,
-      winner,
-      order.epoch,
-      loserAmount,
-      order.idx,
-      $.commissionfee
-    );
-
-    // Return winner's original escrow (no fee)
-    $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount);
-
-    uint256 fee = (loserAmount * $.commissionfee) / BASE;
-    _emitSettlement(
-      order.idx,
-      order.epoch,
-      loser,
-      $.clearingHouse.userBalances(loser) + loserAmount,
-      $.clearingHouse.userBalances(loser),
-      $.clearingHouse.escrowCoupons(loser, order.epoch, order.idx)
-    );
-    _emitSettlement(
-      order.idx,
-      order.epoch,
-      winner,
-      $.clearingHouse.userBalances(winner) - (loserAmount - fee),
-      $.clearingHouse.userBalances(winner),
-      0
-    );
   }
 
   function pause() external whenNotPaused onlyAdmin {
@@ -821,31 +878,44 @@ contract SuperVolHourly is
     for (uint i = 0; i < orders.length; i++) {
       FilledOrder memory order = orders[i];
       if (!order.isSettled) {
-        $.clearingHouse.releaseFromEscrow(
-          order.overUser,
-          order.epoch,
-          order.overPrice * order.unit * PRICE_UNIT,
-          0
-        );
-        $.clearingHouse.releaseFromEscrow(
-          order.underUser,
-          order.epoch,
-          order.underPrice * order.unit * PRICE_UNIT,
-          0
-        );
-        order.isSettled = true;
+        if (order.overUser == order.underUser) {
+          $.clearingHouse.releaseFromEscrow(
+            order.overUser,
+            order.epoch,
+            order.idx,
+            100 * order.unit * PRICE_UNIT,
+            0
+          );
+        } else {
+          $.clearingHouse.releaseFromEscrow(
+            order.overUser,
+            order.epoch,
+            order.idx,
+            order.overPrice * order.unit * PRICE_UNIT,
+            0
+          );
+          $.clearingHouse.releaseFromEscrow(
+            order.underUser,
+            order.epoch,
+            order.idx,
+            order.underPrice * order.unit * PRICE_UNIT,
+            0
+          );
+          order.isSettled = true;
 
-        $.settlementResults[order.idx] = SettlementResult({
-          idx: order.idx,
-          winPosition: WinPosition.Invalid,
-          winAmount: 0,
-          feeRate: 0,
-          fee: 0
-        });
+          $.settlementResults[order.idx] = SettlementResult({
+            idx: order.idx,
+            winPosition: WinPosition.Invalid,
+            winAmount: 0,
+            feeRate: 0,
+            fee: 0
+          });
+        }
       }
     }
     round.isSettled = true;
   }
+
   // @Deprecated
   // function couponBalanceOf(address user) public view returns (uint256) {
   //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
