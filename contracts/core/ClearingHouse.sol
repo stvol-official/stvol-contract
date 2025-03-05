@@ -644,6 +644,10 @@ contract ClearingHouse is
     uint256 amount,
     uint256 epoch
   ) external nonReentrant onlyOperator returns (uint256) {
+    return _useCoupon(user, amount, epoch);
+  }
+
+  function _useCoupon(address user, uint256 amount, uint256 epoch) internal returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     uint256 remainingAmount = amount;
 
@@ -723,17 +727,9 @@ contract ClearingHouse is
   ) external onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
-    // Try to use coupons first
-    uint256 availableCouponAmount = couponBalanceOf(user);
-    uint256 escrowFromCoupon = availableCouponAmount >= amount ? amount : availableCouponAmount;
+    uint256 remainingAmount = _useCoupon(user, amount, epoch);
+    $.escrowCoupons[epoch][user][idx] += amount - remainingAmount;
 
-    if (escrowFromCoupon > 0) {
-      this.useCoupon(user, amount, epoch);
-      $.escrowCoupons[epoch][user][idx] += escrowFromCoupon;
-    }
-
-    // If coupons weren't enough, check if balance can cover the remaining amount
-    uint256 remainingAmount = amount - escrowFromCoupon;
     if (remainingAmount > 0) {
       if ($.userBalances[user] < remainingAmount) {
         revert InsufficientBalance();
@@ -751,12 +747,12 @@ contract ClearingHouse is
         " total amount: ",
         Strings.toString(amount),
         " coupon: ",
-        Strings.toString(escrowFromCoupon),
+        Strings.toString(amount - remainingAmount),
         " balance: ",
         Strings.toString(remainingAmount)
       )
     );
-    emit LockInEscrow(user, epoch, idx, amount, escrowFromCoupon, remainingAmount);
+    emit LockInEscrow(user, epoch, idx, amount, amount - remainingAmount, remainingAmount);
   }
 
   function releaseFromEscrow(

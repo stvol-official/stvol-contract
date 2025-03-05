@@ -61,5 +61,5 @@ interface IClearingHouse {
     uint256 idx,
     uint256 feeRate
   ) external;
-  function escrowCoupons(address user, uint256 epoch, uint256 idx) external view returns (uint256);
+  function escrowCoupons(uint256 epoch, address user, uint256 idx) external view returns (uint256);
 }

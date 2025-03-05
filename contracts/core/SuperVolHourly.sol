@@ -322,7 +322,7 @@ contract SuperVolHourly is
         order.overUser,
         $.clearingHouse.userBalances(order.overUser) + fee,
         $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.escrowCoupons(order.overUser, order.epoch, order.idx)
+        $.clearingHouse.escrowCoupons(order.epoch, order.overUser, order.idx)
       );
       $.settlementResults[order.idx] = SettlementResult({
         idx: order.idx,
@@ -418,61 +418,34 @@ contract SuperVolHourly is
     uint256 fee = (loserAmount * $.commissionfee) / BASE;
 
     // Transfer loser's escrow to winner (with fee handling)
-    try
-      $.clearingHouse.settleEscrowWithFee(loser, winner, order.epoch, loserAmount, order.idx, fee)
-    {
-      // Return winner's original escrow (no fee)
-      $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount, 0);
+    $.clearingHouse.settleEscrowWithFee(loser, winner, order.epoch, loserAmount, order.idx, fee);
+    // Return winner's original escrow (no fee)
+    $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount, 0);
 
-      _emitSettlement(
-        order.idx,
-        order.epoch,
-        loser,
-        $.clearingHouse.userBalances(loser) + loserAmount,
-        $.clearingHouse.userBalances(loser),
-        $.clearingHouse.escrowCoupons(loser, order.epoch, order.idx)
-      );
-      _emitSettlement(
-        order.idx,
-        order.epoch,
-        winner,
-        $.clearingHouse.userBalances(winner) - (loserAmount - fee),
-        $.clearingHouse.userBalances(winner),
-        0
-      );
-      $.settlementResults[order.idx] = SettlementResult({
-        idx: order.idx,
-        winPosition: winPosition,
-        winAmount: loserAmount,
-        feeRate: $.commissionfee,
-        fee: fee
-      });
-      return fee;
-    } catch {
-      emit DebugLog(
-        string.concat(
-          "settleEscrowWithFee failed | ",
-          "Loser: ",
-          Strings.toString(uint256(uint160(loser))),
-          " | ",
-          "Winner: ",
-          Strings.toString(uint256(uint160(winner))),
-          " | ",
-          "Epoch: ",
-          Strings.toString(order.epoch),
-          " | ",
-          "Loser Amount: ",
-          Strings.toString(loserAmount),
-          " | ",
-          "Order Index: ",
-          Strings.toString(order.idx),
-          " | ",
-          "Fee: ",
-          Strings.toString(fee)
-        )
-      );
-      revert("settleEscrowWithFee failed");
-    }
+    _emitSettlement(
+      order.idx,
+      order.epoch,
+      loser,
+      $.clearingHouse.userBalances(loser) + loserAmount,
+      $.clearingHouse.userBalances(loser),
+      $.clearingHouse.escrowCoupons(order.epoch, loser, order.idx)
+    );
+    _emitSettlement(
+      order.idx,
+      order.epoch,
+      winner,
+      $.clearingHouse.userBalances(winner) - (loserAmount - fee),
+      $.clearingHouse.userBalances(winner),
+      0
+    );
+    $.settlementResults[order.idx] = SettlementResult({
+      idx: order.idx,
+      winPosition: winPosition,
+      winAmount: loserAmount,
+      feeRate: $.commissionfee,
+      fee: fee
+    });
+    return fee;
   }
 
   function pause() external whenNotPaused onlyAdmin {
