@@ -230,14 +230,16 @@ contract SuperVolHourly is
         order.overUser,
         overAmount,
         order.epoch,
-        order.idx
+        order.idx,
+        true
       );
       $.clearingHouse.lockInEscrow(
         address(this),
         order.underUser,
         underAmount,
         order.epoch,
-        order.idx
+        order.idx,
+        true
       );
 
       FilledOrder[] storage orders = $.filledOrders[order.epoch];
