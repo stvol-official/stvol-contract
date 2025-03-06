@@ -725,11 +725,12 @@ contract ClearingHouse is
     address user,
     uint256 amount,
     uint256 epoch,
-    uint256 idx
+    uint256 idx,
+    bool applyCoupon
   ) external onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
-    uint256 remainingAmount = _useCoupon(user, amount, epoch);
+    uint256 remainingAmount = applyCoupon ? _useCoupon(user, amount, epoch) : amount;
     $.productEscrowCoupons[product][epoch][user][idx] += amount - remainingAmount;
 
     if (remainingAmount > 0) {

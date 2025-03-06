@@ -50,7 +50,8 @@ interface IClearingHouse {
     address user,
     uint256 amount,
     uint256 epoch,
-    uint256 idx
+    uint256 idx,
+    bool applyCoupon
   ) external;
   function releaseFromEscrow(
     address product,
