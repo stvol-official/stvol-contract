@@ -225,8 +225,20 @@ contract SuperVolHourly is
       uint256 underAmount = order.underPrice * order.unit * PRICE_UNIT;
 
       // Lock in escrow for both parties
-      $.clearingHouse.lockInEscrow(order.overUser, overAmount, order.epoch, order.idx);
-      $.clearingHouse.lockInEscrow(order.underUser, underAmount, order.epoch, order.idx);
+      $.clearingHouse.lockInEscrow(
+        address(this),
+        order.overUser,
+        overAmount,
+        order.epoch,
+        order.idx
+      );
+      $.clearingHouse.lockInEscrow(
+        address(this),
+        order.underUser,
+        underAmount,
+        order.epoch,
+        order.idx
+      );
 
       FilledOrder[] storage orders = $.filledOrders[order.epoch];
       orders.push(order);
@@ -259,6 +271,7 @@ contract SuperVolHourly is
       winPosition = WinPosition.Invalid;
       if (order.overUser != order.underUser) {
         $.clearingHouse.releaseFromEscrow(
+          address(this),
           order.overUser,
           order.epoch,
           order.idx,
@@ -266,6 +279,7 @@ contract SuperVolHourly is
           0
         );
         $.clearingHouse.releaseFromEscrow(
+          address(this),
           order.underUser,
           order.epoch,
           order.idx,
@@ -290,6 +304,7 @@ contract SuperVolHourly is
         );
       } else {
         $.clearingHouse.releaseFromEscrow(
+          address(this),
           order.overUser,
           order.epoch,
           order.idx,
@@ -317,6 +332,7 @@ contract SuperVolHourly is
       uint256 fee = (winAmount * $.commissionfee) / BASE;
       // Return winner's original escrow (no fee)
       $.clearingHouse.releaseFromEscrow(
+        address(this),
         order.overUser,
         order.epoch,
         order.idx,
@@ -331,7 +347,7 @@ contract SuperVolHourly is
         order.overUser,
         $.clearingHouse.userBalances(order.overUser) + fee,
         $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.escrowCoupons(order.epoch, order.overUser, order.idx)
+        $.clearingHouse.escrowCoupons(address(this), order.epoch, order.overUser, order.idx)
       );
       $.settlementResults[order.idx] = SettlementResult({
         idx: order.idx,
@@ -350,6 +366,7 @@ contract SuperVolHourly is
       if (order.overUser != order.underUser) {
         // Tie
         $.clearingHouse.releaseFromEscrow(
+          address(this),
           order.overUser,
           order.epoch,
           order.idx,
@@ -357,6 +374,7 @@ contract SuperVolHourly is
           0
         );
         $.clearingHouse.releaseFromEscrow(
+          address(this),
           order.underUser,
           order.epoch,
           order.idx,
@@ -381,6 +399,7 @@ contract SuperVolHourly is
         );
       } else {
         $.clearingHouse.releaseFromEscrow(
+          address(this),
           order.overUser,
           order.epoch,
           order.idx,
@@ -427,9 +446,24 @@ contract SuperVolHourly is
     uint256 fee = (loserAmount * $.commissionfee) / BASE;
 
     // Transfer loser's escrow to winner (with fee handling)
-    $.clearingHouse.settleEscrowWithFee(loser, winner, order.epoch, loserAmount, order.idx, fee);
+    $.clearingHouse.settleEscrowWithFee(
+      address(this),
+      loser,
+      winner,
+      order.epoch,
+      loserAmount,
+      order.idx,
+      fee
+    );
     // Return winner's original escrow (no fee)
-    $.clearingHouse.releaseFromEscrow(winner, order.epoch, order.idx, winnerAmount, 0);
+    $.clearingHouse.releaseFromEscrow(
+      address(this),
+      winner,
+      order.epoch,
+      order.idx,
+      winnerAmount,
+      0
+    );
 
     _emitSettlement(
       order.idx,
@@ -437,7 +471,7 @@ contract SuperVolHourly is
       loser,
       $.clearingHouse.userBalances(loser) + loserAmount,
       $.clearingHouse.userBalances(loser),
-      $.clearingHouse.escrowCoupons(order.epoch, loser, order.idx)
+      $.clearingHouse.escrowCoupons(address(this), order.epoch, loser, order.idx)
     );
     _emitSettlement(
       order.idx,
@@ -861,6 +895,7 @@ contract SuperVolHourly is
       if (!order.isSettled) {
         if (order.overUser == order.underUser) {
           $.clearingHouse.releaseFromEscrow(
+            address(this),
             order.overUser,
             order.epoch,
             order.idx,
@@ -869,6 +904,7 @@ contract SuperVolHourly is
           );
         } else {
           $.clearingHouse.releaseFromEscrow(
+            address(this),
             order.overUser,
             order.epoch,
             order.idx,
@@ -876,6 +912,7 @@ contract SuperVolHourly is
             0
           );
           $.clearingHouse.releaseFromEscrow(
+            address(this),
             order.underUser,
             order.epoch,
             order.idx,
