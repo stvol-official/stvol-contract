@@ -7,8 +7,8 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["soneium_testnet", "soneium_mainnet"];
-// const DEPLOYED_PROXY = "0x46BdD9f022413a0c7CAD405C2835347D2dAFf7c7"; // for testnet
-const DEPLOYED_PROXY = "0x34834F208F149e0269394324c3f19e06dF2ca9cB"; // for mainnet
+const DEPLOYED_PROXY = "0x46BdD9f022413a0c7CAD405C2835347D2dAFf7c7"; // for testnet
+// const DEPLOYED_PROXY = "0x34834F208F149e0269394324c3f19e06dF2ca9cB"; // for mainnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -43,7 +43,7 @@ const upgrade = async () => {
     // Deploy contracts.
     const SuperVolFactory = await ethers.getContractFactory(contractName);
 
-    // await upgrades.forceImport(PROXY, SuperVolFactory, { kind: "uups" });
+    await upgrades.forceImport(PROXY, SuperVolFactory, { kind: "uups" });
     let superVolContractAddress;
     if (isSafeOwner === "N") {
       const superVolContract = await upgrades.upgradeProxy(PROXY, SuperVolFactory, {
