@@ -45,8 +45,15 @@ interface IClearingHouse {
   function useCoupon(address user, uint256 amount, uint256 epoch) external returns (uint256);
   function couponBalanceOf(address user) external view returns (uint256);
   function depositCouponTo(address user, uint256 amount, uint256 expirationEpoch) external;
-  function lockInEscrow(address user, uint256 amount, uint256 epoch, uint256 idx) external;
+  function lockInEscrow(
+    address product,
+    address user,
+    uint256 amount,
+    uint256 epoch,
+    uint256 idx
+  ) external;
   function releaseFromEscrow(
+    address product,
     address user,
     uint256 epoch,
     uint256 idx,
@@ -54,12 +61,18 @@ interface IClearingHouse {
     uint256 fee
   ) external;
   function settleEscrowWithFee(
+    address product,
     address from,
     address to,
     uint256 epoch,
     uint256 amount,
     uint256 idx,
-    uint256 feeRate
+    uint256 fee
   ) external;
-  function escrowCoupons(uint256 epoch, address user, uint256 idx) external view returns (uint256);
+  function escrowCoupons(
+    address product,
+    uint256 epoch,
+    address user,
+    uint256 idx
+  ) external view returns (uint256);
 }
