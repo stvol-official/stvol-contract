@@ -65,16 +65,9 @@ interface IVault {
   function unpause() external;
   function setOperator(address _operatorAddress) external;
   function setAdmin(address _adminAddress) external;
-  function processVaultTransaction(
-    address product,
-    address vault,
-    uint256 orderIdx,
-    uint256 amount,
-    bool isWin
-  ) external;
 
   // View Functions
-  function isVault(address product, address vault) external view returns (bool);
+  function isVault(address vault) external view returns (bool);
   function isVaultMember(address product, address vault, address user) external view returns (bool);
   function addresses() external view returns (address, address);
   function getVaultInfo(address product, address vault) external view returns (VaultInfo memory);

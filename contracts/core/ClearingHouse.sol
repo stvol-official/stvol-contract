@@ -84,6 +84,11 @@ contract ClearingHouse is
     if ($.userBalances[user] < amount + $.withdrawalFee) revert InsufficientBalance();
     _;
   }
+  modifier notVault(address user) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    if ($.vault.isVault(user)) revert InvalidAddress();
+    _;
+  }
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
@@ -111,14 +116,14 @@ contract ClearingHouse is
     $.withdrawalFee = WITHDRAWAL_FEE;
   }
 
-  function deposit(uint256 amount) external nonReentrant {
+  function deposit(uint256 amount) external nonReentrant notVault(msg.sender) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.token.safeTransferFrom(msg.sender, address(this), amount);
     $.userBalances[msg.sender] += amount;
     emit Deposit(msg.sender, msg.sender, amount, $.userBalances[msg.sender]);
   }
 
-  function depositTo(address user, uint256 amount) external nonReentrant {
+  function depositTo(address user, uint256 amount) external nonReentrant notVault(user) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     $.token.safeTransferFrom(msg.sender, address(this), amount);
@@ -156,7 +161,7 @@ contract ClearingHouse is
   function withdraw(
     address user,
     uint256 amount
-  ) external nonReentrant onlyOperator validWithdrawal(user, amount) {
+  ) external nonReentrant onlyOperator validWithdrawal(user, amount) notVault(user) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.userBalances[user] -= amount + $.withdrawalFee;
     $.treasuryAmount += $.withdrawalFee;
@@ -166,7 +171,13 @@ contract ClearingHouse is
 
   function requestWithdrawal(
     uint256 amount
-  ) external nonReentrant validWithdrawal(msg.sender, amount) returns (WithdrawalRequest memory) {
+  )
+    external
+    nonReentrant
+    validWithdrawal(msg.sender, amount)
+    notVault(msg.sender)
+    returns (WithdrawalRequest memory)
+  {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     WithdrawalRequest memory request = WithdrawalRequest({
@@ -830,9 +841,6 @@ contract ClearingHouse is
     if (balanceAmount > 0) {
       $.userBalances[user] += amountAfterFee;
       if (fee > 0) {
-        if ($.vault.isVault(product, user)) {
-          $.vault.processVaultTransaction(product, user, idx, fee, false);
-        }
         $.treasuryAmount += fee;
       }
       $.productEscrowBalances[product][epoch][user][idx] = 0;
@@ -849,11 +857,6 @@ contract ClearingHouse is
     uint256 fee
   ) external onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-
-    // Process vault transaction if loser is a vault
-    if ($.vault.isVault(product, loser)) {
-      $.vault.processVaultTransaction(product, loser, idx, amount, false);
-    }
 
     // Validate total escrowed amount
     uint256 totalEscrowed = $.productEscrowCoupons[product][epoch][loser][idx] +
@@ -878,9 +881,6 @@ contract ClearingHouse is
       $.productEscrowBalances[product][epoch][loser][idx] -= remainingAmount;
     }
 
-    if ($.vault.isVault(product, winner)) {
-      $.vault.processVaultTransaction(product, winner, idx, amountAfterFee, true);
-    }
     // Transfer amount after fee to winner
     if (amountAfterFee > 0) {
       $.userBalances[winner] += amountAfterFee;

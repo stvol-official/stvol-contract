@@ -17,6 +17,7 @@ library VaultStorage {
     mapping(address => mapping(address => VaultMember[])) vaultMembers; // key: product -> vault address -> vault members
     mapping(address => mapping(uint256 => VaultSnapshot)) orderVaultSnapshots; // key: product -> order index -> vault snapshot
     address[] operatorList; // List of operators
+    address[] vaultList; // List of vaults
     uint256 vaultCounter; // Add this line
     /* IMPROTANT: you can add new variables here */
   }
