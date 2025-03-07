@@ -819,7 +819,7 @@ contract SuperVolHourly is
     bool isWin
   ) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);
+    $.vault.processVaultTransaction(address(this), orderIdx, vaultAddress, amount, isWin);
   }
 
   function transferRemainingTokens(address to) external onlyAdmin {

@@ -13,9 +13,9 @@ library VaultStorage {
     IClearingHouse clearingHouse; // Clearing house
     address adminAddress; // Admin address
     mapping(address => bool) operators; // Operators
-    mapping(address => VaultInfo) vaults; // key: vault address
-    mapping(address => VaultMember[]) vaultMembers; // key: vault address, value: vault members
-    mapping(uint256 => VaultSnapshot) orderVaultSnapshots; // Mapping from order index to vault snapshot
+    mapping(address => mapping(address => VaultInfo)) vaults; // key: product -> vault address
+    mapping(address => mapping(address => VaultMember[])) vaultMembers; // key: product -> vault address -> vault members
+    mapping(address => mapping(uint256 => VaultSnapshot)) orderVaultSnapshots; // key: product -> order index -> vault snapshot
     address[] operatorList; // List of operators
     uint256 vaultCounter; // Add this line
     /* IMPROTANT: you can add new variables here */

@@ -127,25 +127,27 @@ contract ClearingHouse is
   }
 
   function depositToVault(
+    address product,
     address vaultAddress,
     address user,
     uint256 amount
   ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if ($.userBalances[user] < amount) revert InsufficientBalance();
-    uint256 balance = $.vault.depositToVault(vaultAddress, user, amount);
+    uint256 balance = $.vault.depositToVault(product, vaultAddress, user, amount);
 
     // user -> vaultAddress
     _transferBalance(user, vaultAddress, balance);
   }
 
   function withdrawFromVault(
+    address product,
     address vaultAddress,
     address user,
     uint256 amount
   ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    uint256 balance = $.vault.withdrawFromVault(vaultAddress, user, amount);
+    uint256 balance = $.vault.withdrawFromVault(product, vaultAddress, user, amount);
 
     // vaultAddress -> user
     _transferBalance(vaultAddress, user, balance);
