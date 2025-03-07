@@ -812,16 +812,6 @@ contract SuperVolHourly is
     return (startTime, endTime);
   }
 
-  function _processVaultTransaction(
-    uint256 orderIdx,
-    address vaultAddress,
-    uint256 amount,
-    bool isWin
-  ) internal {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.vault.processVaultTransaction(address(this), orderIdx, vaultAddress, amount, isWin);
-  }
-
   function transferRemainingTokens(address to) external onlyAdmin {
     if (to == address(0)) revert InvalidAddress();
 

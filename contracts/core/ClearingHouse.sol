@@ -777,10 +777,18 @@ contract ClearingHouse is
       $.productEscrowBalances[product][epoch][user][idx];
     emit DebugLog(
       string.concat(
-        "Total escrowed: ",
+        "Product: ",
+        Strings.toHexString(product),
+        " Order ",
+        Strings.toString(idx),
+        ": Release from escrow for ",
+        Strings.toHexString(user),
+        " total escrowed: ",
         Strings.toString(totalEscrowed),
-        ", Amount: ",
-        Strings.toString(amount)
+        " amount: ",
+        Strings.toString(amount),
+        " fee: ",
+        Strings.toString(fee)
       )
     );
     if (totalEscrowed < amount) revert InsufficientBalance();
@@ -822,6 +830,9 @@ contract ClearingHouse is
     if (balanceAmount > 0) {
       $.userBalances[user] += amountAfterFee;
       if (fee > 0) {
+        if ($.vault.isVault(product, user)) {
+          $.vault.processVaultTransaction(product, user, idx, fee, false);
+        }
         $.treasuryAmount += fee;
       }
       $.productEscrowBalances[product][epoch][user][idx] = 0;
@@ -830,8 +841,8 @@ contract ClearingHouse is
 
   function settleEscrowWithFee(
     address product,
-    address from,
-    address to,
+    address loser,
+    address winner,
     uint256 epoch,
     uint256 amount,
     uint256 idx,
@@ -839,32 +850,40 @@ contract ClearingHouse is
   ) external onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
+    // Process vault transaction if loser is a vault
+    if ($.vault.isVault(product, loser)) {
+      $.vault.processVaultTransaction(product, loser, idx, amount, false);
+    }
+
     // Validate total escrowed amount
-    uint256 totalEscrowed = $.productEscrowCoupons[product][epoch][from][idx] +
-      $.productEscrowBalances[product][epoch][from][idx];
+    uint256 totalEscrowed = $.productEscrowCoupons[product][epoch][loser][idx] +
+      $.productEscrowBalances[product][epoch][loser][idx];
     if (totalEscrowed < amount) revert InsufficientBalance();
 
     uint256 amountAfterFee = amount - fee;
 
     // First try to convert from coupon escrow
-    uint256 fromCouponEscrow = $.productEscrowCoupons[product][epoch][from][idx];
+    uint256 fromCouponEscrow = $.productEscrowCoupons[product][epoch][loser][idx];
     uint256 remainingAmount = amount;
     if (fromCouponEscrow > 0) {
       uint256 couponToUse = fromCouponEscrow > remainingAmount ? remainingAmount : fromCouponEscrow;
-      $.productEscrowCoupons[product][epoch][from][idx] -= couponToUse;
+      $.productEscrowCoupons[product][epoch][loser][idx] -= couponToUse;
       remainingAmount -= couponToUse;
     }
 
     // If there's remaining amount, convert from balance escrow
     if (remainingAmount > 0) {
-      if ($.productEscrowBalances[product][epoch][from][idx] < remainingAmount)
+      if ($.productEscrowBalances[product][epoch][loser][idx] < remainingAmount)
         revert InsufficientBalance();
-      $.productEscrowBalances[product][epoch][from][idx] -= remainingAmount;
+      $.productEscrowBalances[product][epoch][loser][idx] -= remainingAmount;
     }
 
+    if ($.vault.isVault(product, winner)) {
+      $.vault.processVaultTransaction(product, winner, idx, amountAfterFee, true);
+    }
     // Transfer amount after fee to winner
     if (amountAfterFee > 0) {
-      $.userBalances[to] += amountAfterFee;
+      $.userBalances[winner] += amountAfterFee;
     }
 
     // Transfer fee to treasury
