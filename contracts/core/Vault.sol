@@ -200,21 +200,6 @@ contract Vault is
     return false;
   }
 
-  function getVaultMember(
-    address product,
-    address vault,
-    address user
-  ) public view returns (VaultMember memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
-    VaultMember[] storage members = $.vaultMembers[product][vault];
-    for (uint i = 0; i < members.length; i++) {
-      if (members[i].user == user) {
-        return members[i];
-      }
-    }
-    return VaultMember(vault, user, 0, 0);
-  }
-
   function addresses() public view returns (address) {
     VaultStorage.Layout storage $ = VaultStorage.layout();
     return ($.adminAddress);
@@ -266,7 +251,7 @@ contract Vault is
     }
   }
 
-  function getVaultMemberInfo(
+  function userBalances(
     address product,
     address vault,
     address user
