@@ -92,10 +92,6 @@ struct VaultMember {
   uint256 created;
 }
 
-struct VaultSnapshot {
-  VaultMember[] members;
-}
-
 // One min
 enum Position {
   Over,

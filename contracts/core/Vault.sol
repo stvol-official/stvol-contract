@@ -247,14 +247,6 @@ contract Vault is
     return _getVaultMemberBalance(product, vault, user);
   }
 
-  function getVaultSnapshot(
-    address product,
-    uint256 orderIdx
-  ) internal view returns (VaultSnapshot memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
-    return $.orderVaultSnapshots[product][orderIdx];
-  }
-
   function addOperator(address operator) external onlyAdmin {
     if (operator == address(0)) revert InvalidAddress();
     VaultStorage.Layout storage $ = VaultStorage.layout();

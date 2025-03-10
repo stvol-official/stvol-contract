@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import { VaultInfo, VaultMember, VaultSnapshot } from "../types/Types.sol";
+import { VaultInfo, VaultMember} from "../types/Types.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 
 library VaultStorage {
@@ -15,7 +15,6 @@ library VaultStorage {
     mapping(address => bool) operators; // Operators
     mapping(address => mapping(address => VaultInfo)) vaults; // key: product -> vault address
     mapping(address => mapping(address => VaultMember[])) vaultMembers; // key: product -> vault address -> vault members
-    mapping(address => mapping(uint256 => VaultSnapshot)) orderVaultSnapshots; // key: product -> order index -> vault snapshot
     address[] operatorList; // List of operators
     address[] vaultList; // List of vaults
     uint256 vaultCounter; // Add this line
