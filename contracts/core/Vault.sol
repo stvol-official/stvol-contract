@@ -157,12 +157,13 @@ contract Vault is
     if (isVault(product, user) || !isVaultMember(product, vault, user)) revert Unauthorized();
     VaultInfo storage vaultInfo = _validateVaultOperation(product, vault, amount, true);
 
-    uint256 withdrawableAmount = _getVaultMemberBalance(product, vault, user);
-    if (withdrawableAmount < amount) revert InsufficientBalance();
+    uint256 leaderShare;
+    if (user != vaultInfo.leader) {
+      leaderShare = (amount * vaultInfo.profitShare) / BASE;
+    }
 
     if (user != vaultInfo.leader) {
       // Calculate leader's share
-      uint256 leaderShare = _calculateLeaderShare(amount, vaultInfo.profitShare);
       _updateVaultMemberBalance(product, vault, vaultInfo.leader, leaderShare, true);
     }
     (uint256 depositBalance, uint256 currentBalance) = _updateVaultMemberBalance(
@@ -301,6 +302,45 @@ contract Vault is
     VaultMember[] storage members = $.vaultMembers[product][vault];
     bool found = false;
 
+    for (uint i = 0; i < members.length; i++) {
+      if (members[i].user == user) {
+        if (isDeposit) {
+          members[i].balance += amount;
+          $.vaults[product][vault].balance += amount;
+          depositBalance = members[i].balance;
+          currentBalance = members[i].balance;
+        } else {
+          members[i].balance -= amount;
+          $.vaults[product][vault].balance -= amount;
+          depositBalance = members[i].balance;
+          currentBalance = members[i].balance;
+        }
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      if (!isDeposit) revert CannotWithdrawFromNonExistentMember();
+      $.vaultMembers[product][vault].push(
+        VaultMember({ vault: vault, user: user, balance: amount, created: block.timestamp })
+      );
+      $.vaults[product][vault].balance += amount;
+      depositBalance = amount;
+      currentBalance = amount;
+    }
+  }
+
+  function _updateVaultMemberBalanceV2(
+    address product,
+    address vault,
+    address user,
+    uint256 amount,
+    bool isDeposit
+  ) internal returns (uint256 depositBalance, uint256 currentBalance) {
+    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultMember[] storage members = $.vaultMembers[product][vault];
+    bool found = false;
+
     // Calculate total initial deposits for balance calculation
     uint256 totalInitialDeposits = _getTotalInitialDeposits(product, vault);
 
@@ -340,21 +380,7 @@ contract Vault is
             BASE,
             Math.Rounding.Floor
           );
-
           if (balance < amount) revert InsufficientBalance();
-
-          emit DebugLog(
-            string.concat(
-              "balance: ",
-              Strings.toString(balance),
-              " amount: ",
-              Strings.toString(amount),
-              " userShareRatio: ",
-              Strings.toString(userShareRatio),
-              " totalInitialDeposits: ",
-              Strings.toString(totalInitialDeposits)
-            )
-          );
 
           // Calculate proportional reduction of initialDeposit
           if (amount == balance) {
@@ -412,6 +438,7 @@ contract Vault is
         BASE,
         Math.Rounding.Floor
       );
+      $.vaults[product][vault].balance += amount;
     }
   }
 
@@ -449,7 +476,7 @@ contract Vault is
     uint256 totalBalance
   ) internal pure returns (uint256) {
     if (balance == 0 || totalBalance == 0) return 0;
-    return (balance * BASE) / totalBalance;
+    return Math.mulDiv(balance, BASE, totalBalance, Math.Rounding.Floor);
   }
 
   function _calculateMemberBalance(
@@ -457,7 +484,7 @@ contract Vault is
     uint256 vaultBalance
   ) internal pure returns (uint256) {
     if (shareRatio == 0 || vaultBalance == 0) return 0;
-    return (vaultBalance * shareRatio) / BASE;
+    return Math.mulDiv(vaultBalance, shareRatio, BASE, Math.Rounding.Floor);
   }
 
   function _calculateLeaderShare(
@@ -465,7 +492,7 @@ contract Vault is
     uint256 profitShare
   ) internal pure returns (uint256) {
     if (amount == 0 || profitShare == 0) return 0;
-    return (amount * profitShare) / BASE;
+    return Math.mulDiv(amount, profitShare, BASE, Math.Rounding.Floor);
   }
 
   function _getVaultMemberBalance(
