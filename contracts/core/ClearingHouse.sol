@@ -506,6 +506,14 @@ contract ClearingHouse is
     return ($.adminAddress, $.operatorVaultAddress, address($.token), address($.vault));
   }
 
+  function balances(address user) public view returns (uint256, uint256, uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 depositBalance = $.userBalances[user];
+    uint256 couponBalance = this.couponBalanceOf(user);
+    uint256 totalBalance = depositBalance + couponBalance;
+    return (depositBalance, couponBalance, totalBalance);
+  }
+
   function getToken() external view returns (address) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return address($.token);

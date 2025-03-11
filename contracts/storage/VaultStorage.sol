@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import { VaultInfo, VaultMember} from "../types/Types.sol";
+import { VaultInfo, VaultMember } from "../types/Types.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 
 library VaultStorage {
@@ -16,7 +16,7 @@ library VaultStorage {
     mapping(address => mapping(address => VaultInfo)) vaults; // key: product -> vault address
     mapping(address => mapping(address => VaultMember[])) vaultMembers; // key: product -> vault address -> vault members
     address[] operatorList; // List of operators
-    address[] vaultList; // List of vaults
+    mapping(address => address[]) vaultList; // key: product -> vault address
     uint256 vaultCounter; // Add this line
     /* IMPROTANT: you can add new variables here */
   }
