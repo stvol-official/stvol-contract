@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 pragma abicoder v2;
 
-import { VaultInfo } from "../types/Types.sol";
+import { VaultInfo, WithdrawalInfo } from "../types/Types.sol";
 
 interface IVault {
   // Events
@@ -10,7 +10,8 @@ interface IVault {
     address indexed vault,
     address indexed user,
     uint256 amount,
-    bool isDeposit
+    bool isDeposit,
+    uint256 balance
   );
   event VaultCreated(address indexed vault, address indexed leader, uint256 sharePercentage);
   event DepositToVault(address indexed vault, address indexed user, uint256 amount);
@@ -71,4 +72,8 @@ interface IVault {
   function isVaultMember(address product, address vault, address user) external view returns (bool);
   function addresses() external view returns (address, address);
   function getVaultInfo(address product, address vault) external view returns (VaultInfo memory);
+  function withdrawAllFromVault(
+    address product,
+    address vault
+  ) external returns (WithdrawalInfo[] memory);
 }

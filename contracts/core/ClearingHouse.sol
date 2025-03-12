@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition, WithdrawalInfo } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 import { IVault } from "../interfaces/IVault.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -156,6 +156,19 @@ contract ClearingHouse is
 
     // vaultAddress -> user
     _transferBalance(vaultAddress, user, balance);
+  }
+
+  function withdrawAllFromVault(
+    address product,
+    address vaultAddress
+  ) external nonReentrant onlyOperator {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    WithdrawalInfo[] memory withdrawals = $.vault.withdrawAllFromVault(product, vaultAddress);
+    for (uint256 i = 0; i < withdrawals.length; i++) {
+      WithdrawalInfo memory withdrawal = withdrawals[i];
+    // vaultAddress -> user
+      _transferBalance(vaultAddress, withdrawal.user, withdrawal.amount);
+    }
   }
 
   function withdraw(

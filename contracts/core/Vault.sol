@@ -11,7 +11,6 @@ import { VaultStorage } from "../storage/VaultStorage.sol";
 import { IVaultErrors } from "../errors/VaultErrors.sol";
 import "../types/Types.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract Vault is
   Initializable,
@@ -21,7 +20,6 @@ contract Vault is
   ReentrancyGuardUpgradeable,
   IVaultErrors
 {
-  using Math for uint256;
   uint256 private constant BASE = 10000; // 100%
 
   event VaultTransaction(
@@ -30,8 +28,7 @@ contract Vault is
     address indexed user,
     uint256 amount,
     bool isDeposit,
-    uint256 depositBalance,
-    uint256 currentBalance
+    uint256 balance
   );
   event VaultCreated(
     address indexed product,
@@ -103,7 +100,7 @@ contract Vault is
 
     $.vaultList[product].push(vault);
     $.vaultMembers[product][vault].push(
-      VaultMember({ vault: vault, user: leader, balance: 0, created: block.timestamp })
+      VaultMember({ vault: vault, user: leader, balance: 0, shares: 0, created: block.timestamp })
     );
 
     emit VaultCreated(product, vault, leader, sharePercentage);
@@ -121,7 +118,6 @@ contract Vault is
     if (vaultInfo.vault == address(0)) revert VaultNotFound();
     if (vaultInfo.leader != leader) revert Unauthorized();
     if (vaultInfo.closed) revert VaultAlreadyClosed();
-    if (vaultInfo.balance != 0) revert NonZeroBalance();
 
     vaultInfo.closed = true;
     emit VaultClosed(product, vault, leader);
@@ -136,16 +132,10 @@ contract Vault is
     if (isVault(product, user)) revert VaultCannotDeposit();
     _validateVaultOperation(product, vault, amount, false);
 
-    (uint256 depositBalance, uint256 currentBalance) = _updateVaultMemberBalance(
-      product,
-      vault,
-      user,
-      amount,
-      true
-    );
+    uint256 depositBalance = _updateVaultMemberBalance(product, vault, user, amount, true);
 
-    emit VaultTransaction(product, vault, user, amount, true, depositBalance, currentBalance);
-    return amount;
+    emit VaultTransaction(product, vault, user, amount, true, depositBalance);
+    return depositBalance;
   }
 
   function withdrawFromVault(
@@ -166,16 +156,10 @@ contract Vault is
       // Calculate leader's share
       _updateVaultMemberBalance(product, vault, vaultInfo.leader, leaderShare, true);
     }
-    (uint256 depositBalance, uint256 currentBalance) = _updateVaultMemberBalance(
-      product,
-      vault,
-      user,
-      amount,
-      false
-    );
+    uint256 withdrawAmount = _updateVaultMemberBalance(product, vault, user, amount, false);
 
-    emit VaultTransaction(product, vault, user, amount, false, depositBalance, currentBalance);
-    return amount;
+    emit VaultTransaction(product, vault, user, amount, false, withdrawAmount);
+    return withdrawAmount;
   }
 
   function pause() external whenNotPaused onlyAdmin {
@@ -256,40 +240,135 @@ contract Vault is
     }
   }
 
-  function userBalances(
-    address product,
-    address vault,
-    address user
-  ) public view returns (uint256 depositBalance, uint256 currentBalance) {
-    (VaultMember memory member, bool found) = _findMember(product, vault, user);
-    if (!found) {
-      return (0, 0);
-    }
-
-    depositBalance = member.balance;
-    currentBalance = _getVaultMemberBalance(product, vault, user);
-  }
-
   function vaultsByProduct(address product) public view returns (address[] memory) {
     VaultStorage.Layout storage $ = VaultStorage.layout();
     return $.vaultList[product];
   }
 
-  /* internal functions */
-  function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+  function getWithdrawableAmount(
+    address product,
+    address vault,
+    address user
+  )
+    public
+    view
+    returns (uint256 withdrawableAmount, uint256 userShares, uint256 estimatedLeaderFee)
+  {
+    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultInfo storage vaultInfo = $.vaults[product][vault];
 
-  function _getTotalInitialDeposits(
+    // Get user's current shares
+    (VaultMember memory member, bool found) = _findMember(product, vault, user);
+    if (!found) return (0, 0, 0);
+
+    userShares = member.shares;
+    uint256 totalShares = vaultInfo.totalShares;
+    uint256 totalVaultValue = vaultInfo.balance;
+
+    // Calculate current value of shares
+    withdrawableAmount = (userShares * totalVaultValue) / totalShares;
+
+    // Calculate leader fee if applicable
+    if (user != vaultInfo.leader) {
+      estimatedLeaderFee = (withdrawableAmount * vaultInfo.profitShare) / BASE;
+      withdrawableAmount -= estimatedLeaderFee;
+    }
+  }
+
+  function userBalances(
+    address product,
+    address vault,
+    address user
+  )
+    public
+    view
+    returns (
+      uint256 initialDeposit,
+      uint256 currentValue,
+      uint256 unrealizedProfitLoss,
+      uint256 sharePercentage
+    )
+  {
+    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultInfo storage vaultInfo = $.vaults[product][vault];
+
+    (VaultMember memory member, bool found) = _findMember(product, vault, user);
+    if (!found) return (0, 0, 0, 0);
+
+    initialDeposit = member.balance;
+    uint256 totalShares = vaultInfo.totalShares;
+
+    // Calculate current share percentage
+    sharePercentage = (member.shares * BASE) / totalShares;
+
+    // Calculate current value before leader fee
+    currentValue = (member.shares * vaultInfo.balance) / totalShares;
+
+    // Apply leader fee if applicable
+    if (user != vaultInfo.leader) {
+      uint256 leaderFee = (currentValue * vaultInfo.profitShare) / BASE;
+      currentValue -= leaderFee;
+    }
+
+    // Calculate unrealized profit/loss
+    if (currentValue > initialDeposit) {
+      unrealizedProfitLoss = currentValue - initialDeposit;
+    } else {
+      unrealizedProfitLoss = initialDeposit - currentValue;
+    }
+  }
+
+  function withdrawAllFromVault(
     address product,
     address vault
-  ) internal view returns (uint256) {
+  ) external nonReentrant onlyOperator returns (WithdrawalInfo[] memory) {
     VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultInfo storage vaultInfo = $.vaults[product][vault];
+    if (vaultInfo.vault == address(0)) revert VaultNotFound();
+
     VaultMember[] storage members = $.vaultMembers[product][vault];
-    uint256 totalDeposits = 0;
+    uint256 totalVaultValue = vaultInfo.balance;
+    uint256 totalShares = vaultInfo.totalShares;
+
+    // First, count valid withdrawals
+    uint256 validWithdrawalsCount = 0;
     for (uint i = 0; i < members.length; i++) {
-      totalDeposits += members[i].balance;
+      if (members[i].shares > 0) {
+        validWithdrawalsCount++;
+      }
     }
-    return totalDeposits;
+
+    // Create array with exact size needed
+    WithdrawalInfo[] memory withdrawals = new WithdrawalInfo[](validWithdrawalsCount);
+    uint256 withdrawalIndex = 0;
+
+    for (uint i = 0; i < members.length; i++) {
+      if (totalShares == 0 || totalVaultValue == 0) break;
+
+      address user = members[i].user;
+      uint256 memberShares = members[i].shares;
+
+      if (memberShares > 0) {
+        uint256 withdrawAmount = (memberShares * totalVaultValue) / totalShares;
+
+        members[i].balance = 0;
+        members[i].shares = 0;
+
+        if (withdrawAmount <= vaultInfo.balance) {
+          vaultInfo.balance -= withdrawAmount;
+          vaultInfo.totalShares -= memberShares;
+
+          withdrawals[withdrawalIndex] = WithdrawalInfo({ user: user, amount: withdrawAmount });
+          withdrawalIndex++;
+        }
+      }
+    }
+
+    return withdrawals;
   }
+
+  /* internal functions */
+  function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
   function _updateVaultMemberBalance(
     address product,
@@ -297,23 +376,33 @@ contract Vault is
     address user,
     uint256 amount,
     bool isDeposit
-  ) internal returns (uint256 depositBalance, uint256 currentBalance) {
+  ) internal returns (uint256 balance) {
     VaultStorage.Layout storage $ = VaultStorage.layout();
     VaultMember[] storage members = $.vaultMembers[product][vault];
     bool found = false;
+
+    uint256 totalVaultValue = $.vaults[product][vault].balance;
+    uint256 totalShares = $.vaults[product][vault].totalShares;
+    uint256 newShares = totalShares == 0 ? amount : (amount * totalShares) / totalVaultValue;
 
     for (uint i = 0; i < members.length; i++) {
       if (members[i].user == user) {
         if (isDeposit) {
           members[i].balance += amount;
+          members[i].shares += newShares;
           $.vaults[product][vault].balance += amount;
-          depositBalance = members[i].balance;
-          currentBalance = members[i].balance;
+          $.vaults[product][vault].totalShares += newShares;
+          balance = amount;
         } else {
-          members[i].balance -= amount;
-          $.vaults[product][vault].balance -= amount;
-          depositBalance = members[i].balance;
-          currentBalance = members[i].balance;
+          uint256 withdrawShares = (amount * totalShares) / totalVaultValue;
+          if (members[i].shares < withdrawShares) revert InsufficientShares();
+
+          uint256 actualAmount = (withdrawShares * totalVaultValue) / totalShares;
+          members[i].balance -= actualAmount;
+          members[i].shares -= withdrawShares;
+          $.vaults[product][vault].balance -= actualAmount;
+          $.vaults[product][vault].totalShares -= withdrawShares;
+          balance = actualAmount;
         }
         found = true;
         break;
@@ -322,123 +411,17 @@ contract Vault is
     if (!found) {
       if (!isDeposit) revert CannotWithdrawFromNonExistentMember();
       $.vaultMembers[product][vault].push(
-        VaultMember({ vault: vault, user: user, balance: amount, created: block.timestamp })
+        VaultMember({
+          vault: vault,
+          user: user,
+          balance: amount,
+          shares: newShares,
+          created: block.timestamp
+        })
       );
       $.vaults[product][vault].balance += amount;
-      depositBalance = amount;
-      currentBalance = amount;
-    }
-  }
-
-  function _updateVaultMemberBalanceV2(
-    address product,
-    address vault,
-    address user,
-    uint256 amount,
-    bool isDeposit
-  ) internal returns (uint256 depositBalance, uint256 currentBalance) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
-    VaultMember[] storage members = $.vaultMembers[product][vault];
-    bool found = false;
-
-    // Calculate total initial deposits for balance calculation
-    uint256 totalInitialDeposits = _getTotalInitialDeposits(product, vault);
-
-    for (uint i = 0; i < members.length; i++) {
-      if (members[i].user == user) {
-        if (isDeposit) {
-          members[i].balance += amount;
-          depositBalance = members[i].balance;
-
-          // Calculate balance after deposit
-          uint256 newShareRatio = Math.mulDiv(
-            members[i].balance,
-            BASE,
-            totalInitialDeposits + amount,
-            Math.Rounding.Floor
-          );
-          currentBalance = Math.mulDiv(
-            $.vaults[product][vault].balance + amount,
-            newShareRatio,
-            BASE,
-            Math.Rounding.Floor
-          );
-          $.vaults[product][vault].balance += amount;
-        } else {
-          uint256 initialDepositReduction;
-
-          // Calculate current balance
-          uint256 userShareRatio = Math.mulDiv(
-            members[i].balance,
-            BASE,
-            totalInitialDeposits,
-            Math.Rounding.Floor
-          );
-          uint256 balance = Math.mulDiv(
-            $.vaults[product][vault].balance,
-            userShareRatio,
-            BASE,
-            Math.Rounding.Floor
-          );
-          if (balance < amount) revert InsufficientBalance();
-
-          // Calculate proportional reduction of initialDeposit
-          if (amount == balance) {
-            initialDepositReduction = members[i].balance;
-            members[i].balance = 0;
-            currentBalance = 0;
-          } else {
-            uint256 reductionRatio = Math.mulDiv(amount, BASE, balance, Math.Rounding.Floor);
-            initialDepositReduction = Math.mulDiv(
-              members[i].balance,
-              reductionRatio,
-              BASE,
-              Math.Rounding.Floor
-            );
-            members[i].balance -= initialDepositReduction;
-
-            if (totalInitialDeposits == initialDepositReduction) {
-              currentBalance = 0;
-            } else {
-              uint256 newShareRatio = Math.mulDiv(
-                members[i].balance,
-                BASE,
-                totalInitialDeposits - initialDepositReduction,
-                Math.Rounding.Floor
-              );
-              currentBalance = Math.mulDiv(
-                $.vaults[product][vault].balance - amount,
-                newShareRatio,
-                BASE,
-                Math.Rounding.Floor
-              );
-            }
-          }
-          $.vaults[product][vault].balance -= amount;
-        }
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      if (!isDeposit) revert CannotWithdrawFromNonExistentMember();
-      $.vaultMembers[product][vault].push(
-        VaultMember({ vault: vault, user: user, balance: amount, created: block.timestamp })
-      );
-      // Calculate balance for new member
-      uint256 newShareRatio = Math.mulDiv(
-        amount,
-        BASE,
-        totalInitialDeposits + amount,
-        Math.Rounding.Floor
-      );
-      currentBalance = Math.mulDiv(
-        $.vaults[product][vault].balance + amount,
-        newShareRatio,
-        BASE,
-        Math.Rounding.Floor
-      );
-      $.vaults[product][vault].balance += amount;
+      $.vaults[product][vault].totalShares += newShares;
+      balance = amount;
     }
   }
 
@@ -471,50 +454,21 @@ contract Vault is
     return (members[0], false); // Return first element as dummy (never used when false)
   }
 
-  function _calculateShareRatio(
-    uint256 balance,
-    uint256 totalBalance
-  ) internal pure returns (uint256) {
-    if (balance == 0 || totalBalance == 0) return 0;
-    return Math.mulDiv(balance, BASE, totalBalance, Math.Rounding.Floor);
-  }
-
-  function _calculateMemberBalance(
-    uint256 shareRatio,
-    uint256 vaultBalance
-  ) internal pure returns (uint256) {
-    if (shareRatio == 0 || vaultBalance == 0) return 0;
-    return Math.mulDiv(vaultBalance, shareRatio, BASE, Math.Rounding.Floor);
-  }
-
-  function _calculateLeaderShare(
-    uint256 amount,
-    uint256 profitShare
-  ) internal pure returns (uint256) {
-    if (amount == 0 || profitShare == 0) return 0;
-    return Math.mulDiv(amount, profitShare, BASE, Math.Rounding.Floor);
-  }
-
-  function _getVaultMemberBalance(
+  function addVaultBalanceForTest(
     address product,
     address vault,
-    address user
-  ) internal view returns (uint256) {
+    uint256 amount
+  ) external nonReentrant onlyOperator {
     VaultStorage.Layout storage $ = VaultStorage.layout();
-    VaultInfo storage vaultInfo = $.vaults[product][vault];
-    (VaultMember storage member, bool found) = _findMember(product, vault, user);
+    $.vaults[product][vault].balance += amount;
+  }
 
-    if (!found) return 0;
-
-    uint256 totalDeposits = _getTotalInitialDeposits(product, vault);
-    uint256 shareRatio = _calculateShareRatio(member.balance, totalDeposits);
-    uint256 currentBalance = _calculateMemberBalance(shareRatio, vaultInfo.balance);
-
-    if (user == vaultInfo.leader) {
-      return currentBalance;
-    } else {
-      uint256 leaderShare = _calculateLeaderShare(currentBalance, vaultInfo.profitShare);
-      return currentBalance - leaderShare;
-    }
+  function subVaultBalanceForTest(
+    address product,
+    address vault,
+    uint256 amount
+  ) external nonReentrant onlyOperator {
+    VaultStorage.Layout storage $ = VaultStorage.layout();
+    $.vaults[product][vault].balance -= amount;
   }
 }
