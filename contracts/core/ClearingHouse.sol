@@ -84,11 +84,6 @@ contract ClearingHouse is
     if ($.userBalances[user] < amount + $.withdrawalFee) revert InsufficientBalance();
     _;
   }
-  modifier notVault(address user) {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    if ($.vault.isVault(user)) revert InvalidAddress();
-    _;
-  }
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
@@ -116,14 +111,14 @@ contract ClearingHouse is
     $.withdrawalFee = WITHDRAWAL_FEE;
   }
 
-  function deposit(uint256 amount) external nonReentrant notVault(msg.sender) {
+  function deposit(uint256 amount) external nonReentrant {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.token.safeTransferFrom(msg.sender, address(this), amount);
     $.userBalances[msg.sender] += amount;
     emit Deposit(msg.sender, msg.sender, amount, $.userBalances[msg.sender]);
   }
 
-  function depositTo(address user, uint256 amount) external nonReentrant notVault(user) {
+  function depositTo(address user, uint256 amount) external nonReentrant {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     $.token.safeTransferFrom(msg.sender, address(this), amount);
@@ -166,7 +161,7 @@ contract ClearingHouse is
     WithdrawalInfo[] memory withdrawals = $.vault.withdrawAllFromVault(product, vaultAddress);
     for (uint256 i = 0; i < withdrawals.length; i++) {
       WithdrawalInfo memory withdrawal = withdrawals[i];
-    // vaultAddress -> user
+      // vaultAddress -> user
       _transferBalance(vaultAddress, withdrawal.user, withdrawal.amount);
     }
   }
@@ -174,7 +169,7 @@ contract ClearingHouse is
   function withdraw(
     address user,
     uint256 amount
-  ) external nonReentrant onlyOperator validWithdrawal(user, amount) notVault(user) {
+  ) external nonReentrant onlyOperator validWithdrawal(user, amount) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.userBalances[user] -= amount + $.withdrawalFee;
     $.treasuryAmount += $.withdrawalFee;
@@ -184,13 +179,7 @@ contract ClearingHouse is
 
   function requestWithdrawal(
     uint256 amount
-  )
-    external
-    nonReentrant
-    validWithdrawal(msg.sender, amount)
-    notVault(msg.sender)
-    returns (WithdrawalRequest memory)
-  {
+  ) external nonReentrant validWithdrawal(msg.sender, amount) returns (WithdrawalRequest memory) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     WithdrawalRequest memory request = WithdrawalRequest({

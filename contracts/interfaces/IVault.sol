@@ -68,7 +68,7 @@ interface IVault {
   function setAdmin(address _adminAddress) external;
 
   // View Functions
-  function isVault(address vault) external view returns (bool);
+  function isVault(address product, address vault) external view returns (bool);
   function isVaultMember(address product, address vault, address user) external view returns (bool);
   function addresses() external view returns (address, address);
   function getVaultInfo(address product, address vault) external view returns (VaultInfo memory);
