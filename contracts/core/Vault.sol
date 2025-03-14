@@ -162,6 +162,24 @@ contract Vault is
     return withdrawAmount;
   }
 
+  function addVaultBalance(
+    address product,
+    address vault,
+    uint256 amount
+  ) external nonReentrant onlyOperator {
+    VaultStorage.Layout storage $ = VaultStorage.layout();
+    $.vaults[product][vault].balance += amount;
+  }
+
+  function subtractVaultBalance(
+    address product,
+    address vault,
+    uint256 amount
+  ) external nonReentrant onlyOperator {
+    VaultStorage.Layout storage $ = VaultStorage.layout();
+    $.vaults[product][vault].balance -= amount;
+  }
+
   function pause() external whenNotPaused onlyAdmin {
     _pause();
   }
@@ -452,23 +470,5 @@ contract Vault is
       }
     }
     return (members[0], false); // Return first element as dummy (never used when false)
-  }
-
-  function addVaultBalanceForTest(
-    address product,
-    address vault,
-    uint256 amount
-  ) external nonReentrant onlyOperator {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
-    $.vaults[product][vault].balance += amount;
-  }
-
-  function subVaultBalanceForTest(
-    address product,
-    address vault,
-    uint256 amount
-  ) external nonReentrant onlyOperator {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
-    $.vaults[product][vault].balance -= amount;
   }
 }

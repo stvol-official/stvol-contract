@@ -763,6 +763,9 @@ contract ClearingHouse is
 
       $.userBalances[user] -= remainingAmount;
       $.productEscrowBalances[product][epoch][user][idx] += remainingAmount;
+      if ($.vault.isVault(product, user)) {
+        $.vault.subtractVaultBalance(product, user, remainingAmount);
+      }
     }
     emit DebugLog(
       string.concat(
@@ -854,6 +857,9 @@ contract ClearingHouse is
         $.treasuryAmount += fee;
       }
       $.productEscrowBalances[product][epoch][user][idx] = 0;
+      if ($.vault.isVault(product, user)) {
+        $.vault.addVaultBalance(product, user, amountAfterFee);
+      }
     }
   }
 
@@ -894,6 +900,9 @@ contract ClearingHouse is
     // Transfer amount after fee to winner
     if (amountAfterFee > 0) {
       $.userBalances[winner] += amountAfterFee;
+      if ($.vault.isVault(product, winner)) {
+        $.vault.addVaultBalance(product, winner, amountAfterFee);
+      }
     }
 
     // Transfer fee to treasury

@@ -7,7 +7,7 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["soneium_testnet", "soneium_mainnet"];
-const DEPLOYED_PROXY = "0x96e837a9dA4cd64693C2f7685b2c11984e09D265"; // for testnet
+const DEPLOYED_PROXY = "0x5063560c167c6a9f0d35Ae7c8599BC93AFBA51c6"; // for testnet
 // const DEPLOYED_PROXY = "0xF94e7F50120fe8276B85E21f31C6de097eab8813"; // for mainnet
 
 function sleep(ms: number) {
@@ -38,7 +38,7 @@ const upgrade = async () => {
     // Deploy contracts.
     const VaultFactory = await ethers.getContractFactory(contractName);
 
-    // await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
+    await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
     const contract = await upgrades.upgradeProxy(PROXY, VaultFactory, {
       kind: "uups",
       redeployImplementation: "always",

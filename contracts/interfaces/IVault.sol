@@ -76,4 +76,6 @@ interface IVault {
     address product,
     address vault
   ) external returns (WithdrawalInfo[] memory);
+  function addVaultBalance(address product, address vault, uint256 amount) external;
+  function subtractVaultBalance(address product, address vault, uint256 amount) external;
 }
