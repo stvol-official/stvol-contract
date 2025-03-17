@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition, WithdrawalInfo } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 import { IVault } from "../interfaces/IVault.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -151,6 +151,19 @@ contract ClearingHouse is
 
     // vaultAddress -> user
     _transferBalance(vaultAddress, user, balance);
+  }
+
+  function withdrawAllFromVault(
+    address product,
+    address vaultAddress
+  ) external nonReentrant onlyOperator {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    WithdrawalInfo[] memory withdrawals = $.vault.withdrawAllFromVault(product, vaultAddress);
+    for (uint256 i = 0; i < withdrawals.length; i++) {
+      WithdrawalInfo memory withdrawal = withdrawals[i];
+      // vaultAddress -> user
+      _transferBalance(vaultAddress, withdrawal.user, withdrawal.amount);
+    }
   }
 
   function withdraw(
@@ -495,6 +508,14 @@ contract ClearingHouse is
     return ($.adminAddress, $.operatorVaultAddress, address($.token), address($.vault));
   }
 
+  function balances(address user) public view returns (uint256, uint256, uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    uint256 depositBalance = $.userBalances[user];
+    uint256 couponBalance = this.couponBalanceOf(user);
+    uint256 totalBalance = depositBalance + couponBalance;
+    return (depositBalance, couponBalance, totalBalance);
+  }
+
   function getToken() external view returns (address) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return address($.token);
@@ -742,6 +763,9 @@ contract ClearingHouse is
 
       $.userBalances[user] -= remainingAmount;
       $.productEscrowBalances[product][epoch][user][idx] += remainingAmount;
+      if ($.vault.isVault(product, user)) {
+        $.vault.subtractVaultBalance(product, user, remainingAmount);
+      }
     }
     emit DebugLog(
       string.concat(
@@ -777,10 +801,18 @@ contract ClearingHouse is
       $.productEscrowBalances[product][epoch][user][idx];
     emit DebugLog(
       string.concat(
-        "Total escrowed: ",
+        "Product: ",
+        Strings.toHexString(product),
+        " Order ",
+        Strings.toString(idx),
+        ": Release from escrow for ",
+        Strings.toHexString(user),
+        " total escrowed: ",
         Strings.toString(totalEscrowed),
-        ", Amount: ",
-        Strings.toString(amount)
+        " amount: ",
+        Strings.toString(amount),
+        " fee: ",
+        Strings.toString(fee)
       )
     );
     if (totalEscrowed < amount) revert InsufficientBalance();
@@ -825,13 +857,16 @@ contract ClearingHouse is
         $.treasuryAmount += fee;
       }
       $.productEscrowBalances[product][epoch][user][idx] = 0;
+      if ($.vault.isVault(product, user)) {
+        $.vault.addVaultBalance(product, user, amountAfterFee);
+      }
     }
   }
 
   function settleEscrowWithFee(
     address product,
-    address from,
-    address to,
+    address loser,
+    address winner,
     uint256 epoch,
     uint256 amount,
     uint256 idx,
@@ -840,31 +875,34 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
     // Validate total escrowed amount
-    uint256 totalEscrowed = $.productEscrowCoupons[product][epoch][from][idx] +
-      $.productEscrowBalances[product][epoch][from][idx];
+    uint256 totalEscrowed = $.productEscrowCoupons[product][epoch][loser][idx] +
+      $.productEscrowBalances[product][epoch][loser][idx];
     if (totalEscrowed < amount) revert InsufficientBalance();
 
     uint256 amountAfterFee = amount - fee;
 
     // First try to convert from coupon escrow
-    uint256 fromCouponEscrow = $.productEscrowCoupons[product][epoch][from][idx];
+    uint256 fromCouponEscrow = $.productEscrowCoupons[product][epoch][loser][idx];
     uint256 remainingAmount = amount;
     if (fromCouponEscrow > 0) {
       uint256 couponToUse = fromCouponEscrow > remainingAmount ? remainingAmount : fromCouponEscrow;
-      $.productEscrowCoupons[product][epoch][from][idx] -= couponToUse;
+      $.productEscrowCoupons[product][epoch][loser][idx] -= couponToUse;
       remainingAmount -= couponToUse;
     }
 
     // If there's remaining amount, convert from balance escrow
     if (remainingAmount > 0) {
-      if ($.productEscrowBalances[product][epoch][from][idx] < remainingAmount)
+      if ($.productEscrowBalances[product][epoch][loser][idx] < remainingAmount)
         revert InsufficientBalance();
-      $.productEscrowBalances[product][epoch][from][idx] -= remainingAmount;
+      $.productEscrowBalances[product][epoch][loser][idx] -= remainingAmount;
     }
 
     // Transfer amount after fee to winner
     if (amountAfterFee > 0) {
-      $.userBalances[to] += amountAfterFee;
+      $.userBalances[winner] += amountAfterFee;
+      if ($.vault.isVault(product, winner)) {
+        $.vault.addVaultBalance(product, winner, amountAfterFee);
+      }
     }
 
     // Transfer fee to treasury

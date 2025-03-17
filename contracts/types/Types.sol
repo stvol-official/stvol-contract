@@ -81,6 +81,7 @@ struct VaultInfo {
   address leader;
   uint256 balance;
   uint256 profitShare;
+  uint256 totalShares;
   bool closed;
   uint256 created;
 }
@@ -89,11 +90,8 @@ struct VaultMember {
   address vault;
   address user;
   uint256 balance;
+  uint256 shares;
   uint256 created;
-}
-
-struct VaultSnapshot {
-  VaultMember[] members;
 }
 
 // One min
@@ -128,4 +126,9 @@ struct CouponUsageDetail {
   uint256 usedAt;
   address issuer;
   uint256 expirationEpoch;
+}
+
+struct WithdrawalInfo {
+  address user;
+  uint256 amount;
 }

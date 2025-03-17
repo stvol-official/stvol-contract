@@ -469,14 +469,4 @@ contract SuperVolOneMin is
     endTime = startTime + ROUND_DURATION;
     return (startTime, endTime);
   }
-
-  function _processVaultTransaction(
-    uint256 orderIdx,
-    address vaultAddress,
-    uint256 amount,
-    bool isWin
-  ) internal {
-    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
-    $.vault.processVaultTransaction(orderIdx, vaultAddress, amount, isWin);
-  }
 }

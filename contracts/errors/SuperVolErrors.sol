@@ -5,7 +5,6 @@ import { ICommonErrors } from "./CommonErrors.sol";
 interface ISuperVolErrors is ICommonErrors {
   error InvalidCommissionFee();
   error VaultCannotDeposit();
-  error VaultCannotWithdraw();
   error InvalidId();
   error InvalidTokenAddress();
   error InvalidInitDate();
