@@ -11,7 +11,6 @@ import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { IVault } from "../interfaces/IVault.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolStorage } from "../storage/SuperVolStorage.sol";
 import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition } from "../types/Types.sol";
@@ -543,27 +542,15 @@ contract SuperVolHourly is
     $.token = IERC20(_token);
   }
 
-  function setVault(address _vault) external onlyAdmin {
-    if (_vault == address(0)) revert InvalidAddress();
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.vault = IVault(_vault);
-  }
-
   /* public views */
   function commissionfee() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.commissionfee;
   }
 
-  function addresses() public view returns (address, address, address, address, address) {
+  function addresses() public view returns (address, address, address, address) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return (
-      $.adminAddress,
-      $.operatorAddress,
-      address($.vault),
-      address($.clearingHouse),
-      address($.token)
-    );
+    return ($.adminAddress, $.operatorAddress, address($.clearingHouse), address($.token));
   }
 
   function balances(address user) public view returns (uint256, uint256, uint256) {

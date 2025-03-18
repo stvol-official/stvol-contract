@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import { VaultInfo, VaultMember } from "../types/Types.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 
-library VaultStorage {
+library VaultManagerStorage {
   // keccak256(abi.encode(uint256(keccak256("io.supervol.storage.vault")) - 1)) & ~bytes32(uint256(0xff));
   bytes32 internal constant SLOT =
     0x3ba51e27037c89b8f55c98c430ae8aceea1a621192309f2a67c6375c8c04b300;

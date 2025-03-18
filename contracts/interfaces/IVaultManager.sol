@@ -4,7 +4,7 @@ pragma abicoder v2;
 
 import { VaultInfo, WithdrawalInfo } from "../types/Types.sol";
 
-interface IVault {
+interface IVaultManager {
   // Events
   event VaultTransaction(
     address indexed vault,

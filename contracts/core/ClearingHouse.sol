@@ -12,7 +12,7 @@ import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
 import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition, WithdrawalInfo } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
-import { IVault } from "../interfaces/IVault.sol";
+import { IVaultManager } from "../interfaces/IVaultManager.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract ClearingHouse is
@@ -134,7 +134,7 @@ contract ClearingHouse is
   ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if ($.userBalances[user] < amount) revert InsufficientBalance();
-    uint256 balance = $.vault.depositToVault(product, vaultAddress, user, amount);
+    uint256 balance = $.vaultManager.depositToVault(product, vaultAddress, user, amount);
 
     // user -> vaultAddress
     _transferBalance(user, vaultAddress, balance);
@@ -147,7 +147,7 @@ contract ClearingHouse is
     uint256 amount
   ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    uint256 balance = $.vault.withdrawFromVault(product, vaultAddress, user, amount);
+    uint256 balance = $.vaultManager.withdrawFromVault(product, vaultAddress, user, amount);
 
     // vaultAddress -> user
     _transferBalance(vaultAddress, user, balance);
@@ -158,7 +158,10 @@ contract ClearingHouse is
     address vaultAddress
   ) external nonReentrant onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    WithdrawalInfo[] memory withdrawals = $.vault.withdrawAllFromVault(product, vaultAddress);
+    WithdrawalInfo[] memory withdrawals = $.vaultManager.withdrawAllFromVault(
+      product,
+      vaultAddress
+    );
     for (uint256 i = 0; i < withdrawals.length; i++) {
       WithdrawalInfo memory withdrawal = withdrawals[i];
       // vaultAddress -> user
@@ -406,10 +409,10 @@ contract ClearingHouse is
     $.forceWithdrawalDelay = newDelay;
   }
 
-  function setVault(address _vault) external onlyAdmin {
-    if (_vault == address(0)) revert InvalidAddress();
+  function setVaultManager(address _vaultManager) external onlyAdmin {
+    if (_vaultManager == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    $.vault = IVault(_vault);
+    $.vaultManager = IVaultManager(_vaultManager);
   }
 
   function setWithdrawalFee(uint256 newFee) external onlyAdmin {
@@ -505,7 +508,7 @@ contract ClearingHouse is
   /* public views */
   function addresses() public view returns (address, address, address, address) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    return ($.adminAddress, $.operatorVaultAddress, address($.token), address($.vault));
+    return ($.adminAddress, $.operatorVaultAddress, address($.token), address($.vaultManager));
   }
 
   function balances(address user) public view returns (uint256, uint256, uint256) {
@@ -763,8 +766,8 @@ contract ClearingHouse is
 
       $.userBalances[user] -= remainingAmount;
       $.productEscrowBalances[product][epoch][user][idx] += remainingAmount;
-      if ($.vault.isVault(product, user)) {
-        $.vault.subtractVaultBalance(product, user, remainingAmount);
+      if ($.vaultManager.isVault(product, user)) {
+        $.vaultManager.subtractVaultBalance(product, user, remainingAmount);
       }
     }
     emit DebugLog(
@@ -857,8 +860,8 @@ contract ClearingHouse is
         $.treasuryAmount += fee;
       }
       $.productEscrowBalances[product][epoch][user][idx] = 0;
-      if ($.vault.isVault(product, user)) {
-        $.vault.addVaultBalance(product, user, amountAfterFee);
+      if ($.vaultManager.isVault(product, user)) {
+        $.vaultManager.addVaultBalance(product, user, amountAfterFee);
       }
     }
   }
@@ -900,8 +903,8 @@ contract ClearingHouse is
     // Transfer amount after fee to winner
     if (amountAfterFee > 0) {
       $.userBalances[winner] += amountAfterFee;
-      if ($.vault.isVault(product, winner)) {
-        $.vault.addVaultBalance(product, winner, amountAfterFee);
+      if ($.vaultManager.isVault(product, winner)) {
+        $.vaultManager.addVaultBalance(product, winner, amountAfterFee);
       }
     }
 

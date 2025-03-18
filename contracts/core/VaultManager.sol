@@ -7,12 +7,12 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import { VaultStorage } from "../storage/VaultStorage.sol";
+import { VaultManagerStorage } from "../storage/VaultManagerStorage.sol";
 import { IVaultErrors } from "../errors/VaultErrors.sol";
 import "../types/Types.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract Vault is
+contract VaultManager is
   Initializable,
   UUPSUpgradeable,
   OwnableUpgradeable,
@@ -40,13 +40,13 @@ contract Vault is
   event DebugLog(string message);
 
   modifier onlyAdmin() {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     if (msg.sender != $.adminAddress) revert OnlyAdmin();
     _;
   }
 
   modifier onlyOperator() {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     if (!$.operators[msg.sender]) revert OnlyOperator();
     _;
   }
@@ -64,7 +64,7 @@ contract Vault is
 
     if (_adminAddress == address(0)) revert InvalidAddress();
 
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.adminAddress = _adminAddress;
   }
 
@@ -77,7 +77,7 @@ contract Vault is
     if (sharePercentage > BASE) revert InvalidAmount();
     if (isVault(product, leader)) revert InvalidLeaderAddress();
 
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.vaultCounter++;
     address vault = address(
       uint160(
@@ -112,7 +112,7 @@ contract Vault is
     address vault,
     address leader
   ) external nonReentrant onlyOperator {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
 
     if (vaultInfo.vault == address(0)) revert VaultNotFound();
@@ -167,7 +167,7 @@ contract Vault is
     address vault,
     uint256 amount
   ) external nonReentrant onlyOperator {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.vaults[product][vault].balance += amount;
   }
 
@@ -176,7 +176,7 @@ contract Vault is
     address vault,
     uint256 amount
   ) external nonReentrant onlyOperator {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.vaults[product][vault].balance -= amount;
   }
 
@@ -190,13 +190,13 @@ contract Vault is
 
   function setAdmin(address _adminAddress) external onlyOwner {
     if (_adminAddress == address(0)) revert InvalidAddress();
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.adminAddress = _adminAddress;
   }
 
   /* public views */
   function isVault(address product, address vault) public view returns (bool) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     for (uint i = 0; i < $.vaultList[product].length; i++) {
       if ($.vaultList[product][i] == vault) {
         return true;
@@ -206,7 +206,7 @@ contract Vault is
   }
 
   function isVaultMember(address product, address vault, address user) public view returns (bool) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultMember[] storage members = $.vaultMembers[product][vault];
     for (uint i = 0; i < members.length; i++) {
       if (members[i].user == user) {
@@ -217,17 +217,17 @@ contract Vault is
   }
 
   function addresses() public view returns (address) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     return ($.adminAddress);
   }
 
   function getOperators() public view returns (address[] memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     return $.operatorList;
   }
 
   function getVaultInfo(address product, address vault) public view returns (VaultInfo memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     return $.vaults[product][vault];
   }
 
@@ -235,19 +235,19 @@ contract Vault is
     address product,
     address vault
   ) external view returns (VaultMember[] memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     return $.vaultMembers[product][vault];
   }
 
   function addOperator(address operator) external onlyAdmin {
     if (operator == address(0)) revert InvalidAddress();
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.operators[operator] = true;
     $.operatorList.push(operator);
   }
 
   function removeOperator(address operator) external onlyAdmin {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     $.operators[operator] = false;
     for (uint i = 0; i < $.operatorList.length; i++) {
       if ($.operatorList[i] == operator) {
@@ -259,7 +259,7 @@ contract Vault is
   }
 
   function vaultsByProduct(address product) public view returns (address[] memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     return $.vaultList[product];
   }
 
@@ -272,7 +272,7 @@ contract Vault is
     view
     returns (uint256 withdrawableAmount, uint256 userShares, uint256 estimatedLeaderFee)
   {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
 
     // Get user's current shares
@@ -307,7 +307,7 @@ contract Vault is
       uint256 sharePercentage
     )
   {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
 
     (VaultMember memory member, bool found) = _findMember(product, vault, user);
@@ -340,7 +340,7 @@ contract Vault is
     address product,
     address vault
   ) external nonReentrant onlyOperator returns (WithdrawalInfo[] memory) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
     if (vaultInfo.vault == address(0)) revert VaultNotFound();
 
@@ -395,7 +395,7 @@ contract Vault is
     uint256 amount,
     bool isDeposit
   ) internal returns (uint256 balance) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultMember[] storage members = $.vaultMembers[product][vault];
     bool found = false;
 
@@ -451,7 +451,7 @@ contract Vault is
   ) internal view returns (VaultInfo storage vaultInfo) {
     if (amount == 0) revert InvalidAmount();
 
-    vaultInfo = VaultStorage.layout().vaults[product][vault];
+    vaultInfo = VaultManagerStorage.layout().vaults[product][vault];
     if (vaultInfo.vault == address(0)) revert VaultNotFound();
     if (vaultInfo.closed) revert VaultAlreadyClosed();
     if (checkBalance && vaultInfo.balance < amount) revert InsufficientBalance();
@@ -462,7 +462,7 @@ contract Vault is
     address vault,
     address user
   ) internal view returns (VaultMember storage, bool) {
-    VaultStorage.Layout storage $ = VaultStorage.layout();
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultMember[] storage members = $.vaultMembers[product][vault];
     for (uint i = 0; i < members.length; i++) {
       if (members[i].user == user) {

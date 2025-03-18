@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/IVault.sol";
+import "../interfaces/IVaultManager.sol";
 import { WithdrawalRequest, Coupon, ForceWithdrawalRequest, CouponUsageDetail } from "../types/Types.sol";
 
 library ClearingHouseStorage {
@@ -21,7 +21,7 @@ library ClearingHouseStorage {
     address[] operatorList; // List of operators
     ForceWithdrawalRequest[] forceWithdrawalRequests;
     uint256 forceWithdrawalDelay;
-    IVault vault;
+    IVaultManager vaultManager;
     mapping(address => Coupon[]) couponBalances; // user to coupon list
     uint256 couponAmount; // coupon amount
     uint256 usedCouponAmount; // used coupon amount
