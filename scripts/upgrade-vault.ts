@@ -17,7 +17,7 @@ function sleep(ms: number) {
 const upgrade = async () => {
   // Get network data from Hardhat config (see hardhat.config.ts).
   const networkName = network.name;
-  const contractName = "Vault";
+  const contractName = "VaultManager";
 
   const PROXY = await input({
     message: "Enter the proxy address",
@@ -38,7 +38,7 @@ const upgrade = async () => {
     // Deploy contracts.
     const VaultFactory = await ethers.getContractFactory(contractName);
 
-    await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
+    // await upgrades.forceImport(PROXY, VaultFactory, { kind: "uups" });
     const contract = await upgrades.upgradeProxy(PROXY, VaultFactory, {
       kind: "uups",
       redeployImplementation: "always",

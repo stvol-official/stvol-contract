@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IVault } from "../interfaces/IVault.sol";
+import { IVaultManager } from "../interfaces/IVaultManager.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon } from "../types/Types.sol";
 
@@ -15,7 +15,7 @@ library SuperVolStorage {
   struct Layout {
     IERC20 token; // Prediction token
     IPyth oracle;
-    IVault vault;
+    IVaultManager vaultManager;
     IClearingHouse clearingHouse;
     address adminAddress; // address of the admin
     address operatorAddress; // address of the operator

@@ -11,7 +11,6 @@ import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { IVault } from "../interfaces/IVault.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
 import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position } from "../types/Types.sol";
@@ -109,7 +108,7 @@ contract SuperVolOneMin is
 
     $.token = IERC20(_usdcAddress);
     $.oracle = IPyth(_oracleAddress);
-    $.vault = IVault(_vaultAddress);
+    $.vault = _vaultAddress;
     $.clearingHouse = IClearingHouse(_clearingHouseAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddresses.push(_operatorAddress);
@@ -387,7 +386,7 @@ contract SuperVolOneMin is
   function setVault(address _vault) external onlyAdmin {
     if (_vault == address(0)) revert InvalidAddress();
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
-    $.vault = IVault(_vault);
+    $.vault = _vault;
   }
 
   /* public views */

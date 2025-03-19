@@ -88,8 +88,7 @@ contract SuperVolHourly is
     address _adminAddress,
     address _operatorAddress,
     uint256 _commissionfee,
-    address _clearingHouseAddress,
-    address _vaultAddress
+    address _clearingHouseAddress
   ) public initializer {
     __UUPSUpgradeable_init();
     __Ownable_init(msg.sender);
@@ -102,7 +101,6 @@ contract SuperVolHourly is
 
     $.token = IERC20(_usdcAddress);
     $.oracle = IPyth(_oracleAddress);
-    $.vault = IVault(_vaultAddress);
     $.clearingHouse = IClearingHouse(_clearingHouseAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
