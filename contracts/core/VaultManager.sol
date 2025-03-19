@@ -282,6 +282,7 @@ contract VaultManager is
     userShares = member.shares;
     uint256 totalShares = vaultInfo.totalShares;
     uint256 totalVaultValue = vaultInfo.balance;
+    if (totalShares == 0) return (0, 0, 0);
 
     // Calculate current value of shares
     withdrawableAmount = (userShares * totalVaultValue) / totalShares;
@@ -316,6 +317,9 @@ contract VaultManager is
     initialDeposit = member.balance;
     uint256 totalShares = vaultInfo.totalShares;
 
+    // Return early if totalShares is 0
+    if (totalShares == 0) return (initialDeposit, 0, 0, 0);
+
     // Calculate current share percentage
     sharePercentage = (member.shares * BASE) / totalShares;
 
@@ -347,6 +351,7 @@ contract VaultManager is
     VaultMember[] storage members = $.vaultMembers[product][vault];
     uint256 totalVaultValue = vaultInfo.balance;
     uint256 totalShares = vaultInfo.totalShares;
+    if (totalShares == 0 || totalVaultValue == 0) revert VaultBalanceIsZero();
 
     // First, count valid withdrawals
     uint256 validWithdrawalsCount = 0;
