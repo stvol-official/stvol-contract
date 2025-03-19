@@ -144,8 +144,53 @@ contract SuperVolOneMin is
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
     for (uint i = 0; i < orders.length; i++) {
       OneMinOrder calldata order = orders[i];
-      if ($.oneMinOrders[order.idx].idx != 0) continue;
+      if ($.oneMinOrders[order.idx].idx != 0) {
+        emit DebugLog(string.concat("Order ", Strings.toString(order.idx), " already exists"));
+        continue;
+      }
+
+      try
+        $.clearingHouse.lockInEscrow(
+          address(this),
+          order.user,
+          order.amount,
+          order.epoch,
+          order.idx,
+          true
+        )
+      {} catch {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(order.idx), " - user lockInEscrow failed")
+        );
+        continue;
+      }
+
+      try
+        $.clearingHouse.lockInEscrow(
+          address(this),
+          $.vault,
+          order.collateralAmount,
+          order.epoch,
+          order.idx,
+          false
+        )
+      {} catch {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(order.idx), " - vault lockInEscrow failed")
+        );
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          order.user,
+          order.epoch,
+          order.idx,
+          order.amount,
+          0
+        );
+        continue;
+      }
+
       $.oneMinOrders[order.idx] = order;
+      emit DebugLog(string.concat("Order ", Strings.toString(order.idx), " added"));
     }
   }
 
@@ -153,7 +198,7 @@ contract SuperVolOneMin is
     uint256[] calldata orderIds
   ) public onlyOperator returns (uint256[] memory) {
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
-    address vaultAddress = address($.vault);
+    address vaultAddress = $.vault;
     if (vaultAddress == address(0)) revert InvalidAddress();
 
     // Create dynamic array to store successful order IDs
@@ -162,16 +207,31 @@ contract SuperVolOneMin is
 
     for (uint i = 0; i < orderIds.length; i++) {
       // Validate order ID exists
-      if (orderIds[i] == 0) continue;
+      if (orderIds[i] == 0) {
+        emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " does not exist"));
+        continue;
+      }
 
       OneMinOrder storage order = $.oneMinOrders[orderIds[i]];
       // Validate order exists and hasn't been settled
-      if (order.idx == 0) continue;
-      if (order.closingPrice != 0 || order.closingTime != 0 || order.settleAmount != 0) continue;
+      if (order.idx == 0) {
+        emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " does not exist"));
+        continue;
+      }
+      if (order.isSettled) {
+        emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " already settled"));
+        continue;
+      }
 
       // Validate user and amounts
-      if (order.user == address(0)) continue;
-      if (order.amount == 0 || order.collateralAmount == 0) continue;
+      if (order.user == address(0)) {
+        emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " has no user"));
+        continue;
+      }
+      if (order.amount == 0 || order.collateralAmount == 0) {
+        emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " has no amount"));
+        continue;
+      }
 
       (, uint256 endTime) = _epochTimes(order.epoch);
       if (block.timestamp < endTime) {
@@ -200,41 +260,6 @@ contract SuperVolOneMin is
         continue;
       }
 
-      // Validate balances before settlement
-      uint256 userBalance = $.clearingHouse.userBalances(order.user);
-      if (userBalance < order.amount) {
-        emit DebugLog(
-          string.concat(
-            "Order ",
-            Strings.toString(order.idx),
-            " - User ",
-            Strings.toHexString(uint160(order.user), 20),
-            " has insufficient balance (",
-            Strings.toString(userBalance),
-            " < ",
-            Strings.toString(order.amount),
-            ")"
-          )
-        );
-        continue;
-      }
-
-      uint256 vaultBalance = $.clearingHouse.userBalances(vaultAddress);
-      if (vaultBalance < order.collateralAmount) {
-        emit DebugLog(
-          string.concat(
-            "Order ",
-            Strings.toString(order.idx),
-            " - Vault has insufficient balance (",
-            Strings.toString(vaultBalance),
-            " < ",
-            Strings.toString(order.collateralAmount),
-            ")"
-          )
-        );
-        continue;
-      }
-
       order.closingPrice = closingPrice;
       order.closingTime = endTime;
 
@@ -242,52 +267,45 @@ contract SuperVolOneMin is
         (order.closingPrice < order.entryPrice && order.position == Position.Under);
 
       if (isWin) {
-        try $.clearingHouse.subtractUserBalance(vaultAddress, order.collateralAmount) {
-          try $.clearingHouse.addUserBalance(order.user, order.collateralAmount) {
-            order.settleAmount = order.collateralAmount + order.amount;
-          } catch {
-            order.closingPrice = 0;
-            order.closingTime = 0;
-            emit DebugLog(
-              string.concat(
-                "Order ",
-                Strings.toString(order.idx),
-                " - User ",
-                Strings.toHexString(uint160(order.user), 20),
-                " addUserBalance failed"
-              )
-            );
-            continue;
-          }
-        } catch {
-          order.closingPrice = 0;
-          order.closingTime = 0;
-          emit DebugLog(
-            string.concat("Order ", Strings.toString(order.idx), " - subtractVaultBalance failed")
-          );
-          continue;
-        }
+        $.clearingHouse.settleEscrowWithFee(
+          address(this),
+          vaultAddress,
+          order.user,
+          order.epoch,
+          order.collateralAmount,
+          order.idx,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          order.user,
+          order.epoch,
+          order.idx,
+          order.amount,
+          0
+        );
+        order.settleAmount = order.amount + order.collateralAmount;
       } else {
-        try $.clearingHouse.subtractUserBalance(order.user, order.amount) {
-          try $.clearingHouse.addUserBalance(vaultAddress, order.amount) {
-            order.settleAmount = 0;
-          } catch {
-            order.closingPrice = 0;
-            order.closingTime = 0;
-            emit DebugLog(
-              string.concat("Order ", Strings.toString(order.idx), " - addVaultBalance failed")
-            );
-            continue;
-          }
-        } catch {
-          order.closingPrice = 0;
-          order.closingTime = 0;
-          emit DebugLog(
-            string.concat("Order ", Strings.toString(order.idx), " - subtractUserBalance failed")
-          );
-          continue;
-        }
+        $.clearingHouse.settleEscrowWithFee(
+          address(this),
+          order.user,
+          vaultAddress,
+          order.epoch,
+          order.amount,
+          order.idx,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          vaultAddress,
+          order.epoch,
+          order.idx,
+          order.collateralAmount,
+          0
+        );
+        order.settleAmount = 0;
       }
+      order.isSettled = true;
 
       emit OrderSettled(
         order.user,

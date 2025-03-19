@@ -113,6 +113,7 @@ struct OneMinOrder {
   uint256 closingPrice;
   uint256 closingTime;
   uint256 settleAmount;
+  bool isSettled;
 }
 
 struct BatchWithdrawRequest {
