@@ -43,7 +43,9 @@ const upgrade = async () => {
     // Deploy contracts.
     const SuperVolFactory = await ethers.getContractFactory(contractName);
 
-    // const stVolContract = await upgrades.forceImport(PROXY, StVolFactory, { kind: "uups" });
+    const superVolContract = await upgrades.forceImport(PROXY, SuperVolFactory, {
+      kind: "uups",
+    });
     let superVolContractAddress;
     if (isSafeOwner === "N") {
       const superVolContract = await upgrades.upgradeProxy(PROXY, SuperVolFactory, {

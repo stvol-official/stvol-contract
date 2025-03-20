@@ -423,7 +423,7 @@ contract SuperVolOneMin is
     return (
       $.adminAddress,
       $.operatorAddresses,
-      address($.vault),
+      $.vault,
       address($.clearingHouse),
       address($.token)
     );
