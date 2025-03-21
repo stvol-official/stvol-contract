@@ -344,12 +344,6 @@ contract VaultManager is
     // Calculate current value before leader fee
     currentValue = (member.shares * vaultInfo.balance) / totalShares;
 
-    // Apply leader fee if applicable
-    if (user != vaultInfo.leader) {
-      uint256 leaderFee = (currentValue * vaultInfo.profitShare) / BASE;
-      currentValue -= leaderFee;
-    }
-
     // Calculate unrealized profit/loss
     if (currentValue > depositBalance) {
       profitOrLoss = currentValue - depositBalance;
