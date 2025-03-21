@@ -94,6 +94,11 @@ struct VaultMember {
   uint256 created;
 }
 
+struct VaultBalance {
+  address vault;
+  uint256 balance;
+}
+
 // One min
 enum Position {
   Over,

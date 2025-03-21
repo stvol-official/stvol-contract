@@ -120,6 +120,13 @@ contract VaultManager is
     if (vaultInfo.closed) revert VaultAlreadyClosed();
 
     vaultInfo.closed = true;
+    for (uint i = 0; i < $.vaultList[product].length; i++) {
+      if ($.vaultList[product][i] == vault) {
+        $.vaultList[product][i] = $.vaultList[product][$.vaultList[product].length - 1];
+        $.vaultList[product].pop();
+        break;
+      }
+    }
     emit VaultClosed(product, vault, leader);
   }
 
@@ -231,6 +238,17 @@ contract VaultManager is
     return $.vaults[product][vault];
   }
 
+  function getVaultBalancesByProduct(address product) public view returns (VaultBalance[] memory) {
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
+    VaultBalance[] memory balances = new VaultBalance[]($.vaultList[product].length);
+
+    for (uint i = 0; i < $.vaultList[product].length; i++) {
+      address vault = $.vaultList[product][i];
+      balances[i] = VaultBalance({ vault: vault, balance: $.vaults[product][vault].balance });
+    }
+    return balances;
+  }
+
   function getVaultMembers(
     address product,
     address vault
@@ -302,9 +320,9 @@ contract VaultManager is
     public
     view
     returns (
-      uint256 initialDeposit,
+      uint256 depositBalance,
       uint256 currentValue,
-      uint256 unrealizedProfitLoss,
+      uint256 profitOrLoss,
       uint256 sharePercentage
     )
   {
@@ -314,11 +332,11 @@ contract VaultManager is
     (VaultMember memory member, bool found) = _findMember(product, vault, user);
     if (!found) return (0, 0, 0, 0);
 
-    initialDeposit = member.balance;
+    depositBalance = member.balance;
     uint256 totalShares = vaultInfo.totalShares;
 
     // Return early if totalShares is 0
-    if (totalShares == 0) return (initialDeposit, 0, 0, 0);
+    if (totalShares == 0) return (depositBalance, 0, 0, 0);
 
     // Calculate current share percentage
     sharePercentage = (member.shares * BASE) / totalShares;
@@ -333,10 +351,10 @@ contract VaultManager is
     }
 
     // Calculate unrealized profit/loss
-    if (currentValue > initialDeposit) {
-      unrealizedProfitLoss = currentValue - initialDeposit;
+    if (currentValue > depositBalance) {
+      profitOrLoss = currentValue - depositBalance;
     } else {
-      unrealizedProfitLoss = initialDeposit - currentValue;
+      profitOrLoss = depositBalance - currentValue;
     }
   }
 
