@@ -13,7 +13,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
-import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position } from "../types/Types.sol";
+import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position, ClosingOneMinOrder } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -191,6 +191,120 @@ contract SuperVolOneMin is
 
       $.oneMinOrders[order.idx] = order;
       emit DebugLog(string.concat("Order ", Strings.toString(order.idx), " added"));
+    }
+  }
+
+  function closeOneMinOrders(ClosingOneMinOrder[] calldata closingOrders) public onlyOperator {
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+    for (uint i = 0; i < closingOrders.length; i++) {
+      ClosingOneMinOrder calldata closingOrder = closingOrders[i];
+
+      OneMinOrder storage order = $.oneMinOrders[closingOrder.idx];
+      if (order.idx == 0) {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(closingOrder.idx), " does not exist")
+        );
+        continue;
+      }
+
+      if (order.isSettled) {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(closingOrder.idx), " already settled")
+        );
+        continue;
+      }
+
+      if (order.user == address(0)) {
+        emit DebugLog(string.concat("Order ", Strings.toString(closingOrder.idx), " has no user"));
+        continue;
+      }
+
+      if (order.amount == 0 || order.collateralAmount == 0) {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(closingOrder.idx), " has no amount")
+        );
+        continue;
+      }
+
+      if (closingOrder.closingPrice == 0) {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(closingOrder.idx), " has invalid closing price")
+        );
+        continue;
+      }
+
+      if (closingOrder.closingTime > block.timestamp) {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(closingOrder.idx), " has future closing time")
+        );
+        continue;
+      }
+
+      // Release escrow first
+      try
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          order.user,
+          order.epoch,
+          order.idx,
+          order.amount,
+          0
+        )
+      {
+        try
+          $.clearingHouse.releaseFromEscrow(
+            address(this),
+            $.vault,
+            order.epoch,
+            order.idx,
+            order.collateralAmount,
+            0
+          )
+        {
+          int256 delta = int256(order.amount) - int256(closingOrder.settleAmount);
+          if (delta > 0) {
+            $.clearingHouse.subtractUserBalance(order.user, uint256(delta));
+            $.clearingHouse.addUserBalance($.vault, uint256(delta));
+          } else if (delta < 0) {
+            uint256 absDelta = uint256(-delta);
+            $.clearingHouse.subtractUserBalance($.vault, absDelta);
+            $.clearingHouse.addUserBalance(order.user, absDelta);
+          }
+
+          order.closingPrice = closingOrder.closingPrice;
+          order.closingTime = closingOrder.closingTime;
+          order.settleAmount = closingOrder.settleAmount;
+          order.isSettled = true;
+
+          emit OrderSettled(
+            order.user,
+            order.idx,
+            order.epoch,
+            order.closingPrice,
+            order.closingTime,
+            order.settleAmount
+          );
+        } catch {
+          emit DebugLog(
+            string.concat("Order ", Strings.toString(closingOrder.idx), " - vault release failed")
+          );
+          // Attempt to restore user's escrow
+          $.clearingHouse.lockInEscrow(
+            address(this),
+            order.user,
+            order.amount,
+            order.epoch,
+            order.idx,
+            true
+          );
+          continue;
+        }
+      } catch {
+        emit DebugLog(
+          string.concat("Order ", Strings.toString(closingOrder.idx), " - user release failed")
+        );
+        continue;
+      }
     }
   }
 

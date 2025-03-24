@@ -121,6 +121,13 @@ struct OneMinOrder {
   bool isSettled;
 }
 
+struct ClosingOneMinOrder {
+  uint256 idx;
+  uint256 closingPrice;
+  uint256 closingTime;
+  uint256 settleAmount;
+}
+
 struct BatchWithdrawRequest {
   address user;
   uint256 amount;
