@@ -494,10 +494,7 @@ contract SuperVolOneMin is
     $.oracle = IPyth(_oracle);
   }
 
-  function setCommissionfee(
-    uint256 productId,
-    uint256 _commissionfee
-  ) external whenPaused onlyAdmin {
+  function setCommissionfee(uint256 productId, uint256 _commissionfee) external onlyOperator {
     if (_commissionfee > MAX_COMMISSION_FEE) revert InvalidCommissionFee();
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
     $.commissionfees[productId] = _commissionfee;
