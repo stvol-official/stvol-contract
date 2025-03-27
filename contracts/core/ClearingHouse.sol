@@ -899,10 +899,11 @@ contract ClearingHouse is
     // Release coupon escrow first
     uint256 couponAmount = $.productEscrowCoupons[product][epoch][user][idx];
     if (couponAmount > 0) {
+      uint256 couponEpoch = _convertToCouponEpoch(product, epoch);
       // Find original coupon issuer
       address originalIssuer = address(0);
       Coupon[] storage coupons = $.couponBalances[user];
-      CouponUsageDetail[] storage usageDetails = $.couponUsageHistory[user][epoch];
+      CouponUsageDetail[] storage usageDetails = $.couponUsageHistory[user][couponEpoch];
 
       if (usageDetails.length > 0) {
         originalIssuer = usageDetails[usageDetails.length - 1].issuer;
