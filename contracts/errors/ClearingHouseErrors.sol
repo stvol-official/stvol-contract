@@ -19,4 +19,5 @@ interface IClearingHouseErrors is ICommonErrors {
   error InvalidRequestId();
   error InvalidBatchId();
   error BatchAlreadyProcessed();
+  error ProductNotActive();
 }

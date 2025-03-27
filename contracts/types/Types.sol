@@ -145,3 +145,22 @@ struct WithdrawalInfo {
   address user;
   uint256 amount;
 }
+
+enum TimeUnit {
+  MINUTE,
+  HOUR,
+  DAY
+}
+
+struct Product {
+  uint256 startTimestamp;
+  TimeUnit timeUnit;
+  bool isActive;
+}
+
+struct ProductInfo {
+  address productAddress;
+  uint256 startTimestamp;
+  TimeUnit timeUnit;
+  bool isActive;
+}

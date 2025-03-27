@@ -10,7 +10,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ClearingHouseStorage } from "../storage/ClearingHouseStorage.sol";
 import { ICommonErrors } from "../errors/CommonErrors.sol";
-import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition, WithdrawalInfo } from "../types/Types.sol";
+import { WithdrawalRequest, ForceWithdrawalRequest, Coupon, BatchWithdrawRequest, CouponUsageDetail, WinPosition, WithdrawalInfo, TimeUnit, Product, ProductInfo } from "../types/Types.sol";
 import { IClearingHouseErrors } from "../errors/ClearingHouseErrors.sol";
 import { IVaultManager } from "../interfaces/IVaultManager.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -65,6 +65,12 @@ contract ClearingHouse is
     uint256 fee
   );
   event DebugLog(string message);
+  event ProductUpdated(
+    address indexed product,
+    uint256 startTimestamp,
+    TimeUnit timeUnit,
+    bool isActive
+  );
 
   modifier onlyAdmin() {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
@@ -82,6 +88,12 @@ contract ClearingHouse is
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     if (amount == 0) revert InvalidAmount();
     if ($.userBalances[user] < amount + $.withdrawalFee) revert InsufficientBalance();
+    _;
+  }
+
+  modifier onlyActiveProduct(address _product) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    if (!$.products[_product].isActive) revert ProductNotActive();
     _;
   }
 
@@ -666,13 +678,13 @@ contract ClearingHouse is
     return elapsedHours;
   }
 
-  function useCoupon(
-    address user,
-    uint256 amount,
-    uint256 epoch
-  ) external nonReentrant onlyOperator returns (uint256) {
-    return _useCoupon(user, amount, epoch);
-  }
+  // function useCoupon(
+  //   address user,
+  //   uint256 amount,
+  //   uint256 epoch
+  // ) external nonReentrant onlyOperator returns (uint256) {
+  //   return _useCoupon(user, amount, epoch);
+  // }
 
   function _useCoupon(address user, uint256 amount, uint256 epoch) internal returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
@@ -756,7 +768,8 @@ contract ClearingHouse is
   ) external onlyOperator {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
 
-    uint256 remainingAmount = applyCoupon ? _useCoupon(user, amount, epoch) : amount;
+    uint256 couponEpoch = _convertToCouponEpoch(product, epoch);
+    uint256 remainingAmount = applyCoupon ? _useCoupon(user, amount, couponEpoch) : amount;
     $.productEscrowCoupons[product][epoch][user][idx] += amount - remainingAmount;
 
     if (remainingAmount > 0) {
@@ -787,6 +800,68 @@ contract ClearingHouse is
       )
     );
     emit LockInEscrow(product, user, epoch, idx, amount, amount - remainingAmount, remainingAmount);
+  }
+
+  function _convertToCouponEpoch(
+    address _product,
+    uint256 _epoch
+  ) internal view onlyActiveProduct(_product) returns (uint256) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    Product memory product = $.products[_product];
+
+    uint256 epochTimestamp = product.startTimestamp;
+
+    if (product.timeUnit == TimeUnit.MINUTE) {
+      epochTimestamp += _epoch * 30;
+    } else if (product.timeUnit == TimeUnit.HOUR) {
+      epochTimestamp += _epoch * 3600;
+    } else if (product.timeUnit == TimeUnit.DAY) {
+      epochTimestamp += _epoch * 86400;
+    }
+
+    // convert to hours based on coupon base timestamp
+    return (epochTimestamp - START_TIMESTAMP) / 3600;
+  }
+
+  function setProduct(
+    address _product,
+    uint256 _startTimestamp,
+    TimeUnit _timeUnit,
+    bool _isActive
+  ) external onlyAdmin {
+    require(_product != address(0), "Invalid product address");
+    require(_startTimestamp > 0, "Invalid start timestamp");
+
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+
+    if ($.products[_product].startTimestamp == 0) {
+      $.productAddresses.push(_product);
+    }
+
+    $.products[_product] = Product({
+      startTimestamp: _startTimestamp,
+      timeUnit: _timeUnit,
+      isActive: _isActive
+    });
+
+    emit ProductUpdated(_product, _startTimestamp, _timeUnit, _isActive);
+  }
+
+  function getProducts() external view returns (ProductInfo[] memory productInfos) {
+    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    productInfos = new ProductInfo[]($.productAddresses.length);
+
+    for (uint256 i = 0; i < productInfos.length; i++) {
+      address productAddress = $.productAddresses[i];
+      Product memory product = $.products[productAddress];
+
+      productInfos[i] = ProductInfo({
+        productAddress: productAddress,
+        startTimestamp: product.startTimestamp,
+        timeUnit: product.timeUnit,
+        isActive: product.isActive
+      });
+    }
   }
 
   function releaseFromEscrow(
