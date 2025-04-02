@@ -10,7 +10,7 @@ type SupportedNetwork = (typeof NETWORK)[number];
 const main = async () => {
   // Get network data from Hardhat config
   const networkName = network.name as SupportedNetwork;
-  const contractName = "Vault";
+  const contractName = "VaultManager";
 
   // Check if the network is supported
   if (NETWORK.includes(networkName)) {
