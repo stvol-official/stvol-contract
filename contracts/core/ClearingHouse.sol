@@ -457,6 +457,8 @@ contract ClearingHouse is
   function addOperator(address operator) external onlyAdmin {
     if (operator == address(0)) revert InvalidAddress();
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
+    if ($.operators[operator]) revert OperatorAlreadyExists();
+
     $.operators[operator] = true;
     $.operatorList.push(operator);
   }
