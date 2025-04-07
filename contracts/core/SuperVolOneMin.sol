@@ -43,7 +43,7 @@ contract SuperVolOneMin is
   uint256 private constant BASE = 10000; // 100%
   uint256 private constant MAX_COMMISSION_FEE = 2000; // 20%
   uint256 private constant ROUND_INTERVAL = 60; // 60초마다 새로운 라운드
-  uint256 private constant ROUND_DURATION = 1200; // 라운드 지속시간 120초
+  uint256 private constant ROUND_DURATION = ROUND_INTERVAL * 2; // 라운드 지속시간 120초
   uint256 private constant BUFFER_SECONDS = 5; // 버퍼 시간
   uint256 private constant START_TIMESTAMP = 1736294400; // for epoch
 
@@ -125,8 +125,8 @@ contract SuperVolOneMin is
   function updatePrice(
     bytes[] calldata priceUpdateData,
     uint64 timestamp
-  ) external payable whenNotPaused onlyOperator {
-    // timestamp should be either XX:00 or XX:30
+  ) external payable onlyOperator {
+    // timestamp should be either XX:00
     if (timestamp % ROUND_INTERVAL != 0) revert InvalidTime();
 
     PythStructs.PriceFeed[] memory feeds = _getPythPrices(priceUpdateData, timestamp);
@@ -138,6 +138,7 @@ contract SuperVolOneMin is
       uint64 pythPrice = uint64(feeds[i].price.price);
       $.priceHistory[timestamp][i] = pythPrice;
     }
+    emit DebugLog(string.concat("Price updated for timestamp: ", Strings.toString(timestamp)));
   }
 
   function submitOneMinOrders(OneMinOrder[] calldata orders) external nonReentrant onlyOperator {
