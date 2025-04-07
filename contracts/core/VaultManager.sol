@@ -433,11 +433,30 @@ contract VaultManager is
           if (members[i].shares < withdrawShares) revert InsufficientShares();
 
           uint256 actualAmount = (withdrawShares * totalVaultValue) / totalShares;
-          members[i].balance -= actualAmount;
-          members[i].shares -= withdrawShares;
+
+          if (actualAmount > members[i].balance) {
+            actualAmount = members[i].balance;
+            members[i].balance = 0;
+            members[i].shares = 0;
+          } else {
+            members[i].balance -= actualAmount;
+            members[i].shares -= withdrawShares;
+          }
+
           $.vaults[product][vault].balance -= actualAmount;
           $.vaults[product][vault].totalShares -= withdrawShares;
           balance = actualAmount;
+
+          emit DebugLog(
+            string.concat(
+              "withdrawAmount: ",
+              Strings.toString(amount),
+              " withdrawShares: ",
+              Strings.toString(withdrawShares),
+              " actualAmount: ",
+              Strings.toString(actualAmount)
+            )
+          );
         }
         found = true;
         break;
