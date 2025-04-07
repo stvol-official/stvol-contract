@@ -812,7 +812,7 @@ contract ClearingHouse is
     uint256 epochTimestamp = product.startTimestamp;
 
     if (product.timeUnit == TimeUnit.MINUTE) {
-      epochTimestamp += _epoch * 30;
+      epochTimestamp += _epoch * 60;
     } else if (product.timeUnit == TimeUnit.HOUR) {
       epochTimestamp += _epoch * 3600;
     } else if (product.timeUnit == TimeUnit.DAY) {
