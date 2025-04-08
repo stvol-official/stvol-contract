@@ -316,40 +316,24 @@ contract VaultManager is
     address product,
     address vault,
     address user
-  )
-    public
-    view
-    returns (
-      uint256 depositBalance,
-      uint256 currentValue,
-      uint256 profitOrLoss,
-      uint256 sharePercentage
-    )
-  {
+  ) public view returns (uint256 depositBalance, uint256 currentValue, uint256 sharePercentage) {
     VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
 
     (VaultMember memory member, bool found) = _findMember(product, vault, user);
-    if (!found) return (0, 0, 0, 0);
+    if (!found) return (0, 0, 0);
 
     depositBalance = member.balance;
     uint256 totalShares = vaultInfo.totalShares;
 
     // Return early if totalShares is 0
-    if (totalShares == 0) return (depositBalance, 0, 0, 0);
+    if (totalShares == 0) return (depositBalance, 0, 0);
 
     // Calculate current share percentage
     sharePercentage = (member.shares * BASE) / totalShares;
 
     // Calculate current value before leader fee
     currentValue = (member.shares * vaultInfo.balance) / totalShares;
-
-    // Calculate unrealized profit/loss
-    if (currentValue > depositBalance) {
-      profitOrLoss = currentValue - depositBalance;
-    } else {
-      profitOrLoss = depositBalance - currentValue;
-    }
   }
 
   function withdrawAllFromVault(
@@ -435,7 +419,6 @@ contract VaultManager is
           uint256 actualAmount = (withdrawShares * totalVaultValue) / totalShares;
 
           if (actualAmount > members[i].balance) {
-            actualAmount = members[i].balance;
             members[i].balance = 0;
             members[i].shares = 0;
           } else {
