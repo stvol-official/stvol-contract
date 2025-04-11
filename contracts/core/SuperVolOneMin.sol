@@ -241,8 +241,35 @@ contract SuperVolOneMin is
         continue;
       }
 
-      // Release escrow first
-      try
+      int256 delta = int256(order.amount) - int256(closingOrder.settleAmount);
+      if (delta > 0) {
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          $.vault,
+          order.epoch,
+          order.idx,
+          order.collateralAmount,
+          0
+        );
+        $.clearingHouse.settleEscrowWithFee(
+          address(this),
+          order.user,
+          $.vault,
+          order.epoch,
+          uint256(delta),
+          order.idx,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          order.user,
+          order.epoch,
+          order.idx,
+          closingOrder.settleAmount,
+          0
+        );
+      } else if (delta < 0) {
+        uint256 absDelta = uint256(-delta);
         $.clearingHouse.releaseFromEscrow(
           address(this),
           order.user,
@@ -250,62 +277,56 @@ contract SuperVolOneMin is
           order.idx,
           order.amount,
           0
-        )
-      {
-        try
-          $.clearingHouse.releaseFromEscrow(
-            address(this),
-            $.vault,
-            order.epoch,
-            order.idx,
-            order.collateralAmount,
-            0
-          )
-        {
-          int256 delta = int256(order.amount) - int256(closingOrder.settleAmount);
-          if (delta > 0) {
-            $.clearingHouse.subtractUserBalance(order.user, uint256(delta));
-            $.clearingHouse.addUserBalance($.vault, uint256(delta));
-          } else if (delta < 0) {
-            uint256 absDelta = uint256(-delta);
-            $.clearingHouse.subtractUserBalance($.vault, absDelta);
-            $.clearingHouse.addUserBalance(order.user, absDelta);
-          }
-
-          order.closingPrice = closingOrder.closingPrice;
-          order.closingTime = closingOrder.closingTime;
-          order.settleAmount = closingOrder.settleAmount;
-          order.isSettled = true;
-
-          emit OrderSettled(
-            order.user,
-            order.idx,
-            order.epoch,
-            order.closingPrice,
-            order.closingTime,
-            order.settleAmount
-          );
-        } catch {
-          emit DebugLog(
-            string.concat("Order ", Strings.toString(closingOrder.idx), " - vault release failed")
-          );
-          // Attempt to restore user's escrow
-          $.clearingHouse.lockInEscrow(
-            address(this),
-            order.user,
-            order.amount,
-            order.epoch,
-            order.idx,
-            true
-          );
-          continue;
-        }
-      } catch {
-        emit DebugLog(
-          string.concat("Order ", Strings.toString(closingOrder.idx), " - user release failed")
         );
-        continue;
+        $.clearingHouse.settleEscrowWithFee(
+          address(this),
+          $.vault,
+          order.user,
+          order.epoch,
+          absDelta,
+          order.idx,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          $.vault,
+          order.epoch,
+          order.idx,
+          order.collateralAmount - absDelta,
+          0
+        );
+      } else {
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          order.user,
+          order.epoch,
+          order.idx,
+          order.amount,
+          0
+        );
+        $.clearingHouse.releaseFromEscrow(
+          address(this),
+          $.vault,
+          order.epoch,
+          order.idx,
+          order.collateralAmount,
+          0
+        );
       }
+
+      order.closingPrice = closingOrder.closingPrice;
+      order.closingTime = closingOrder.closingTime;
+      order.settleAmount = closingOrder.settleAmount;
+      order.isSettled = true;
+
+      emit OrderSettled(
+        order.user,
+        order.idx,
+        order.epoch,
+        order.closingPrice,
+        order.closingTime,
+        order.settleAmount
+      );
     }
   }
 
