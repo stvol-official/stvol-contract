@@ -41,7 +41,7 @@ contract SuperVolOneMin is
 
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant BASE = 10000; // 100%
-  uint256 private constant MAX_COMMISSION_FEE = 2000; // 20%
+  uint256 private constant MAX_COMMISSION_FEE = 5000; // 50%
   uint256 private constant ROUND_INTERVAL = 60; // 60초마다 새로운 라운드
   uint256 private constant ROUND_DURATION = ROUND_INTERVAL * 2; // 라운드 지속시간 120초
   uint256 private constant BUFFER_SECONDS = 5; // 버퍼 시간
