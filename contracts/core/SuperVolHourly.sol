@@ -329,6 +329,13 @@ contract SuperVolHourly is
           : WinPosition.Tie;
 
       uint256 fee = (winAmount * $.commissionfee) / BASE;
+      uint256 usedCoupon = $.clearingHouse.escrowCoupons(
+        address(this),
+        order.epoch,
+        order.overUser,
+        order.idx
+      );
+
       // Return winner's original escrow (no fee)
       $.clearingHouse.releaseFromEscrow(
         address(this),
@@ -346,7 +353,7 @@ contract SuperVolHourly is
         order.overUser,
         $.clearingHouse.userBalances(order.overUser) + fee,
         $.clearingHouse.userBalances(order.overUser),
-        $.clearingHouse.escrowCoupons(address(this), order.epoch, order.overUser, order.idx)
+        usedCoupon
       );
       $.settlementResults[order.idx] = SettlementResult({
         idx: order.idx,
@@ -383,17 +390,17 @@ contract SuperVolHourly is
         _emitSettlement(
           order.idx,
           order.epoch,
-          order.underUser,
-          $.clearingHouse.userBalances(order.underUser),
-          $.clearingHouse.userBalances(order.underUser),
+          order.overUser,
+          $.clearingHouse.userBalances(order.overUser),
+          $.clearingHouse.userBalances(order.overUser),
           0
         );
         _emitSettlement(
           order.idx,
           order.epoch,
-          order.overUser,
-          $.clearingHouse.userBalances(order.overUser),
-          $.clearingHouse.userBalances(order.overUser),
+          order.underUser,
+          $.clearingHouse.userBalances(order.underUser),
+          $.clearingHouse.userBalances(order.underUser),
           0
         );
       } else {
@@ -443,6 +450,12 @@ contract SuperVolHourly is
       ? order.overPrice * order.unit * PRICE_UNIT
       : order.underPrice * order.unit * PRICE_UNIT;
     uint256 fee = (loserAmount * $.commissionfee) / BASE;
+    uint256 usedCoupon = $.clearingHouse.escrowCoupons(
+      address(this),
+      order.epoch,
+      loser,
+      order.idx
+    );
 
     // Transfer loser's escrow to winner (with fee handling)
     $.clearingHouse.settleEscrowWithFee(
@@ -470,7 +483,7 @@ contract SuperVolHourly is
       loser,
       $.clearingHouse.userBalances(loser) + loserAmount,
       $.clearingHouse.userBalances(loser),
-      $.clearingHouse.escrowCoupons(address(this), order.epoch, loser, order.idx)
+      usedCoupon
     );
     _emitSettlement(
       order.idx,
