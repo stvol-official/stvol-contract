@@ -36,7 +36,7 @@ contract SuperVolOneMin is
     priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
     priceIds[2] = 0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853; // astr
     priceIds[3] = 0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d; // sol
-    priceIds[4] = 0x273717b49430906f4b0c230e99aa1007f83758e3199edbc887c0d06c3e332494; // paxg
+    priceIds[4] = 0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67; // xaut
     return priceIds;
   }
 
