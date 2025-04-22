@@ -946,7 +946,8 @@ contract SuperVolHourly is
   function _addPriceId(bytes32 _priceId, string memory _symbol) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     if (_priceId == bytes32(0)) revert InvalidPriceId();
-    if ($.priceIdToProductId[_priceId] != 0) revert PriceIdAlreadyExists();
+    if ($.priceIdToProductId[_priceId] != 0 || $.priceInfos[0].priceId == _priceId)
+      revert PriceIdAlreadyExists();
     if (bytes(_symbol).length == 0) revert InvalidSymbol();
 
     uint256 newProductId = $.priceIdCount;
