@@ -5,7 +5,7 @@ import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IVaultManager } from "../interfaces/IVaultManager.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
-import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon } from "../types/Types.sol";
+import { Round, FilledOrder, SettlementResult, WithdrawalRequest, Coupon, PriceInfo } from "../types/Types.sol";
 
 library SuperVolStorage {
   // keccak256(abi.encode(uint256(keccak256("io.supervol.storage.main")) - 1)) & ~bytes32(uint256(0xff));
@@ -33,6 +33,9 @@ library SuperVolStorage {
     mapping(uint256 => SettlementResult) settlementResults; // key: filled order idx
     mapping(address => bool) migratedHolders;
     uint256 migratedHoldersCount;
+    mapping(uint256 => PriceInfo) priceInfos; // productId => PriceInfo
+    mapping(bytes32 => uint256) priceIdToProductId; // priceId => productId
+    uint256 priceIdCount;
     /* IMPROTANT: you can add new variables here */
   }
 

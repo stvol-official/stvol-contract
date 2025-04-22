@@ -15,4 +15,7 @@ interface ISuperVolErrors is ICommonErrors {
   error InvalidIndex();
   error PriceLengthMismatch();
   error InsufficientEscrowBalance(address user, uint256 available, uint256 required);
+  error InvalidPriceId();
+  error PriceIdAlreadyExists();
+  error InvalidSymbol();
 }

@@ -164,3 +164,19 @@ struct ProductInfo {
   TimeUnit timeUnit;
   bool isActive;
 }
+
+struct PriceInfo {
+  bytes32 priceId; // pyth price id
+  uint256 productId; // product id
+  string symbol; // symbol(ex: "BTC/USD")
+}
+
+struct PriceUpdateData {
+  bytes priceData; // pyth price data
+  uint256 productId; // product id
+}
+
+struct ManualPriceData {
+  uint64 price;
+  uint256 productId;
+}

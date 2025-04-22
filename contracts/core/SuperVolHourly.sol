@@ -13,7 +13,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolStorage } from "../storage/SuperVolStorage.sol";
-import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition } from "../types/Types.sol";
+import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, PriceInfo, PriceUpdateData, ManualPriceData } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -26,18 +26,6 @@ contract SuperVolHourly is
   ISuperVolErrors
 {
   using SafeERC20 for IERC20;
-
-  function _priceIds() internal pure returns (bytes32[] memory) {
-    // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
-    // to add products, upgrade the contract
-    bytes32[] memory priceIds = new bytes32[](4);
-    // priceIds[productId] = pyth price id
-    priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
-    priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
-    priceIds[2] = 0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853; // astr
-    priceIds[3] = 0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d; // sol
-    return priceIds;
-  }
 
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant BASE = 10000; // 100%
@@ -65,6 +53,7 @@ contract SuperVolHourly is
     uint256 result
   );
   event DebugLog(string message);
+  event PriceIdAdded(uint256 indexed productId, bytes32 priceId, string symbol);
 
   modifier onlyAdmin() {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -105,6 +94,11 @@ contract SuperVolHourly is
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
     $.commissionfee = _commissionfee;
+
+    _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, "BTC/USD");
+    _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, "ETH/USD");
+    _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, "ASTR/USD");
+    _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, "SOL/USD");
   }
 
   function currentEpoch() external view returns (uint256) {
@@ -112,13 +106,13 @@ contract SuperVolHourly is
   }
 
   function executeRound(
-    bytes[] calldata priceUpdateData,
+    PriceUpdateData[] calldata updateDataWithIds,
     uint64 initDate,
     bool skipSettlement
   ) external payable whenNotPaused onlyOperator {
     if (initDate % 3600 != 0) revert InvalidInitDate(); // Ensure initDate is on the hour in seconds since Unix epoch.
 
-    PythStructs.PriceFeed[] memory feeds = _getPythPrices(priceUpdateData, initDate);
+    PythStructs.PriceFeed[] memory feeds = _getPythPrices(updateDataWithIds, initDate);
 
     uint256 startEpoch = _epochAt(initDate);
     uint256 currentEpochNumber = _epochAt(block.timestamp);
@@ -133,9 +127,10 @@ contract SuperVolHourly is
       round.endTimestamp = initDate + INTERVAL_SECONDS;
 
       for (uint i = 0; i < feeds.length; i++) {
+        uint256 productId = updateDataWithIds[i].productId;
         uint64 pythPrice = uint64(feeds[i].price.price);
-        round.startPrice[i] = pythPrice;
-        emit StartRound(startEpoch, i, pythPrice, initDate);
+        round.startPrice[productId] = pythPrice;
+        emit StartRound(startEpoch, productId, pythPrice, initDate);
       }
       round.isStarted = true;
     }
@@ -152,9 +147,10 @@ contract SuperVolHourly is
       prevRound.endTimestamp = initDate;
 
       for (uint i = 0; i < feeds.length; i++) {
+        uint256 productId = updateDataWithIds[i].productId;
         uint64 pythPrice = uint64(feeds[i].price.price);
-        prevRound.endPrice[i] = pythPrice;
-        emit EndRound(prevEpoch, i, pythPrice, initDate);
+        prevRound.endPrice[productId] = pythPrice;
+        emit EndRound(prevEpoch, productId, pythPrice, initDate);
       }
       prevRound.isSettled = true;
     }
@@ -553,6 +549,10 @@ contract SuperVolHourly is
     $.token = IERC20(_token);
   }
 
+  function addPriceId(bytes32 _priceId, string calldata _symbol) external onlyOperator {
+    _addPriceId(_priceId, _symbol);
+  }
+
   /* public views */
   function commissionfee() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -671,20 +671,38 @@ contract SuperVolHourly is
     return $.lastSettledFilledOrderId;
   }
 
+  function priceInfos() external view returns (PriceInfo[] memory) {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    PriceInfo[] memory priceInfoArray = new PriceInfo[]($.priceIdCount);
+    for (uint256 i = 0; i < $.priceIdCount; i++) {
+      priceInfoArray[i] = $.priceInfos[i];
+    }
+    return priceInfoArray;
+  }
+
   /* internal functions */
   function _getPythPrices(
-    bytes[] memory updateData,
+    PriceUpdateData[] memory updateDataWithIds,
     uint64 timestamp
   ) internal returns (PythStructs.PriceFeed[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+
+    bytes[] memory updateData = new bytes[](updateDataWithIds.length);
+    bytes32[] memory priceIds = new bytes32[](updateDataWithIds.length);
+
+    for (uint256 i = 0; i < updateDataWithIds.length; i++) {
+      updateData[i] = updateDataWithIds[i].priceData;
+      priceIds[i] = $.priceInfos[updateDataWithIds[i].productId].priceId;
+    }
+
     uint fee = $.oracle.getUpdateFee(updateData);
-    PythStructs.PriceFeed[] memory pythPrice = $.oracle.parsePriceFeedUpdates{ value: fee }(
-      updateData,
-      _priceIds(),
-      timestamp,
-      timestamp + uint64(BUFFER_SECONDS)
-    );
-    return pythPrice;
+    return
+      $.oracle.parsePriceFeedUpdates{ value: fee }(
+        updateData,
+        priceIds,
+        timestamp,
+        timestamp + uint64(BUFFER_SECONDS)
+      );
   }
 
   function _settleFilledOrders(Round storage round) internal {
@@ -827,12 +845,11 @@ contract SuperVolHourly is
   }
 
   function executeFallbackRoundWithManualPrices(
-    uint64[] calldata prices, // price array corresponding to _priceIds()
+    ManualPriceData[] calldata manualPrices,
     uint64 initDate,
     bool skipSettlement
   ) external onlyOperator {
     if (initDate % 3600 != 0) revert InvalidInitDate();
-    if (prices.length != _priceIds().length) revert PriceLengthMismatch();
 
     uint256 problemEpoch = _epochAt(initDate);
     uint256 currentEpochNumber = _epochAt(block.timestamp);
@@ -851,9 +868,11 @@ contract SuperVolHourly is
     ) {
       problemRound.endTimestamp = initDate;
 
-      for (uint i = 0; i < prices.length; i++) {
-        problemRound.endPrice[i] = prices[i];
-        emit EndRound(problemEpoch, i, prices[i], initDate);
+      for (uint i = 0; i < manualPrices.length; i++) {
+        ManualPriceData calldata priceData = manualPrices[i];
+        problemRound.endPrice[priceData.productId] = priceData.price;
+
+        emit EndRound(problemEpoch, priceData.productId, priceData.price, initDate);
         emit DebugLog(
           string.concat(
             "Manual Price Update | ",
@@ -861,9 +880,9 @@ contract SuperVolHourly is
             Strings.toString(problemEpoch),
             " | ",
             "Product[",
-            Strings.toString(i),
+            Strings.toString(priceData.productId),
             "]: ",
-            Strings.toString(prices[i])
+            Strings.toString(priceData.price)
           )
         );
       }
@@ -924,246 +943,23 @@ contract SuperVolHourly is
     round.isSettled = true;
   }
 
-  // @Deprecated
-  // function couponBalanceOf(address user) public view returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   uint256 total = 0;
-  //   uint256 epoch = _epochAt(block.timestamp);
-  //   for (uint i = 0; i < $.couponBalances[user].length; i++) {
-  //     if ($.couponBalances[user][i].expirationEpoch >= epoch) {
-  //       total += $.couponBalances[user][i].amount - $.couponBalances[user][i].usedAmount;
-  //     }
-  //   }
-  //   return total;
-  // }
-  // @Deprecated
-  // function treasuryAmount() public view returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   return $.clearingHouse.treasuryAmount();
-  // }
+  function _addPriceId(bytes32 _priceId, string memory _symbol) internal {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    if (_priceId == bytes32(0)) revert InvalidPriceId();
+    if ($.priceIdToProductId[_priceId] != 0) revert PriceIdAlreadyExists();
+    if (bytes(_symbol).length == 0) revert InvalidSymbol();
 
-  // @Deprecated
-  // function couponHolders() public view returns (address[] memory) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   return $.couponHolders;
-  // }
+    uint256 newProductId = $.priceIdCount;
 
-  // @Deprecated
-  // function getCouponHoldersPaged(
-  //   uint256 offset,
-  //   uint256 size
-  // ) public view returns (address[] memory) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   uint256 length = $.couponHolders.length;
+    $.priceInfos[newProductId] = PriceInfo({
+      priceId: _priceId,
+      productId: newProductId,
+      symbol: _symbol
+    });
 
-  //   if (offset >= length || size == 0) return new address[](0);
+    $.priceIdToProductId[_priceId] = newProductId;
+    $.priceIdCount++;
 
-  //   uint256 endIndex = offset + size;
-  //   if (endIndex > length) endIndex = length;
-
-  //   address[] memory pagedHolders = new address[](endIndex - offset);
-  //   for (uint256 i = offset; i < endIndex; i++) {
-  //     pagedHolders[i - offset] = $.couponHolders[i];
-  //   }
-  //   return pagedHolders;
-  // }
-
-  // @Deprecated
-  // function userCoupons(address user) public view returns (Coupon[] memory) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   return $.couponBalances[user];
-  // }
-  // used for migration
-  // function migrateCouponsToClearingHouse(
-  //   uint256 startIndex,
-  //   uint256 size
-  // ) external returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-
-  //   if (startIndex >= $.couponHolders.length) revert InvalidIndex();
-  //   uint256 currentAllowance = $.token.allowance(address(this), address($.clearingHouse));
-  //   if (currentAllowance == 0) {
-  //     $.token.approve(address($.clearingHouse), type(uint256).max);
-  //   }
-
-  //   uint256 endIndex = startIndex + size;
-  //   if (endIndex > $.couponHolders.length) {
-  //     endIndex = $.couponHolders.length;
-  //   }
-
-  //   for (uint256 i = startIndex; i < endIndex; i++) {
-  //     address holder = $.couponHolders[i];
-  //     if ($.migratedHolders[holder]) continue;
-
-  //     Coupon[] storage coupons = $.couponBalances[holder];
-
-  //     for (uint256 j = 0; j < coupons.length; j++) {
-  //       Coupon storage coupon = coupons[j];
-
-  //       if (coupon.amount == coupon.usedAmount) continue;
-  //       uint256 remainingAmount = coupon.amount - coupon.usedAmount;
-  //       $.clearingHouse.depositCouponTo(holder, remainingAmount, coupon.expirationEpoch);
-  //     }
-
-  //     // check if the holder is migrated
-  //     if (!$.migratedHolders[holder]) {
-  //       $.migratedHolders[holder] = true;
-  //       $.migratedHoldersCount++;
-  //     }
-  //   }
-  //   return $.migratedHoldersCount;
-  // }
-
-  // used for migration
-  // function migrateTokenBalanceToClearingHouse() external onlyAdmin {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   uint256 balance = $.token.balanceOf(address(this));
-  //   if (balance > 0) {
-  //     $.token.safeTransfer(address($.clearingHouse), balance);
-  //   }
-  // }
-
-  // used for migration
-  // function getMigrationStatus()
-  //   external
-  //   view
-  //   returns (
-  //     uint256 totalHolders,
-  //     uint256 migratedHolders,
-  //     uint256 totalCouponAmount,
-  //     uint256 totalUsedAmount
-  //   )
-  // {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   return ($.couponHolders.length, $.migratedHoldersCount, $.couponAmount, $.usedCouponAmount);
-  // }
-  // @Deprecated
-  // function _useCoupon(address user, uint256 amount, uint256 epoch) internal returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   uint256 remainingAmount = amount;
-  //   for (uint i = 0; i < $.couponBalances[user].length && remainingAmount > 0; i++) {
-  //     if ($.couponBalances[user][i].expirationEpoch >= epoch) {
-  //       uint256 availableAmount = $.couponBalances[user][i].amount -
-  //         $.couponBalances[user][i].usedAmount;
-  //       if (availableAmount >= remainingAmount) {
-  //         $.couponBalances[user][i].usedAmount += remainingAmount;
-  //         remainingAmount = 0;
-  //       } else {
-  //         $.couponBalances[user][i].usedAmount += availableAmount;
-  //         remainingAmount -= availableAmount;
-  //       }
-  //     }
-  //   }
-  //   $.usedCouponAmount += amount - remainingAmount;
-
-  //   return remainingAmount;
-  // }
-
-  // @Deprecated
-  // function _reclaimExpiredCoupons(address user) internal {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   uint256 epoch = _epochAt(block.timestamp);
-
-  //   Coupon[] storage coupons = $.couponBalances[user];
-
-  //   uint256 validCount = 0;
-  //   for (uint i = 0; i < coupons.length; i++) {
-  //     Coupon storage coupon = coupons[i];
-  //     if (coupon.expirationEpoch < epoch) {
-  //       uint256 availableAmount = coupon.amount - coupon.usedAmount;
-  //       if (availableAmount > 0) {
-  //         $.token.safeTransfer(coupon.issuer, availableAmount);
-  //         $.couponAmount -= availableAmount;
-  //         coupon.usedAmount = coupon.amount;
-  //       }
-  //     } else {
-  //       // move valid coupons to the front of the array
-  //       coupons[validCount] = coupon;
-  //       validCount++;
-  //     }
-  //   }
-
-  //   // remove expired coupons from the array
-  //   while (coupons.length > validCount) {
-  //     coupons.pop();
-  //   }
-
-  //   if (validCount == 0) {
-  //     // remove user from couponHolders array
-  //     uint length = $.couponHolders.length;
-  //     for (uint i = 0; i < length; i++) {
-  //       if ($.couponHolders[i] == user) {
-  //         $.couponHolders[i] = $.couponHolders[length - 1];
-  //         $.couponHolders.pop();
-  //         break;
-  //       }
-  //     }
-  //   }
-  // }
-  // @Deprecated
-  // function getCouponHoldersLength() external view returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   return $.couponHolders.length;
-  // }
-  // @Deprecated
-  // function depositCouponTo(
-  //   address user,
-  //   uint256 amount,
-  //   uint256 expirationEpoch
-  // ) external nonReentrant {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   $.token.safeTransferFrom(msg.sender, address(this), amount);
-  //   $.couponAmount += amount;
-
-  //   Coupon[] storage coupons = $.couponBalances[user];
-
-  //   Coupon memory newCoupon = Coupon({
-  //     user: user,
-  //     amount: amount,
-  //     usedAmount: 0,
-  //     expirationEpoch: expirationEpoch,
-  //     created: block.timestamp,
-  //     issuer: msg.sender
-  //   });
-
-  //   uint i = coupons.length;
-  //   coupons.push(newCoupon);
-
-  //   if (i == 0) {
-  //     // add user to couponHolders array
-  //     $.couponHolders.push(user);
-  //   }
-
-  //   while (i > 0 && coupons[i - 1].expirationEpoch > newCoupon.expirationEpoch) {
-  //     coupons[i] = coupons[i - 1];
-  //     i--;
-  //   }
-  //   coupons[i] = newCoupon;
-  //   emit DepositCoupon(user, msg.sender, amount, expirationEpoch, couponBalanceOf(user)); // 전체 쿠폰 잔액 계산
-  // }
-
-  // @Deprecated
-  // function reclaimExpiredCouponsByChunk(
-  //   uint256 startIndex,
-  //   uint256 size
-  // ) external nonReentrant returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-
-  //   if (startIndex >= $.couponHolders.length) revert InvalidIndex();
-
-  //   uint256 endIndex = startIndex + size;
-  //   if (endIndex > $.couponHolders.length) {
-  //     endIndex = $.couponHolders.length;
-  //   }
-
-  //   for (uint256 i = startIndex; i < endIndex; i++) {
-  //     _reclaimExpiredCoupons($.couponHolders[i]);
-  //   }
-  //   return endIndex; // Return the next start index for subsequent calls
-  // }
-
-  // @Deprecated
-  // function reclaimExpiredCoupons(address user) external nonReentrant {
-  //   _reclaimExpiredCoupons(user);
-  // }
+    emit PriceIdAdded(newProductId, _priceId, _symbol);
+  }
 }
