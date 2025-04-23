@@ -95,10 +95,10 @@ contract SuperVolHourly is
     $.operatorAddress = _operatorAddress;
     $.commissionfee = _commissionfee;
 
-    _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, "BTC/USD");
-    _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, "ETH/USD");
-    _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, "ASTR/USD");
-    _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, "SOL/USD");
+    _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
+    _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
+    _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, 2, "ASTR/USD");
+    _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
   }
 
   function currentEpoch() external view returns (uint256) {
@@ -549,8 +549,12 @@ contract SuperVolHourly is
     $.token = IERC20(_token);
   }
 
-  function addPriceId(bytes32 _priceId, string calldata _symbol) external onlyOperator {
-    _addPriceId(_priceId, _symbol);
+  function addPriceId(
+    bytes32 _priceId,
+    uint256 _productId,
+    string calldata _symbol
+  ) external onlyOperator {
+    _addPriceId(_priceId, _productId, _symbol);
   }
 
   function initializeDefaultPriceIds() external onlyOperator {
@@ -561,11 +565,40 @@ contract SuperVolHourly is
       0 &&
       $.priceInfos[0].priceId != 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
     ) {
-      _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, "BTC/USD");
-      _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, "ETH/USD");
-      _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, "ASTR/USD");
-      _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, "SOL/USD");
+      _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
+      _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
+      _addPriceId(
+        0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853,
+        2,
+        "ASTR/USD"
+      );
+      _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
     }
+  }
+
+  function setPriceInfo(PriceInfo calldata priceInfo) external onlyOperator {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+
+    if (priceInfo.priceId == bytes32(0)) revert InvalidPriceId();
+    if (bytes(priceInfo.symbol).length == 0) revert InvalidSymbol();
+
+    uint256 existingProductId = $.priceIdToProductId[priceInfo.priceId];
+    bytes32 oldPriceId = $.priceInfos[priceInfo.productId].priceId;
+
+    if (existingProductId != priceInfo.productId) {
+      if (existingProductId != 0 || $.priceInfos[0].priceId == priceInfo.priceId) {
+        revert PriceIdAlreadyExists();
+      }
+    }
+
+    if (oldPriceId != bytes32(0)) {
+      delete $.priceIdToProductId[oldPriceId];
+    }
+
+    $.priceInfos[priceInfo.productId] = priceInfo;
+    $.priceIdToProductId[priceInfo.priceId] = priceInfo.productId;
+
+    emit PriceIdAdded(priceInfo.productId, priceInfo.priceId, priceInfo.symbol);
   }
 
   /* public views */
@@ -958,24 +991,28 @@ contract SuperVolHourly is
     round.isSettled = true;
   }
 
-  function _addPriceId(bytes32 _priceId, string memory _symbol) internal {
+  function _addPriceId(bytes32 _priceId, uint256 _productId, string memory _symbol) internal {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     if (_priceId == bytes32(0)) revert InvalidPriceId();
-    if ($.priceIdToProductId[_priceId] != 0 || $.priceInfos[0].priceId == _priceId)
+    if ($.priceIdToProductId[_priceId] != 0 || $.priceInfos[0].priceId == _priceId) {
       revert PriceIdAlreadyExists();
-    if (bytes(_symbol).length == 0) revert InvalidSymbol();
+    }
+    if ($.priceInfos[_productId].priceId != bytes32(0)) {
+      revert ProductIdAlreadyExists();
+    }
+    if (bytes(_symbol).length == 0) {
+      revert InvalidSymbol();
+    }
 
-    uint256 newProductId = $.priceIdCount;
-
-    $.priceInfos[newProductId] = PriceInfo({
+    $.priceInfos[_productId] = PriceInfo({
       priceId: _priceId,
-      productId: newProductId,
+      productId: _productId,
       symbol: _symbol
     });
 
-    $.priceIdToProductId[_priceId] = newProductId;
+    $.priceIdToProductId[_priceId] = _productId;
     $.priceIdCount++;
 
-    emit PriceIdAdded(newProductId, _priceId, _symbol);
+    emit PriceIdAdded(_productId, _priceId, _symbol);
   }
 }

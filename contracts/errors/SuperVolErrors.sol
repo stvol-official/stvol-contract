@@ -18,4 +18,5 @@ interface ISuperVolErrors is ICommonErrors {
   error InvalidPriceId();
   error PriceIdAlreadyExists();
   error InvalidSymbol();
+  error ProductIdAlreadyExists();
 }
