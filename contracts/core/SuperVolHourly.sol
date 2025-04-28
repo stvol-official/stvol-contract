@@ -95,10 +95,10 @@ contract SuperVolHourly is
     $.operatorAddress = _operatorAddress;
     $.commissionfee = _commissionfee;
 
-    _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
-    _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
-    _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, 2, "ASTR/USD");
-    _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
+    // _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
+    // _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
+    // _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, 2, "ASTR/USD");
+    // _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
   }
 
   function currentEpoch() external view returns (uint256) {
@@ -557,24 +557,20 @@ contract SuperVolHourly is
     _addPriceId(_priceId, _productId, _symbol);
   }
 
-  function initializeDefaultPriceIds() external onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+  // function initializeDefaultPriceIds() external onlyOperator {
+  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
-    if (
-      $.priceIdToProductId[0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43] ==
-      0 &&
-      $.priceInfos[0].priceId != 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
-    ) {
-      _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
-      _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
-      _addPriceId(
-        0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853,
-        2,
-        "ASTR/USD"
-      );
-      _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
-    }
-  }
+  //   if (
+  //     $.priceIdToProductId[0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43] ==
+  //     0 &&
+  //     $.priceInfos[0].priceId != 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
+  //   ) {
+  //     _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
+  //     _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
+  //     _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, 2, "ASTR/USD");
+  //     _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
+  //   }
+  // }
 
   function setPriceInfo(PriceInfo calldata priceInfo) external onlyOperator {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -620,10 +616,10 @@ contract SuperVolHourly is
     return (depositBalance, couponBalance, totalBalance);
   }
 
-  function balanceOf(address user) public view returns (uint256) {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    return $.clearingHouse.userBalances(user);
-  }
+  // function balanceOf(address user) public view returns (uint256) {
+  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+  //   return $.clearingHouse.userBalances(user);
+  // }
 
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -884,13 +880,13 @@ contract SuperVolHourly is
     return (startTime, endTime);
   }
 
-  function transferRemainingTokens(address to) external onlyAdmin {
-    if (to == address(0)) revert InvalidAddress();
+  // function transferRemainingTokens(address to) external onlyAdmin {
+  //   if (to == address(0)) revert InvalidAddress();
 
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    uint256 balance = $.token.balanceOf(address(this));
-    $.token.safeTransfer(to, balance);
-  }
+  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+  //   uint256 balance = $.token.balanceOf(address(this));
+  //   $.token.safeTransfer(to, balance);
+  // }
 
   function executeFallbackRoundWithManualPrices(
     ManualPriceData[] calldata manualPrices,

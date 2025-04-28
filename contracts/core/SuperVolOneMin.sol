@@ -13,7 +13,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
-import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position, ClosingOneMinOrder } from "../types/Types.sol";
+import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position, ClosingOneMinOrder, PriceInfo, PriceUpdateData } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -26,18 +26,6 @@ contract SuperVolOneMin is
   ISuperVolErrors
 {
   using SafeERC20 for IERC20;
-
-  function _priceIds() internal pure returns (bytes32[] memory) {
-    // https://pyth.network/developers/price-feed-ids#pyth-evm-stable
-    // to add products, upgrade the contract
-    bytes32[] memory priceIds = new bytes32[](4);
-    // priceIds[productId] = pyth price id
-    priceIds[0] = 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43; // btc
-    priceIds[1] = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace; // eth
-    priceIds[2] = 0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853; // astr
-    priceIds[3] = 0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d; // sol
-    return priceIds;
-  }
 
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant BASE = 10000; // 100%
@@ -67,6 +55,7 @@ contract SuperVolOneMin is
   );
 
   event DebugLog(string message);
+  event PriceIdAdded(uint256 indexed productId, bytes32 priceId, string symbol);
 
   modifier onlyAdmin() {
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
@@ -116,6 +105,11 @@ contract SuperVolOneMin is
     $.commissionfees[1] = 1000; // eth
     $.commissionfees[2] = 1000; // astr
     $.commissionfees[3] = 1000; // sol
+
+    _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
+    _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
+    _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, 2, "ASTR/USD");
+    _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
   }
 
   function currentEpoch() external view returns (uint256) {
@@ -123,13 +117,13 @@ contract SuperVolOneMin is
   }
 
   function updatePrice(
-    bytes[] calldata priceUpdateData,
+    PriceUpdateData[] calldata updateDataWithIds,
     uint64 timestamp
   ) external payable onlyOperator {
     // timestamp should be either XX:00
     if (timestamp % ROUND_INTERVAL != 0) revert InvalidTime();
 
-    PythStructs.PriceFeed[] memory feeds = _getPythPrices(priceUpdateData, timestamp);
+    PythStructs.PriceFeed[] memory feeds = _getPythPrices(updateDataWithIds, timestamp);
 
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
 
@@ -539,6 +533,32 @@ contract SuperVolOneMin is
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
     $.vault = _vault;
   }
+  function addPriceId(
+    bytes32 _priceId,
+    uint256 _productId,
+    string calldata _symbol
+  ) external onlyOperator {
+    _addPriceId(_priceId, _productId, _symbol);
+  }
+
+  function initializeDefaultPriceIds() external onlyOperator {
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+
+    if (
+      $.priceIdToProductId[0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43] ==
+      0 &&
+      $.priceInfos[0].priceId != 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
+    ) {
+      _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
+      _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
+      _addPriceId(
+        0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853,
+        2,
+        "ASTR/USD"
+      );
+      _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
+    }
+  }
 
   /* public views */
   function commissionfee(uint256 productId) public view returns (uint256) {
@@ -591,18 +611,27 @@ contract SuperVolOneMin is
 
   /* internal functions */
   function _getPythPrices(
-    bytes[] calldata updateData,
+    PriceUpdateData[] memory updateDataWithIds,
     uint64 timestamp
   ) internal returns (PythStructs.PriceFeed[] memory) {
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+
+    bytes[] memory updateData = new bytes[](updateDataWithIds.length);
+    bytes32[] memory priceIds = new bytes32[](updateDataWithIds.length);
+
+    for (uint256 i = 0; i < updateDataWithIds.length; i++) {
+      updateData[i] = updateDataWithIds[i].priceData;
+      priceIds[i] = $.priceInfos[updateDataWithIds[i].productId].priceId;
+    }
+
     uint fee = $.oracle.getUpdateFee(updateData);
-    PythStructs.PriceFeed[] memory pythPrice = $.oracle.parsePriceFeedUpdates{ value: fee }(
-      updateData,
-      _priceIds(),
-      timestamp,
-      timestamp + uint64(BUFFER_SECONDS)
-    );
-    return pythPrice;
+    return
+      $.oracle.parsePriceFeedUpdates{ value: fee }(
+        updateData,
+        priceIds,
+        timestamp,
+        timestamp + uint64(BUFFER_SECONDS)
+      );
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -618,5 +647,30 @@ contract SuperVolOneMin is
     startTime = START_TIMESTAMP + (epoch * ROUND_INTERVAL);
     endTime = startTime + ROUND_DURATION;
     return (startTime, endTime);
+  }
+
+  function _addPriceId(bytes32 _priceId, uint256 _productId, string memory _symbol) internal {
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+    if (_priceId == bytes32(0)) revert InvalidPriceId();
+    if ($.priceIdToProductId[_priceId] != 0 || $.priceInfos[0].priceId == _priceId) {
+      revert PriceIdAlreadyExists();
+    }
+    if ($.priceInfos[_productId].priceId != bytes32(0)) {
+      revert ProductIdAlreadyExists();
+    }
+    if (bytes(_symbol).length == 0) {
+      revert InvalidSymbol();
+    }
+
+    $.priceInfos[_productId] = PriceInfo({
+      priceId: _priceId,
+      productId: _productId,
+      symbol: _symbol
+    });
+
+    $.priceIdToProductId[_priceId] = _productId;
+    $.priceIdCount++;
+
+    emit PriceIdAdded(_productId, _priceId, _symbol);
   }
 }
