@@ -609,6 +609,15 @@ contract SuperVolOneMin is
     return $.priceHistory[timestamp][productId];
   }
 
+  function priceInfos() external view returns (PriceInfo[] memory) {
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+    PriceInfo[] memory priceInfoArray = new PriceInfo[]($.priceIdCount);
+    for (uint256 i = 0; i < $.priceIdCount; i++) {
+      priceInfoArray[i] = $.priceInfos[i];
+    }
+    return priceInfoArray;
+  }
+
   /* internal functions */
   function _getPythPrices(
     PriceUpdateData[] memory updateDataWithIds,
