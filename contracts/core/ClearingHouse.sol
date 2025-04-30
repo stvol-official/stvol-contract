@@ -138,6 +138,14 @@ contract ClearingHouse is
     emit Deposit(user, msg.sender, amount, $.userBalances[user]);
   }
 
+  function transferBalance(
+    address from,
+    address to,
+    uint256 amount
+  ) external nonReentrant onlyOperator {
+    _transferBalance(from, to, amount);
+  }
+
   function depositToVault(
     address product,
     address vaultAddress,
