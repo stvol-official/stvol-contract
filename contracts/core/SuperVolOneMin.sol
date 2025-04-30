@@ -129,8 +129,9 @@ contract SuperVolOneMin is
 
     // Store price history
     for (uint i = 0; i < feeds.length; i++) {
+      uint256 productId = updateDataWithIds[i].productId;
       uint64 pythPrice = uint64(feeds[i].price.price);
-      $.priceHistory[timestamp][i] = pythPrice;
+      $.priceHistory[timestamp][productId] = pythPrice;
     }
     emit DebugLog(string.concat("Price updated for timestamp: ", Strings.toString(timestamp)));
   }
