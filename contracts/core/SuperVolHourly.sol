@@ -888,7 +888,7 @@ contract SuperVolHourly is
   //   $.token.safeTransfer(to, balance);
   // }
 
-  function executeFallbackRoundWithManualPrices(
+  function setManualRoundEndPrices(
     ManualPriceData[] calldata manualPrices,
     uint64 initDate,
     bool skipSettlement
@@ -907,10 +907,9 @@ contract SuperVolHourly is
     if (
       problemRound.epoch == problemEpoch &&
       problemRound.startTimestamp > 0 &&
-      problemRound.isStarted &&
-      !problemRound.isSettled
+      problemRound.isStarted
     ) {
-      problemRound.endTimestamp = initDate;
+      problemRound.endTimestamp = initDate + INTERVAL_SECONDS;
 
       for (uint i = 0; i < manualPrices.length; i++) {
         ManualPriceData calldata priceData = manualPrices[i];
