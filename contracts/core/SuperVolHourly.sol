@@ -904,6 +904,15 @@ contract SuperVolHourly is
 
     // end problem round
     Round storage problemRound = $.rounds[problemEpoch];
+    Round storage nextRound = $.rounds[problemEpoch + 1];
+    if (!nextRound.isStarted) {
+      nextRound.epoch = problemEpoch + 1;
+      nextRound.startTimestamp = initDate + INTERVAL_SECONDS;
+      nextRound.endTimestamp = nextRound.startTimestamp + INTERVAL_SECONDS;
+      nextRound.isStarted = true;
+      nextRound.isSettled = false;
+    }
+
     if (
       problemRound.epoch == problemEpoch &&
       problemRound.startTimestamp > 0 &&
@@ -914,6 +923,25 @@ contract SuperVolHourly is
       for (uint i = 0; i < manualPrices.length; i++) {
         ManualPriceData calldata priceData = manualPrices[i];
         problemRound.endPrice[priceData.productId] = priceData.price;
+        emit DebugLog(
+          string.concat(
+            "nextRound | ",
+            "Epoch: ",
+            Strings.toString(nextRound.epoch),
+            " | ",
+            "startPrice[",
+            Strings.toString(nextRound.startPrice[priceData.productId]),
+            "]: ",
+            "endPrice[",
+            Strings.toString(nextRound.endPrice[priceData.productId]),
+            "]"
+          )
+        );
+        if (
+          nextRound.epoch <= currentEpochNumber && nextRound.startPrice[priceData.productId] == 0
+        ) {
+          nextRound.startPrice[priceData.productId] = priceData.price;
+        }
 
         emit EndRound(problemEpoch, priceData.productId, priceData.price, initDate);
         emit DebugLog(
