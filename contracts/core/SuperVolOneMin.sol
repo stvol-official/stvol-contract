@@ -359,7 +359,7 @@ contract SuperVolOneMin is
         emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " has no user"));
         continue;
       }
-      if (order.amount == 0 || order.collateralAmount == 0) {
+      if (order.amount == 0) {
         emit DebugLog(string.concat("Order ", Strings.toString(orderIds[i]), " has no amount"));
         continue;
       }
