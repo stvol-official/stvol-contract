@@ -9,11 +9,13 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import { PythLazer } from "../libraries/PythLazer.sol";
+import { PythLazerLib } from "../libraries/PythLazerLib.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
-import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position, ClosingOneMinOrder, PriceInfo, PriceUpdateData } from "../types/Types.sol";
+import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position, ClosingOneMinOrder, PriceInfo, PriceUpdateData, PriceLazerData, PriceFeedMapping } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -117,22 +119,15 @@ contract SuperVolOneMin is
   }
 
   function updatePrice(
-    PriceUpdateData[] calldata updateDataWithIds,
+    PriceLazerData calldata priceLazerData,
     uint64 timestamp
   ) external payable onlyOperator {
     // timestamp should be either XX:00
     if (timestamp % ROUND_INTERVAL != 0) revert InvalidTime();
 
-    PythStructs.PriceFeed[] memory feeds = _getPythPrices(updateDataWithIds, timestamp);
+    // update price and store
+    _processPythLazerPriceUpdate(priceLazerData, timestamp);
 
-    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
-
-    // Store price history
-    for (uint i = 0; i < feeds.length; i++) {
-      uint256 productId = updateDataWithIds[i].productId;
-      uint64 pythPrice = uint64(feeds[i].price.price);
-      $.priceHistory[timestamp][productId] = pythPrice;
-    }
     emit DebugLog(string.concat("Price updated for timestamp: ", Strings.toString(timestamp)));
   }
 
@@ -642,6 +637,58 @@ contract SuperVolOneMin is
         timestamp,
         timestamp + uint64(BUFFER_SECONDS)
       );
+  }
+
+  function _processPythLazerPriceUpdate(
+    PriceLazerData memory priceLazerData,
+    uint64 timestamp
+  ) internal {
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+
+    uint256 verification_fee = $.pythLazer.verification_fee();
+    if (msg.value < verification_fee) revert("InsufficientFee");
+
+    (bytes memory payload, ) = $.pythLazer.verifyUpdate{ value: verification_fee }(
+      priceLazerData.priceData
+    );
+    if (msg.value > verification_fee) {
+      payable(msg.sender).transfer(msg.value - verification_fee);
+    }
+
+    (uint64 _timestamp, PythLazerLib.Channel channel, uint8 feedsLen, uint16 pos) = PythLazerLib
+      .parsePayloadHeader(payload);
+    if (channel != PythLazerLib.Channel.RealTime) {
+      revert("expected update from RealTime channel");
+    }
+
+    mapping(uint32 => uint256) memory feedIdToProductId;
+    for (uint256 i = 0; i < priceLazerData.mappings.length; i++) {
+      feedIdToProductId[priceLazerData.mappings[i].priceFeedId] = priceLazerData
+        .mappings[i]
+        .productId;
+    }
+
+    for (uint8 i = 0; i < feedsLen; i++) {
+      uint32 feedId;
+      uint8 num_properties;
+      (feedId, num_properties, pos) = PythLazerLib.parseFeedHeader(payload, pos);
+
+      uint64 price = 0;
+      for (uint8 j = 0; j < num_properties; j++) {
+        PythLazerLib.PriceFeedProperty property;
+        (property, pos) = PythLazerLib.parseFeedProperty(payload, pos);
+        if (property == PythLazerLib.PriceFeedProperty.Price) {
+          (price, pos) = PythLazerLib.parseFeedValueUint64(payload, pos);
+        } else {
+          revert("unknown property");
+        }
+      }
+
+      uint256 productId = feedIdToProductId[feedId];
+      if (productId != 0) {
+        $.priceHistory[timestamp][productId] = price;
+      }
+    }
   }
 
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

@@ -180,3 +180,13 @@ struct ManualPriceData {
   uint64 price;
   uint256 productId;
 }
+
+struct PriceFeedMapping {
+  uint256 priceFeedId;
+  uint256 productId;
+}
+
+struct PriceLazerData {
+  bytes priceData;
+  PriceFeedMapping[] mappings;
+}
