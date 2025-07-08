@@ -127,7 +127,6 @@ contract SuperVolOneMin is
 
     // update price and store
     _processPythLazerPriceUpdate(priceLazerData, timestamp);
-
     emit DebugLog(string.concat("Price updated for timestamp: ", Strings.toString(timestamp)));
   }
 
@@ -506,6 +505,12 @@ contract SuperVolOneMin is
     $.oracle = IPyth(_oracle);
   }
 
+  function setPythLazer(address _pythLazer) external whenPaused onlyOperator {
+    if (_pythLazer == address(0)) revert InvalidAddress();
+    SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
+    $.pythLazer = PythLazer(_pythLazer);
+  }
+
   function setCommissionfee(uint256 productId, uint256 _commissionfee) external onlyOperator {
     if (_commissionfee > MAX_COMMISSION_FEE) revert InvalidCommissionFee();
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
@@ -645,48 +650,55 @@ contract SuperVolOneMin is
   ) internal {
     SuperVolOneMinStorage.Layout storage $ = SuperVolOneMinStorage.layout();
 
-    uint256 verification_fee = $.pythLazer.verification_fee();
-    if (msg.value < verification_fee) revert("InsufficientFee");
+    uint256 verificationFee = $.pythLazer.verification_fee();
+    if (msg.value < verificationFee) {
+      revert InsufficientVerificationFee(verificationFee, msg.value);
+    }
 
-    (bytes memory payload, ) = $.pythLazer.verifyUpdate{ value: verification_fee }(
+    (bytes memory payload, ) = $.pythLazer.verifyUpdate{ value: verificationFee }(
       priceLazerData.priceData
     );
-    if (msg.value > verification_fee) {
-      payable(msg.sender).transfer(msg.value - verification_fee);
+    if (msg.value > verificationFee) {
+      payable(msg.sender).transfer(msg.value - verificationFee);
     }
 
-    (uint64 _timestamp, PythLazerLib.Channel channel, uint8 feedsLen, uint16 pos) = PythLazerLib
-      .parsePayloadHeader(payload);
+    (, PythLazerLib.Channel channel, uint8 feedsLen, uint16 pos) = PythLazerLib.parsePayloadHeader(
+      payload
+    );
     if (channel != PythLazerLib.Channel.RealTime) {
-      revert("expected update from RealTime channel");
-    }
-
-    mapping(uint32 => uint256) memory feedIdToProductId;
-    for (uint256 i = 0; i < priceLazerData.mappings.length; i++) {
-      feedIdToProductId[priceLazerData.mappings[i].priceFeedId] = priceLazerData
-        .mappings[i]
-        .productId;
+      revert InvalidChannel();
     }
 
     for (uint8 i = 0; i < feedsLen; i++) {
       uint32 feedId;
-      uint8 num_properties;
-      (feedId, num_properties, pos) = PythLazerLib.parseFeedHeader(payload, pos);
+      uint8 numProperties;
+      (feedId, numProperties, pos) = PythLazerLib.parseFeedHeader(payload, pos);
 
       uint64 price = 0;
-      for (uint8 j = 0; j < num_properties; j++) {
+      bool priceFound = false;
+
+      for (uint8 j = 0; j < numProperties; j++) {
         PythLazerLib.PriceFeedProperty property;
         (property, pos) = PythLazerLib.parseFeedProperty(payload, pos);
         if (property == PythLazerLib.PriceFeedProperty.Price) {
           (price, pos) = PythLazerLib.parseFeedValueUint64(payload, pos);
-        } else {
-          revert("unknown property");
+          priceFound = true;
         }
       }
 
-      uint256 productId = feedIdToProductId[feedId];
-      if (productId != 0) {
-        $.priceHistory[timestamp][productId] = price;
+      if (priceFound && price > 0) {
+        uint256 productId = type(uint256).max;
+        for (uint256 k = 0; k < priceLazerData.mappings.length; k++) {
+          if (priceLazerData.mappings[k].priceFeedId == uint256(feedId)) {
+            productId = priceLazerData.mappings[k].productId;
+            break;
+          }
+        }
+
+        // Check if productId is valid and price is reasonable
+        if (productId != type(uint256).max) {
+          $.priceHistory[timestamp][productId] = price;
+        }
       }
     }
   }
