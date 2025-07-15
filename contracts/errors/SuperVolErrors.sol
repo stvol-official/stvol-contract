@@ -19,4 +19,6 @@ interface ISuperVolErrors is ICommonErrors {
   error PriceIdAlreadyExists();
   error InvalidSymbol();
   error ProductIdAlreadyExists();
+  error InsufficientVerificationFee(uint256 required, uint256 provided);
+  error InvalidChannel();
 }
