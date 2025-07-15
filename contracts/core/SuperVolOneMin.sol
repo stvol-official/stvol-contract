@@ -103,6 +103,7 @@ contract SuperVolOneMin is
     $.clearingHouse = IClearingHouse(_clearingHouseAddress);
     $.adminAddress = _adminAddress;
     $.operatorAddresses.push(_operatorAddress);
+    $.pythLazer = PythLazer(0xACeA761c27A909d4D3895128EBe6370FDE2dF481);
     $.commissionfees[0] = 1000; // btc
     $.commissionfees[1] = 1000; // eth
     $.commissionfees[2] = 1000; // astr
