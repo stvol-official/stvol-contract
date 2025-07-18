@@ -7,8 +7,8 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["soneium_testnet", "soneium_mainnet"];
-const DEPLOYED_PROXY = "0x5063560c167c6a9f0d35Ae7c8599BC93AFBA51c6"; // for testnet
-// const DEPLOYED_PROXY = "0x70495AaBb840bD3e2e945e79b842772dD7892D80"; // for mainnet
+// const DEPLOYED_PROXY = "0x5063560c167c6a9f0d35Ae7c8599BC93AFBA51c6"; // for testnet
+const DEPLOYED_PROXY = "0x70495AaBb840bD3e2e945e79b842772dD7892D80"; // for mainnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));

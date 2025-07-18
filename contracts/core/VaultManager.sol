@@ -154,15 +154,23 @@ contract VaultManager is
     if (isVault(product, user) || !isVaultMember(product, vault, user)) revert Unauthorized();
     VaultInfo storage vaultInfo = _validateVaultOperation(product, vault, amount, true);
 
-    uint256 leaderShare;
-    if (user != vaultInfo.leader) {
-      leaderShare = (amount * vaultInfo.profitShare) / BASE;
+    (VaultMember memory member, bool found) = _findMember(product, vault, user);
+    if (!found) revert Unauthorized();
+
+    uint256 currentValue = (member.shares * vaultInfo.balance) / vaultInfo.totalShares;
+    uint256 originalDeposit = member.balance;
+    uint256 profit = currentValue > originalDeposit ? currentValue - originalDeposit : 0;
+
+    uint256 leaderShare = 0;
+    if (user != vaultInfo.leader && profit > 0) {
+      uint256 profitPortion = (amount * profit) / currentValue;
+      leaderShare = (profitPortion * vaultInfo.profitShare) / BASE;
     }
 
-    if (user != vaultInfo.leader) {
-      // Calculate leader's share
+    if (user != vaultInfo.leader && leaderShare > 0) {
       _updateVaultMemberBalance(product, vault, vaultInfo.leader, leaderShare, true);
     }
+
     uint256 withdrawAmount = _updateVaultMemberBalance(product, vault, user, amount, false);
 
     emit VaultTransaction(product, vault, user, amount, false, withdrawAmount);
@@ -293,7 +301,6 @@ contract VaultManager is
     VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
 
-    // Get user's current shares
     (VaultMember memory member, bool found) = _findMember(product, vault, user);
     if (!found) return (0, 0, 0);
 
@@ -302,13 +309,21 @@ contract VaultManager is
     uint256 totalVaultValue = vaultInfo.balance;
     if (totalShares == 0) return (0, 0, 0);
 
-    // Calculate current value of shares
+    // 현재 지분 가치 계산
     withdrawableAmount = (userShares * totalVaultValue) / totalShares;
 
-    // Calculate leader fee if applicable
-    if (user != vaultInfo.leader) {
-      estimatedLeaderFee = (withdrawableAmount * vaultInfo.profitShare) / BASE;
+    // 수익 계산
+    uint256 originalDeposit = member.balance;
+    uint256 profit = withdrawableAmount > originalDeposit
+      ? withdrawableAmount - originalDeposit
+      : 0;
+
+    // 수익이 있을 때만 수수료 계산
+    if (user != vaultInfo.leader && profit > 0) {
+      estimatedLeaderFee = (profit * vaultInfo.profitShare) / BASE;
       withdrawableAmount -= estimatedLeaderFee;
+    } else {
+      estimatedLeaderFee = 0;
     }
   }
 
@@ -333,7 +348,16 @@ contract VaultManager is
     sharePercentage = (member.shares * BASE) / totalShares;
 
     // Calculate current value before leader fee
-    currentValue = (member.shares * vaultInfo.balance) / totalShares;
+    uint256 totalValue = (member.shares * vaultInfo.balance) / totalShares;
+
+    uint256 profit = totalValue > depositBalance ? totalValue - depositBalance : 0;
+
+    if (user != vaultInfo.leader && profit > 0) {
+      uint256 leaderFee = (profit * vaultInfo.profitShare) / BASE;
+      currentValue = totalValue - leaderFee;
+    } else {
+      currentValue = totalValue;
+    }
   }
 
   function withdrawAllFromVault(
