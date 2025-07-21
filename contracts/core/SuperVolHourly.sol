@@ -7,13 +7,13 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import { PythLazer } from "../libraries/PythLazer.sol";
+import { PythLazerLib } from "../libraries/PythLazerLib.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolStorage } from "../storage/SuperVolStorage.sol";
-import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, PriceInfo, PriceUpdateData, ManualPriceData } from "../types/Types.sol";
+import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, PriceInfo, PriceUpdateData, PriceLazerData, PriceData } from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -53,7 +53,6 @@ contract SuperVolHourly is
     uint256 result
   );
   event DebugLog(string message);
-  event PriceIdAdded(uint256 indexed productId, bytes32 priceId, string symbol);
 
   modifier onlyAdmin() {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -73,7 +72,6 @@ contract SuperVolHourly is
 
   function initialize(
     address _usdcAddress,
-    address _oracleAddress,
     address _adminAddress,
     address _operatorAddress,
     uint256 _commissionfee,
@@ -89,8 +87,8 @@ contract SuperVolHourly is
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
     $.token = IERC20(_usdcAddress);
-    $.oracle = IPyth(_oracleAddress);
     $.clearingHouse = IClearingHouse(_clearingHouseAddress);
+    $.pythLazer = PythLazer(0xACeA761c27A909d4D3895128EBe6370FDE2dF481);
     $.adminAddress = _adminAddress;
     $.operatorAddress = _operatorAddress;
     $.commissionfee = _commissionfee;
@@ -106,13 +104,13 @@ contract SuperVolHourly is
   }
 
   function executeRound(
-    PriceUpdateData[] calldata updateDataWithIds,
+    PriceLazerData calldata priceLazerData,
     uint64 initDate,
     bool skipSettlement
   ) external payable whenNotPaused onlyOperator {
     if (initDate % 3600 != 0) revert InvalidInitDate(); // Ensure initDate is on the hour in seconds since Unix epoch.
 
-    PythStructs.PriceFeed[] memory feeds = _getPythPrices(updateDataWithIds, initDate);
+    PriceData[] memory priceData = _processPythLazerPriceUpdate(priceLazerData);
 
     uint256 startEpoch = _epochAt(initDate);
     uint256 currentEpochNumber = _epochAt(block.timestamp);
@@ -126,11 +124,10 @@ contract SuperVolHourly is
       round.startTimestamp = initDate;
       round.endTimestamp = initDate + INTERVAL_SECONDS;
 
-      for (uint i = 0; i < feeds.length; i++) {
-        uint256 productId = updateDataWithIds[i].productId;
-        uint64 pythPrice = uint64(feeds[i].price.price);
-        round.startPrice[productId] = pythPrice;
-        emit StartRound(startEpoch, productId, pythPrice, initDate);
+      for (uint i = 0; i < priceData.length; i++) {
+        PriceData memory data = priceData[i];
+        round.startPrice[data.productId] = data.price;
+        emit StartRound(startEpoch, data.productId, data.price, initDate);
       }
       round.isStarted = true;
     }
@@ -146,11 +143,10 @@ contract SuperVolHourly is
     ) {
       prevRound.endTimestamp = initDate;
 
-      for (uint i = 0; i < feeds.length; i++) {
-        uint256 productId = updateDataWithIds[i].productId;
-        uint64 pythPrice = uint64(feeds[i].price.price);
-        prevRound.endPrice[productId] = pythPrice;
-        emit EndRound(prevEpoch, productId, pythPrice, initDate);
+      for (uint i = 0; i < priceData.length; i++) {
+        PriceData memory data = priceData[i];
+        prevRound.endPrice[data.productId] = data.price;
+        emit EndRound(prevEpoch, data.productId, data.price, initDate);
       }
       prevRound.isSettled = true;
     }
@@ -515,6 +511,12 @@ contract SuperVolHourly is
     token.safeTransfer($.adminAddress, token.balanceOf(address(this)));
   }
 
+  function setPythLazer(address _pythLazer) external onlyAdmin {
+    if (_pythLazer == address(0)) revert InvalidAddress();
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    $.pythLazer = PythLazer(_pythLazer);
+  }
+
   function unpause() external whenPaused onlyAdmin {
     _unpause();
   }
@@ -523,12 +525,6 @@ contract SuperVolHourly is
     if (_operatorAddress == address(0)) revert InvalidAddress();
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     $.operatorAddress = _operatorAddress;
-  }
-
-  function setOracle(address _oracle) external whenPaused onlyAdmin {
-    if (_oracle == address(0)) revert InvalidAddress();
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    $.oracle = IPyth(_oracle);
   }
 
   function setCommissionfee(uint256 _commissionfee) external whenPaused onlyAdmin {
@@ -549,54 +545,6 @@ contract SuperVolHourly is
     $.token = IERC20(_token);
   }
 
-  function addPriceId(
-    bytes32 _priceId,
-    uint256 _productId,
-    string calldata _symbol
-  ) external onlyOperator {
-    _addPriceId(_priceId, _productId, _symbol);
-  }
-
-  // function initializeDefaultPriceIds() external onlyOperator {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-
-  //   if (
-  //     $.priceIdToProductId[0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43] ==
-  //     0 &&
-  //     $.priceInfos[0].priceId != 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
-  //   ) {
-  //     _addPriceId(0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43, 0, "BTC/USD");
-  //     _addPriceId(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, 1, "ETH/USD");
-  //     _addPriceId(0x89b814de1eb2afd3d3b498d296fca3a873e644bafb587e84d181a01edd682853, 2, "ASTR/USD");
-  //     _addPriceId(0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d, 3, "SOL/USD");
-  //   }
-  // }
-
-  function setPriceInfo(PriceInfo calldata priceInfo) external onlyOperator {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-
-    if (priceInfo.priceId == bytes32(0)) revert InvalidPriceId();
-    if (bytes(priceInfo.symbol).length == 0) revert InvalidSymbol();
-
-    uint256 existingProductId = $.priceIdToProductId[priceInfo.priceId];
-    bytes32 oldPriceId = $.priceInfos[priceInfo.productId].priceId;
-
-    if (existingProductId != priceInfo.productId) {
-      if (existingProductId != 0 || $.priceInfos[0].priceId == priceInfo.priceId) {
-        revert PriceIdAlreadyExists();
-      }
-    }
-
-    if (oldPriceId != bytes32(0)) {
-      delete $.priceIdToProductId[oldPriceId];
-    }
-
-    $.priceInfos[priceInfo.productId] = priceInfo;
-    $.priceIdToProductId[priceInfo.priceId] = priceInfo.productId;
-
-    emit PriceIdAdded(priceInfo.productId, priceInfo.priceId, priceInfo.symbol);
-  }
-
   /* public views */
   function commissionfee() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -615,11 +563,6 @@ contract SuperVolHourly is
     uint256 totalBalance = depositBalance + couponBalance;
     return (depositBalance, couponBalance, totalBalance);
   }
-
-  // function balanceOf(address user) public view returns (uint256) {
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   return $.clearingHouse.userBalances(user);
-  // }
 
   function rounds(uint256 epoch, uint256 productId) public view returns (ProductRound memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
@@ -710,43 +653,85 @@ contract SuperVolHourly is
     return $.lastFilledOrderId;
   }
 
+  function setLastFilledOrderId(uint256 _lastFilledOrderId) external onlyOperator {
+    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
+    $.lastFilledOrderId = _lastFilledOrderId;
+  }
+
   function lastSettledFilledOrderId() public view returns (uint256) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
     return $.lastSettledFilledOrderId;
   }
 
-  function priceInfos() external view returns (PriceInfo[] memory) {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    PriceInfo[] memory priceInfoArray = new PriceInfo[]($.priceIdCount);
-    for (uint256 i = 0; i < $.priceIdCount; i++) {
-      priceInfoArray[i] = $.priceInfos[i];
-    }
-    return priceInfoArray;
-  }
-
   /* internal functions */
-  function _getPythPrices(
-    PriceUpdateData[] memory updateDataWithIds,
-    uint64 timestamp
-  ) internal returns (PythStructs.PriceFeed[] memory) {
+  function _processPythLazerPriceUpdate(
+    PriceLazerData memory priceLazerData
+  ) internal returns (PriceData[] memory) {
     SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
 
-    bytes[] memory updateData = new bytes[](updateDataWithIds.length);
-    bytes32[] memory priceIds = new bytes32[](updateDataWithIds.length);
-
-    for (uint256 i = 0; i < updateDataWithIds.length; i++) {
-      updateData[i] = updateDataWithIds[i].priceData;
-      priceIds[i] = $.priceInfos[updateDataWithIds[i].productId].priceId;
+    uint256 verificationFee = $.pythLazer.verification_fee();
+    if (msg.value < verificationFee) {
+      revert InsufficientVerificationFee(verificationFee, msg.value);
     }
 
-    uint fee = $.oracle.getUpdateFee(updateData);
-    return
-      $.oracle.parsePriceFeedUpdates{ value: fee }(
-        updateData,
-        priceIds,
-        timestamp,
-        timestamp + uint64(BUFFER_SECONDS)
-      );
+    (bytes memory payload, ) = $.pythLazer.verifyUpdate{ value: verificationFee }(
+      priceLazerData.priceData
+    );
+    if (msg.value > verificationFee) {
+      payable(msg.sender).transfer(msg.value - verificationFee);
+    }
+
+    (, PythLazerLib.Channel channel, uint8 feedsLen, uint16 pos) = PythLazerLib.parsePayloadHeader(
+      payload
+    );
+    if (channel != PythLazerLib.Channel.RealTime) {
+      revert InvalidChannel();
+    }
+
+    PriceData[] memory tempData = new PriceData[](feedsLen);
+    uint256 validCount = 0;
+
+    for (uint8 i = 0; i < feedsLen; i++) {
+      uint32 feedId;
+      uint8 numProperties;
+      (feedId, numProperties, pos) = PythLazerLib.parseFeedHeader(payload, pos);
+
+      uint64 price = 0;
+      bool priceFound = false;
+
+      for (uint8 j = 0; j < numProperties; j++) {
+        PythLazerLib.PriceFeedProperty property;
+        (property, pos) = PythLazerLib.parseFeedProperty(payload, pos);
+        if (property == PythLazerLib.PriceFeedProperty.Price) {
+          (price, pos) = PythLazerLib.parseFeedValueUint64(payload, pos);
+          priceFound = true;
+        }
+      }
+
+      if (priceFound && price > 0) {
+        uint256 productId = type(uint256).max;
+        for (uint256 k = 0; k < priceLazerData.mappings.length; k++) {
+          if (priceLazerData.mappings[k].priceFeedId == uint256(feedId)) {
+            productId = priceLazerData.mappings[k].productId;
+            break;
+          }
+        }
+
+        // Check if productId is valid and price is reasonable
+        if (productId != type(uint256).max) {
+          tempData[validCount] = PriceData({ productId: productId, price: price });
+          validCount++;
+        }
+      }
+    }
+
+    PriceData[] memory priceData = new PriceData[](validCount);
+
+    for (uint256 i = 0; i < validCount; i++) {
+      priceData[i] = tempData[i];
+    }
+
+    return priceData;
   }
 
   function _settleFilledOrders(Round storage round) internal {
@@ -880,16 +865,8 @@ contract SuperVolHourly is
     return (startTime, endTime);
   }
 
-  // function transferRemainingTokens(address to) external onlyAdmin {
-  //   if (to == address(0)) revert InvalidAddress();
-
-  //   SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-  //   uint256 balance = $.token.balanceOf(address(this));
-  //   $.token.safeTransfer(to, balance);
-  // }
-
   function setManualRoundEndPrices(
-    ManualPriceData[] calldata manualPrices,
+    PriceData[] calldata priceData,
     uint64 initDate,
     bool skipSettlement
   ) external onlyOperator {
@@ -920,9 +897,9 @@ contract SuperVolHourly is
     ) {
       problemRound.endTimestamp = initDate + INTERVAL_SECONDS;
 
-      for (uint i = 0; i < manualPrices.length; i++) {
-        ManualPriceData calldata priceData = manualPrices[i];
-        problemRound.endPrice[priceData.productId] = priceData.price;
+      for (uint i = 0; i < priceData.length; i++) {
+        PriceData calldata data = priceData[i];
+        problemRound.endPrice[data.productId] = data.price;
         emit DebugLog(
           string.concat(
             "nextRound | ",
@@ -930,20 +907,18 @@ contract SuperVolHourly is
             Strings.toString(nextRound.epoch),
             " | ",
             "startPrice[",
-            Strings.toString(nextRound.startPrice[priceData.productId]),
+            Strings.toString(nextRound.startPrice[data.productId]),
             "]: ",
             "endPrice[",
-            Strings.toString(nextRound.endPrice[priceData.productId]),
+            Strings.toString(nextRound.endPrice[data.productId]),
             "]"
           )
         );
-        if (
-          nextRound.epoch <= currentEpochNumber && nextRound.startPrice[priceData.productId] == 0
-        ) {
-          nextRound.startPrice[priceData.productId] = priceData.price;
+        if (nextRound.epoch <= currentEpochNumber && nextRound.startPrice[data.productId] == 0) {
+          nextRound.startPrice[data.productId] = data.price;
         }
 
-        emit EndRound(problemEpoch, priceData.productId, priceData.price, initDate);
+        emit EndRound(problemEpoch, data.productId, data.price, initDate);
         emit DebugLog(
           string.concat(
             "Manual Price Update | ",
@@ -951,9 +926,9 @@ contract SuperVolHourly is
             Strings.toString(problemEpoch),
             " | ",
             "Product[",
-            Strings.toString(priceData.productId),
+            Strings.toString(data.productId),
             "]: ",
-            Strings.toString(priceData.price)
+            Strings.toString(data.price)
           )
         );
       }
@@ -1012,30 +987,5 @@ contract SuperVolHourly is
       }
     }
     round.isSettled = true;
-  }
-
-  function _addPriceId(bytes32 _priceId, uint256 _productId, string memory _symbol) internal {
-    SuperVolStorage.Layout storage $ = SuperVolStorage.layout();
-    if (_priceId == bytes32(0)) revert InvalidPriceId();
-    if ($.priceIdToProductId[_priceId] != 0 || $.priceInfos[0].priceId == _priceId) {
-      revert PriceIdAlreadyExists();
-    }
-    if ($.priceInfos[_productId].priceId != bytes32(0)) {
-      revert ProductIdAlreadyExists();
-    }
-    if (bytes(_symbol).length == 0) {
-      revert InvalidSymbol();
-    }
-
-    $.priceInfos[_productId] = PriceInfo({
-      priceId: _priceId,
-      productId: _productId,
-      symbol: _symbol
-    });
-
-    $.priceIdToProductId[_priceId] = _productId;
-    $.priceIdCount++;
-
-    emit PriceIdAdded(_productId, _priceId, _symbol);
   }
 }
