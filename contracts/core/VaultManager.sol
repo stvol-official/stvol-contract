@@ -139,7 +139,7 @@ contract VaultManager is
     if (isVault(product, user)) revert VaultCannotDeposit();
     _validateVaultOperation(product, vault, amount, false);
 
-    uint256 depositBalance = _updateVaultMemberBalance(product, vault, user, amount, true);
+    uint256 depositBalance = _depositToVaultMemberBalance(product, vault, user, amount);
 
     emit VaultTransaction(product, vault, user, amount, true, depositBalance);
     return depositBalance;
@@ -154,16 +154,25 @@ contract VaultManager is
     if (isVault(product, user) || !isVaultMember(product, vault, user)) revert Unauthorized();
     VaultInfo storage vaultInfo = _validateVaultOperation(product, vault, amount, true);
 
-    uint256 leaderShare;
-    if (user != vaultInfo.leader) {
-      leaderShare = (amount * vaultInfo.profitShare) / BASE;
+    (VaultMember memory member, bool found) = _findMember(product, vault, user);
+    if (!found) revert Unauthorized();
+
+    uint256 currentValue = (member.shares * vaultInfo.balance) / vaultInfo.totalShares;
+    uint256 profit = _calculateProfit(currentValue, member.balance);
+    uint256 leaderShare = _calculateLeaderFee(
+      user,
+      vaultInfo.leader,
+      profit,
+      amount,
+      currentValue,
+      vaultInfo.profitShare
+    );
+
+    if (user != vaultInfo.leader && leaderShare > 0) {
+      _depositToVaultMemberBalance(product, vault, vaultInfo.leader, leaderShare);
     }
 
-    if (user != vaultInfo.leader) {
-      // Calculate leader's share
-      _updateVaultMemberBalance(product, vault, vaultInfo.leader, leaderShare, true);
-    }
-    uint256 withdrawAmount = _updateVaultMemberBalance(product, vault, user, amount, false);
+    uint256 withdrawAmount = _withdrawFromVaultMemberBalance(product, vault, user, amount, profit);
 
     emit VaultTransaction(product, vault, user, amount, false, withdrawAmount);
     return withdrawAmount;
@@ -293,7 +302,6 @@ contract VaultManager is
     VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultInfo storage vaultInfo = $.vaults[product][vault];
 
-    // Get user's current shares
     (VaultMember memory member, bool found) = _findMember(product, vault, user);
     if (!found) return (0, 0, 0);
 
@@ -302,14 +310,20 @@ contract VaultManager is
     uint256 totalVaultValue = vaultInfo.balance;
     if (totalShares == 0) return (0, 0, 0);
 
-    // Calculate current value of shares
+    // calculate withdrawable amount
     withdrawableAmount = (userShares * totalVaultValue) / totalShares;
 
-    // Calculate leader fee if applicable
-    if (user != vaultInfo.leader) {
-      estimatedLeaderFee = (withdrawableAmount * vaultInfo.profitShare) / BASE;
-      withdrawableAmount -= estimatedLeaderFee;
-    }
+    // calculate profit and leader fee
+    uint256 profit = _calculateProfit(withdrawableAmount, member.balance);
+    estimatedLeaderFee = _calculateLeaderFee(
+      user,
+      vaultInfo.leader,
+      profit,
+      withdrawableAmount,
+      withdrawableAmount,
+      vaultInfo.profitShare
+    );
+    withdrawableAmount -= estimatedLeaderFee;
   }
 
   function userBalances(
@@ -333,7 +347,17 @@ contract VaultManager is
     sharePercentage = (member.shares * BASE) / totalShares;
 
     // Calculate current value before leader fee
-    currentValue = (member.shares * vaultInfo.balance) / totalShares;
+    uint256 totalValue = (member.shares * vaultInfo.balance) / totalShares;
+    uint256 profit = _calculateProfit(totalValue, depositBalance);
+    uint256 leaderFee = _calculateLeaderFee(
+      user,
+      vaultInfo.leader,
+      profit,
+      totalValue,
+      totalValue,
+      vaultInfo.profitShare
+    );
+    currentValue = totalValue - leaderFee;
   }
 
   function withdrawAllFromVault(
@@ -345,42 +369,53 @@ contract VaultManager is
     if (vaultInfo.vault == address(0)) revert VaultNotFound();
 
     VaultMember[] storage members = $.vaultMembers[product][vault];
-    uint256 totalVaultValue = vaultInfo.balance;
+    uint256 vaultBalance = vaultInfo.balance;
     uint256 totalShares = vaultInfo.totalShares;
-    if (totalShares == 0 || totalVaultValue == 0) revert VaultBalanceIsZero();
+    if (totalShares == 0 || vaultBalance == 0) revert VaultBalanceIsZero();
 
-    // First, count valid withdrawals
-    uint256 validWithdrawalsCount = 0;
+    // Count valid withdrawals
+    uint256 validCount = 0;
     for (uint i = 0; i < members.length; i++) {
       if (members[i].shares > 0) {
-        validWithdrawalsCount++;
+        validCount++;
       }
     }
 
-    // Create array with exact size needed
-    WithdrawalInfo[] memory withdrawals = new WithdrawalInfo[](validWithdrawalsCount);
+    WithdrawalInfo[] memory withdrawals = new WithdrawalInfo[](validCount);
     uint256 withdrawalIndex = 0;
 
     for (uint i = 0; i < members.length; i++) {
-      if (totalShares == 0 || totalVaultValue == 0) break;
+      if (members[i].shares == 0) continue;
 
       address user = members[i].user;
       uint256 memberShares = members[i].shares;
 
-      if (memberShares > 0) {
-        uint256 withdrawAmount = (memberShares * totalVaultValue) / totalShares;
+      uint256 currentValue = (memberShares * vaultInfo.balance) / vaultInfo.totalShares;
+      uint256 profit = _calculateProfit(currentValue, members[i].balance);
 
-        members[i].balance = 0;
-        members[i].shares = 0;
+      uint256 leaderShare = _calculateLeaderFee(
+        user,
+        vaultInfo.leader,
+        profit,
+        currentValue,
+        currentValue,
+        vaultInfo.profitShare
+      );
 
-        if (withdrawAmount <= vaultInfo.balance) {
-          vaultInfo.balance -= withdrawAmount;
-          vaultInfo.totalShares -= memberShares;
-
-          withdrawals[withdrawalIndex] = WithdrawalInfo({ user: user, amount: withdrawAmount });
-          withdrawalIndex++;
-        }
+      if (user != vaultInfo.leader && leaderShare > 0) {
+        _depositToVaultMemberBalance(product, vault, vaultInfo.leader, leaderShare);
       }
+
+      uint256 withdrawAmount = _withdrawFromVaultMemberBalance(
+        product,
+        vault,
+        user,
+        currentValue,
+        profit
+      );
+
+      withdrawals[withdrawalIndex] = WithdrawalInfo({ user: user, amount: withdrawAmount });
+      withdrawalIndex++;
     }
 
     return withdrawals;
@@ -389,12 +424,11 @@ contract VaultManager is
   /* internal functions */
   function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-  function _updateVaultMemberBalance(
+  function _depositToVaultMemberBalance(
     address product,
     address vault,
     address user,
-    uint256 amount,
-    bool isDeposit
+    uint256 amount
   ) internal returns (uint256 balance) {
     VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
     VaultMember[] storage members = $.vaultMembers[product][vault];
@@ -406,33 +440,16 @@ contract VaultManager is
 
     for (uint i = 0; i < members.length; i++) {
       if (members[i].user == user) {
-        if (isDeposit) {
-          members[i].balance += amount;
-          members[i].shares += newShares;
-          $.vaults[product][vault].balance += amount;
-          $.vaults[product][vault].totalShares += newShares;
-          balance = amount;
-        } else {
-          uint256 userShareRatio = (members[i].shares * totalVaultValue) / totalShares;
-          uint256 actualAmount = amount > userShareRatio ? userShareRatio : amount;
-          uint256 withdrawShares = (actualAmount * totalShares) / totalVaultValue;
-
-          if (members[i].shares < withdrawShares) revert InsufficientShares();
-
-          members[i].balance -= actualAmount;
-          members[i].shares -= withdrawShares;
-
-          $.vaults[product][vault].balance -= actualAmount;
-          $.vaults[product][vault].totalShares -= withdrawShares;
-
-          balance = actualAmount;
-        }
+        members[i].balance += amount;
+        members[i].shares += newShares;
+        $.vaults[product][vault].balance += amount;
+        $.vaults[product][vault].totalShares += newShares;
+        balance = members[i].balance;
         found = true;
         break;
       }
     }
     if (!found) {
-      if (!isDeposit) revert CannotWithdrawFromNonExistentMember();
       $.vaultMembers[product][vault].push(
         VaultMember({
           vault: vault,
@@ -445,6 +462,52 @@ contract VaultManager is
       $.vaults[product][vault].balance += amount;
       $.vaults[product][vault].totalShares += newShares;
       balance = amount;
+    }
+  }
+
+  function _withdrawFromVaultMemberBalance(
+    address product,
+    address vault,
+    address user,
+    uint256 amount,
+    uint256 profit
+  ) internal returns (uint256 netWithdrawAmount) {
+    VaultManagerStorage.Layout storage $ = VaultManagerStorage.layout();
+    VaultMember[] storage members = $.vaultMembers[product][vault];
+    bool found = false;
+
+    uint256 vaultBalance = $.vaults[product][vault].balance;
+    uint256 totalShares = $.vaults[product][vault].totalShares;
+
+    for (uint i = 0; i < members.length; i++) {
+      if (members[i].user == user) {
+        uint256 userValue = (members[i].shares * vaultBalance) / totalShares;
+        uint256 withdrawValue = amount > userValue ? userValue : amount;
+        uint256 sharesToWithdraw = (withdrawValue * totalShares) / vaultBalance;
+
+        if (members[i].shares < sharesToWithdraw) revert InsufficientShares();
+
+        uint256 leaderFee = _calculateLeaderFee(
+          user,
+          $.vaults[product][vault].leader,
+          profit,
+          withdrawValue,
+          withdrawValue,
+          $.vaults[product][vault].profitShare
+        );
+
+        members[i].balance -= withdrawValue;
+        members[i].shares -= sharesToWithdraw;
+        $.vaults[product][vault].balance -= withdrawValue;
+        $.vaults[product][vault].totalShares -= sharesToWithdraw;
+
+        netWithdrawAmount = withdrawValue - leaderFee;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      revert CannotWithdrawFromNonExistentMember();
     }
   }
 
@@ -474,6 +537,27 @@ contract VaultManager is
         return (members[i], true);
       }
     }
-    return (members[0], false); // Return first element as dummy (never used when false)
+    return (members[0], false);
+  }
+
+  function _calculateProfit(
+    uint256 currentValue,
+    uint256 originalDeposit
+  ) internal pure returns (uint256 profit) {
+    return currentValue > originalDeposit ? currentValue - originalDeposit : 0;
+  }
+
+  function _calculateLeaderFee(
+    address user,
+    address leader,
+    uint256 profit,
+    uint256 amount,
+    uint256 currentValue,
+    uint256 profitShare
+  ) internal pure returns (uint256 leaderFee) {
+    if (user == leader || profit == 0) return 0;
+
+    uint256 profitPortion = currentValue > 0 ? (amount * profit) / currentValue : 0;
+    return (profitPortion * profitShare) / BASE;
   }
 }
