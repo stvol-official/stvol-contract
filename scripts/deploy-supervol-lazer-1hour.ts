@@ -21,8 +21,7 @@ const main = async () => {
       config.Address.Usdc[networkName] === ethers.ZeroAddress ||
       config.Address.Admin[networkName] === ethers.ZeroAddress ||
       config.Address.Operator[networkName] === ethers.ZeroAddress ||
-      config.Address.ClearingHouse[networkName] === ethers.ZeroAddress ||
-      config.Address.Vault[networkName] === ethers.ZeroAddress
+      config.Address.ClearingHouse[networkName] === ethers.ZeroAddress
     ) {
       throw new Error("Missing addresses (Admin/Operator)");
     }
@@ -39,7 +38,6 @@ const main = async () => {
     console.log("Operator: %s", config.Address.Operator[networkName]);
     console.log("CommissionFee: %s", config.CommissionFee[networkName]);
     console.log("ClearingHouse: %s", config.Address.ClearingHouse[networkName]);
-    console.log("Vault: %s", config.Address.Vault[networkName]);
     console.log("===========================================");
 
     // Deploy libraries first
