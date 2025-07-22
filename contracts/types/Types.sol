@@ -176,7 +176,7 @@ struct PriceUpdateData {
   uint256 productId; // product id
 }
 
-struct ManualPriceData {
+struct PriceData {
   uint64 price;
   uint256 productId;
 }
