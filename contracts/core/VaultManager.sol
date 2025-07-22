@@ -443,13 +443,20 @@ contract VaultManager is
 
           if (members[i].shares < withdrawShares) revert InsufficientShares();
 
+          // calculate leader fee
+          uint256 leaderFee = 0;
+          if (user != $.vaults[product][vault].leader) {
+            leaderFee = (actualAmount * $.vaults[product][vault].profitShare) / BASE;
+          }
+
           members[i].balance -= actualAmount;
           members[i].shares -= withdrawShares;
 
           $.vaults[product][vault].balance -= actualAmount;
           $.vaults[product][vault].totalShares -= withdrawShares;
 
-          balance = actualAmount;
+          // return amount without leader fee
+          balance = actualAmount - leaderFee;
         }
         found = true;
         break;
