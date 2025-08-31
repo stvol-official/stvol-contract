@@ -6,7 +6,7 @@ import "../interfaces/IVaultManager.sol";
 import { WithdrawalRequest, Coupon, ForceWithdrawalRequest, CouponUsageDetail, Product } from "../types/Types.sol";
 
 library ClearingHouseStorage {
-  // keccak256(abi.encode(uint256(keccak256("io.supervol.storage.clearinghouse")) - 1)) & ~bytes32(uint256(0xff));
+  // keccak256(abi.encode(uint256(keccak256("io.supervol.storage.clearinghouse.secure")) - 1)) & ~bytes32(uint256(0xff));
   bytes32 internal constant SLOT =
     0x8813a153063d7fe54e4155b960ce0bcfaac345da276d07e649f6c356f4752100;
 
@@ -28,8 +28,6 @@ library ClearingHouseStorage {
     address[] couponHolders;
     uint256 withdrawalFee; // withdrawal fee
     mapping(uint256 => bool) processedBatchIds; // processed batch ids
-    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowBalances; // [DEPRECATED] epoch => user => idx => amount
-    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) escrowCoupons; // [DEPRECATED] epoch => user => idx => amount
     mapping(address => mapping(uint256 => CouponUsageDetail[])) couponUsageHistory; // user => epoch => CouponUsageDetail[]
     mapping(address => mapping(uint256 => mapping(address => mapping(uint256 => uint256)))) productEscrowBalances; // product => epoch => user => idx => amount
     mapping(address => mapping(uint256 => mapping(address => mapping(uint256 => uint256)))) productEscrowCoupons; // product => epoch => user => idx => amount

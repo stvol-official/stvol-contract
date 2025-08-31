@@ -20,6 +20,7 @@ const main = async () => {
     if (
       config.Address.Usdc[networkName] === ethers.ZeroAddress ||
       config.Address.Admin[networkName] === ethers.ZeroAddress ||
+      config.Address.Operator[networkName] === ethers.ZeroAddress ||
       config.Address.OperatorVault[networkName] === ethers.ZeroAddress
     ) {
       throw new Error("Missing addresses (Usdc/Admin/OperatorVault)");
@@ -35,6 +36,7 @@ const main = async () => {
     console.log("Owner: %s", deployer.address);
     console.log("Usdc: %s", config.Address.Usdc[networkName]);
     console.log("Admin: %s", config.Address.Admin[networkName]);
+    console.log("Operator: %s", config.Address.Operator[networkName]);
     console.log("OperatorVault: %s", config.Address.OperatorVault[networkName]);
     console.log("===========================================");
 
@@ -45,6 +47,7 @@ const main = async () => {
       [
         config.Address.Usdc[networkName],
         config.Address.Admin[networkName],
+        config.Address.Operator[networkName],
         config.Address.OperatorVault[networkName],
       ],
       { kind: "uups" },
