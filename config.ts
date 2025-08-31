@@ -10,15 +10,15 @@ export default {
     },
     Admin: {
       soneium_testnet: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      soneium_mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
+      soneium_mainnet: "0x652755A5638364f3864355fB952aC3fe6a7c9522",
     },
     Operator: {
       soneium_testnet: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      soneium_mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
+      soneium_mainnet: "0x0977456Ba44C3e7487Ddbff564790F429F600C4C",
     },
     OperatorVault: {
       soneium_testnet: "0xC61042a7e9a6fe7E738550f24030D37Ecb296DC0",
-      soneium_mainnet: "0x5e6c12e083B1Ad5fB7c7bf5582467EB74cD58a66",
+      soneium_mainnet: "0x3fE8Ed01E91F769243A0234a572fd3A16eee4D55",
     },
     ClearingHouse: {
       soneium_testnet: "0xB48434a7160AAC2C4e5cdB3C3Cc2Ecfd83c6E292", // ClearingHouse Contract

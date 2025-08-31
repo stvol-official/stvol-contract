@@ -10,9 +10,9 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
-const mnemonic = fs.existsSync(".secret")
+const privateKey = fs.existsSync(".secret")
   ? fs.readFileSync(".secret").toString().trim()
-  : "test test test test test test test test test test test junk";
+  : "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
@@ -28,9 +28,7 @@ export default {
       url: `https://soneium-minato.rpc.scs.startale.com?apikey=GmiicS3QQg2znrM6ml2vxupFlf6X7Rns`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
-      accounts: {
-        mnemonic,
-      },
+      accounts: [privateKey],
       chainId: 1946,
       timeout: 60000,
     },
@@ -38,9 +36,7 @@ export default {
       url: `https://soneium.rpc.scs.startale.com?apikey=WIW3bW9VR6NydF09EMd451ojzd84TfHe`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
-      accounts: {
-        mnemonic,
-      },
+      accounts: [privateKey],
       chainId: 1868,
       timeout: 60000,
     },

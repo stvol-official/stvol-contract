@@ -105,6 +105,7 @@ contract ClearingHouse is
   function initialize(
     address _usdcAddress,
     address _adminAddress,
+    address _operatorAddress,
     address _operatorVaultAddress
   ) public initializer {
     __UUPSUpgradeable_init();
@@ -114,11 +115,14 @@ contract ClearingHouse is
 
     if (_usdcAddress == address(0)) revert InvalidAddress();
     if (_adminAddress == address(0)) revert InvalidAddress();
+    if (_operatorAddress == address(0)) revert InvalidAddress();
 
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     $.token = IERC20(_usdcAddress);
     $.adminAddress = _adminAddress;
     $.operatorVaultAddress = _operatorVaultAddress;
+    $.operators[_operatorAddress] = true;
+    $.operatorList.push(_operatorAddress);
     $.forceWithdrawalDelay = DEFAULT_FORCE_WITHDRAWAL_DELAY;
     $.withdrawalFee = WITHDRAWAL_FEE;
   }
@@ -385,7 +389,7 @@ contract ClearingHouse is
 
   function retrieveMisplacedTokens(address _token) external onlyAdmin {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    if (address($.token) != _token) revert InvalidTokenAddress();
+    if (address($.token) == _token) revert InvalidTokenAddress();
     IERC20 token = IERC20(_token);
     token.safeTransfer($.adminAddress, token.balanceOf(address(this)));
   }
@@ -398,11 +402,6 @@ contract ClearingHouse is
   function treasuryAmount() external view returns (uint256) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
     return $.treasuryAmount;
-  }
-
-  function addTreasuryAmount(uint256 amount) external nonReentrant onlyOperator {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    $.treasuryAmount += amount;
   }
 
   function setAdmin(address _adminAddress) external onlyOwner {
@@ -449,17 +448,6 @@ contract ClearingHouse is
     $.userBalances[to] += amount;
 
     emit BalanceTransferred(from, to, amount);
-  }
-
-  function addUserBalance(address user, uint256 amount) external nonReentrant onlyOperator {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    $.userBalances[user] += amount;
-  }
-
-  function subtractUserBalance(address user, uint256 amount) external nonReentrant onlyOperator {
-    ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
-    if ($.userBalances[user] < amount) revert InsufficientBalance();
-    $.userBalances[user] -= amount;
   }
 
   function addOperator(address operator) external onlyAdmin {
@@ -856,6 +844,7 @@ contract ClearingHouse is
 
     emit ProductUpdated(_product, _startTimestamp, _timeUnit, _isActive);
   }
+  
 
   function getProducts() external view returns (ProductInfo[] memory productInfos) {
     ClearingHouseStorage.Layout storage $ = ClearingHouseStorage.layout();
