@@ -481,8 +481,8 @@ contract VaultManager is
 
     for (uint i = 0; i < members.length; i++) {
       if (members[i].user == user) {
-        uint256 userValue = (members[i].shares * vaultBalance) / totalShares;
-        uint256 withdrawValue = amount > userValue ? userValue : amount;
+        uint256 userVaultValue = (members[i].shares * vaultBalance) / totalShares;
+        uint256 withdrawValue = amount > userVaultValue ? userVaultValue : amount;
         uint256 sharesToWithdraw = (withdrawValue * totalShares) / vaultBalance;
 
         if (members[i].shares < sharesToWithdraw) revert InsufficientShares();
@@ -496,7 +496,12 @@ contract VaultManager is
           $.vaults[product][vault].profitShare
         );
 
-        members[i].balance -= withdrawValue;
+        if (members[i].balance != 0) {
+          uint256 originalDepositRatio = (members[i].balance * (userVaultValue - withdrawValue)) /
+            userVaultValue;
+          members[i].balance -= originalDepositRatio;
+        }
+
         members[i].shares -= sharesToWithdraw;
         $.vaults[product][vault].balance -= withdrawValue;
         $.vaults[product][vault].totalShares -= sharesToWithdraw;
