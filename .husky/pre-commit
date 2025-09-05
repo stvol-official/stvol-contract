@@ -1,0 +1,12 @@
+export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "❌ Node.js not found. Please ensure Node.js is installed."
+  exit 1
+fi
+
+echo "🔒 Running security checks..."
+
+node scripts/check-secrets.js
+
+echo "✅ Security checks passed!"
