@@ -444,7 +444,7 @@ contract VaultManager is
         members[i].shares += newShares;
         $.vaults[product][vault].balance += amount;
         $.vaults[product][vault].totalShares += newShares;
-        balance = members[i].balance;
+        balance = amount;
         found = true;
         break;
       }
