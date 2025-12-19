@@ -13,7 +13,19 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolStorage } from "../storage/SuperVolStorage.sol";
-import { Round, FilledOrder, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, PriceInfo, PriceUpdateData, PriceLazerData, PriceData } from "../types/Types.sol";
+import {
+  Round,
+  FilledOrder,
+  Coupon,
+  WithdrawalRequest,
+  ProductRound,
+  SettlementResult,
+  WinPosition,
+  PriceInfo,
+  PriceUpdateData,
+  PriceLazerData,
+  PriceData
+} from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -29,7 +41,7 @@ contract SuperVolHourly is
 
   uint256 private constant PRICE_UNIT = 1e6;
   uint256 private constant BASE = 10000; // 100%
-  uint256 private constant MAX_COMMISSION_FEE = 500; // 5%
+  uint256 private constant MAX_COMMISSION_FEE = 5000; // 50%
   uint256 private constant INTERVAL_SECONDS = 3600; // 60 * 60 (1 hour)
   uint256 private constant BUFFER_SECONDS = 600; // 10 * 60 (10min)
   uint256 private constant START_TIMESTAMP = 1736294400; // for epoch

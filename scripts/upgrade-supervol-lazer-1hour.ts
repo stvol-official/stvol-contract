@@ -7,8 +7,10 @@ import input from "@inquirer/input";
 */
 
 const NETWORK = ["soneium_testnet", "soneium_mainnet"];
-const DEPLOYED_PROXY = "0xBcaC3552EC63cb03363B33bC9182eb594e209FC7"; // for testnet
-const PYTH_LAZER_LIB_ADDRESS = "0x9F75E45a06FA4bd0a89f97e606EfC24A64916750"; // for testnet
+// const DEPLOYED_PROXY = "0xBcaC3552EC63cb03363B33bC9182eb594e209FC7"; // for testnet
+// const PYTH_LAZER_LIB_ADDRESS = "0x9F75E45a06FA4bd0a89f97e606EfC24A64916750"; // for testnet
+const DEPLOYED_PROXY = "0x452EFEEad597169aeAd473f6b82B1e023A73dBF7"; // for mainnet
+const PYTH_LAZER_LIB_ADDRESS = "0x62D800C3eBb0d9C01176FE2Eaf9bB8C8617336Ce"; // for mainnet
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -71,7 +73,7 @@ const upgrade = async () => {
         unsafeAllowLinkedLibraries: true,
       });
       superVolContractAddress = superVolContract;
-      console.log(`�� New implementation contract deployed at: ${superVolContract}`);
+      console.log(`New implementation contract deployed at: ${superVolContract}`);
       console.log("Use this address in your Safe transaction to upgrade the proxy");
 
       /**
