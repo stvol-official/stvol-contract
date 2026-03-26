@@ -15,7 +15,21 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IClearingHouse } from "../interfaces/IClearingHouse.sol";
 import { SuperVolOneMinStorage } from "../storage/SuperVolOneMinStorage.sol";
-import { Round, Coupon, WithdrawalRequest, ProductRound, SettlementResult, WinPosition, OneMinOrder, Position, ClosingOneMinOrder, PriceInfo, PriceUpdateData, PriceLazerData, PriceFeedMapping } from "../types/Types.sol";
+import {
+  Round,
+  Coupon,
+  WithdrawalRequest,
+  ProductRound,
+  SettlementResult,
+  WinPosition,
+  OneMinOrder,
+  Position,
+  ClosingOneMinOrder,
+  PriceInfo,
+  PriceUpdateData,
+  PriceLazerData,
+  PriceFeedMapping
+} from "../types/Types.sol";
 import { ISuperVolErrors } from "../errors/SuperVolErrors.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -155,7 +169,6 @@ contract SuperVolOneMin is
         );
         continue;
       }
-
       try
         $.clearingHouse.lockInEscrow(
           address(this),
@@ -179,7 +192,6 @@ contract SuperVolOneMin is
         );
         continue;
       }
-
       $.oneMinOrders[order.idx] = order;
       emit DebugLog(string.concat("Order ", Strings.toString(order.idx), " added"));
     }
@@ -666,9 +678,6 @@ contract SuperVolOneMin is
     (, PythLazerLib.Channel channel, uint8 feedsLen, uint16 pos) = PythLazerLib.parsePayloadHeader(
       payload
     );
-    if (channel != PythLazerLib.Channel.RealTime) {
-      revert InvalidChannel();
-    }
 
     for (uint8 i = 0; i < feedsLen; i++) {
       uint32 feedId;

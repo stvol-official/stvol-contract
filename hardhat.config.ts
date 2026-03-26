@@ -33,7 +33,7 @@ export default {
       timeout: 60000,
     },
     soneium_mainnet: {
-      url: `https://soneium.rpc.scs.startale.com?apikey=WIW3bW9VR6NydF09EMd451ojzd84TfHe`,
+      url: `https://soneium.gateway.tenderly.co/1P5TBJJNCcx06K1W6sfhj8`,
       gas: 22000000,
       allowUnlimitedContractSize: true,
       accounts: [privateKey],
